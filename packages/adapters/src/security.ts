@@ -4,13 +4,24 @@ import type { ParseContext, SecurityParseResult } from "./types.js";
 
 type JsonRecord = Record<string, unknown>;
 
+function text(value: unknown): string | undefined {
+  return typeof value === "string" || typeof value === "number" || typeof value === "boolean" ? String(value) : undefined;
+}
+
+function messageText(value: unknown): string | undefined {
+  if (typeof value === "string") return value;
+  if (!value || typeof value !== "object") return undefined;
+  const record = value as JsonRecord;
+  return text(record.text) ?? text(record.markdown);
+}
+
 function sarifSeverity(rule: JsonRecord | undefined, result: JsonRecord): Severity {
-  const level = String(result.level ?? "").toLowerCase();
+  const level = (text(result.level) ?? "").toLowerCase();
   if (level === "error") return "high";
   if (level === "warning") return "medium";
   if (level === "note") return "low";
   const props = (rule?.properties ?? {}) as JsonRecord;
-  const severity = String(props["security-severity"] ?? props.severity ?? "").toLowerCase();
+  const severity = (text(props["security-severity"]) ?? text(props.severity) ?? "").toLowerCase();
   const numeric = Number(severity);
   if (Number.isFinite(numeric)) {
     if (numeric >= 9) return "critical";
@@ -32,21 +43,34 @@ export function parseSarif(content: string, context: ParseContext): SecurityPars
       toArray(driver?.rules as JsonRecord[] | JsonRecord | undefined).map((rule) => [String(rule.id), rule])
     );
     for (const result of toArray(run.results as JsonRecord[] | JsonRecord | undefined)) {
-      const ruleId = String(result.ruleId ?? "");
+      const ruleId = text(result.ruleId) ?? "";
       const rule = rules.get(ruleId);
+      const properties = (rule?.properties ?? {}) as JsonRecord;
       const location = toArray(result.locations as JsonRecord[] | JsonRecord | undefined)[0];
       const physical = ((location?.physicalLocation as JsonRecord | undefined) ?? {}) as JsonRecord;
       const artifact = (physical.artifactLocation as JsonRecord | undefined) ?? {};
       const region = (physical.region as JsonRecord | undefined) ?? {};
       const message = result.message as JsonRecord | undefined;
-      const text = String(message?.text ?? rule?.name ?? ruleId);
+      const resultText = messageText(message) ?? text(rule?.name) ?? ruleId;
+      const tags = toArray(properties.tags as string[] | string | undefined)
+        .map((tag) => text(tag))
+        .filter((tag): tag is string => Boolean(tag));
+      const helpUri = text(rule?.helpUri);
+      const description = messageText(rule?.fullDescription) ?? messageText(rule?.shortDescription);
+      const precision = text(properties.precision);
+      const remediation = messageText(rule?.help);
       items.push({
-        id: stableId(["sarif", ruleId, artifact.uri as string, region.startLine as string, text]),
+        id: stableId(["sarif", ruleId, text(artifact.uri), text(region.startLine), resultText]),
         tool: "codeql",
         ...(ruleId ? { ruleId } : {}),
-        title: String(rule?.name ?? (ruleId || "SARIF finding")),
-        message: text,
+        title: text(rule?.name) ?? (ruleId || "SARIF finding"),
+        message: resultText,
         severity: sarifSeverity(rule, result),
+        ...(helpUri ? { helpUri } : {}),
+        ...(description ? { description } : {}),
+        ...(precision ? { precision } : {}),
+        tags,
+        ...(remediation ? { remediation } : {}),
         file: typeof artifact.uri === "string" ? artifact.uri : undefined,
         line: numberOrUndefined(region.startLine),
         sourcePath: context.sourcePath
@@ -73,14 +97,28 @@ export function parseZapJson(content: string, context: ParseContext): SecurityPa
   const items = alerts.map((alert) => {
     const instances = toArray(alert.instances as JsonRecord[] | JsonRecord | undefined);
     const first = instances[0];
-    const title = String(alert.alert ?? alert.name ?? "ZAP finding");
+    const title = text(alert.alert) ?? text(alert.name) ?? "ZAP finding";
+    const message = text(alert.desc) ?? text(alert.description);
+    const confidence = text(alert.confidence);
+    const riskCode = text(alert.riskcode);
+    const evidence = text(first?.evidence);
+    const cweId = text(alert.cweid);
+    const wascId = text(alert.wascid);
+    const remediation = text(alert.solution);
     return {
-      id: stableId(["zap", alert.pluginid as string, title, first?.uri as string]),
+      id: stableId(["zap", text(alert.pluginid), title, text(first?.uri)]),
       tool: "zap" as const,
-      ruleId: alert.pluginid !== undefined ? String(alert.pluginid) : undefined,
+      ruleId: text(alert.pluginid),
       title,
-      message: String(alert.desc ?? alert.description ?? ""),
-      severity: zapRisk(String(alert.riskdesc ?? alert.riskcode ?? alert.risk ?? "")),
+      ...(message ? { message } : {}),
+      severity: zapRisk(text(alert.riskdesc) ?? text(alert.riskcode) ?? text(alert.risk) ?? ""),
+      tags: [],
+      ...(confidence ? { confidence } : {}),
+      ...(riskCode ? { riskCode } : {}),
+      ...(evidence ? { evidence } : {}),
+      ...(cweId ? { cweId } : {}),
+      ...(wascId ? { wascId } : {}),
+      ...(remediation ? { remediation } : {}),
       url: typeof first?.uri === "string" ? first.uri : undefined,
       sourcePath: context.sourcePath
     };

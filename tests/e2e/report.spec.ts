@@ -8,3 +8,9 @@ test("generated report loads dashboard and tests", async ({ page }) => {
   await expect(page.getByRole("heading", { name: "Tests" })).toBeVisible();
   await expect(page.getByText("creates user RFL-101")).toBeVisible();
 });
+
+test("github pages fallback redirects clean paths to hash routes", async ({ page }) => {
+  await page.goto("/tests");
+  await expect(page).toHaveURL(/#\/tests$/);
+  await expect(page.getByRole("heading", { name: "Tests" })).toBeVisible();
+});

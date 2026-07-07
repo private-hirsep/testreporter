@@ -25,7 +25,8 @@ createServer(async (request, response) => {
     return;
   }
   let file = candidate;
-  if (!existsSync(file) || (await stat(file)).isDirectory()) file = path.join(root, "index.html");
+  if (existsSync(file) && (await stat(file)).isDirectory()) file = path.join(root, "index.html");
+  if (!existsSync(file)) file = path.join(root, "404.html");
   if (!existsSync(file)) {
     response.writeHead(404).end("Not found");
     return;

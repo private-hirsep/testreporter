@@ -51,6 +51,16 @@ export type SecurityFinding = {
   title: string;
   message?: string;
   severity: string;
+  helpUri?: string;
+  description?: string;
+  precision?: string;
+  tags: string[];
+  confidence?: string;
+  riskCode?: string;
+  evidence?: string;
+  cweId?: string;
+  wascId?: string;
+  remediation?: string;
   file?: string;
   line?: number;
   url?: string;

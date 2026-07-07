@@ -15,7 +15,8 @@ describe("report generator", () => {
       config,
       configPath,
       inputPath: path.join(root, "examples/minimal/quality-artifacts"),
-      outputPath: output
+      outputPath: output,
+      zip: true
     });
     expect(report.tests.length).toBeGreaterThan(0);
     expect(report.summary.tests.byLayer.backend).toBeGreaterThan(0);
@@ -25,5 +26,11 @@ describe("report generator", () => {
     expect(report.downloads.every((download) => !download.sourcePath || !path.isAbsolute(download.sourcePath))).toBe(
       true
     );
+    expect(report.downloads.some((download) => download.category === "report" && download.path.endsWith(".zip"))).toBe(
+      true
+    );
+    expect(report.warnings.some((warning) => warning.code === "artifact.parse-failed")).toBe(true);
+    expect(report.requirements.testsByRequirement["RFL-101"]?.length).toBeGreaterThan(0);
+    expect(report.security.some((finding) => finding.helpUri || finding.evidence)).toBe(true);
   });
 });
