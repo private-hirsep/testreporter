@@ -1,0 +1,16 @@
+{
+  "site": [
+    {
+      "name": "http://localhost:3000",
+      "alerts": [
+        {
+          "pluginid": "10020",
+          "alert": "Missing anti-clickjacking header",
+          "riskdesc": "Low (Medium)",
+          "desc": "Example ZAP alert",
+          "instances": [{ "uri": "http://localhost:3000/" }]
+        }
+      ]
+    }
+  ]
+}
