@@ -9,7 +9,16 @@
             {
               "id": "js/example",
               "name": "Example informational finding",
-              "properties": { "security-severity": "2.0" }
+              "shortDescription": { "text": "Example rule summary" },
+              "fullDescription": { "text": "Example rule description for the quality portal sample." },
+              "help": { "text": "Review the affected source and apply the recommended secure pattern." },
+              "helpUri": "https://codeql.github.com/codeql-query-help/javascript/",
+              "properties": {
+                "security-severity": "2.0",
+                "precision": "medium",
+                "tags": ["security", "sample"],
+                "id": "js/example"
+              }
             }
           ]
         }

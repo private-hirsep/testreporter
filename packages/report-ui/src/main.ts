@@ -10,8 +10,10 @@ import App from "./App.vue";
 import Coverage from "./views/Coverage.vue";
 import Dashboard from "./views/Dashboard.vue";
 import Downloads from "./views/Downloads.vue";
+import History from "./views/History.vue";
 import Requirements from "./views/Requirements.vue";
 import Security from "./views/Security.vue";
+import SecurityDetail from "./views/SecurityDetail.vue";
 import TestDetail from "./views/TestDetail.vue";
 import Tests from "./views/Tests.vue";
 
@@ -24,7 +26,9 @@ const router = createRouter({
     { path: "/coverage", component: Coverage },
     { path: "/requirements", component: Requirements },
     { path: "/security", component: Security },
-    { path: "/downloads", component: Downloads }
+    { path: "/security/:id", component: SecurityDetail },
+    { path: "/downloads", component: Downloads },
+    { path: "/history", component: History }
   ]
 });
 

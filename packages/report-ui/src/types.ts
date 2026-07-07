@@ -14,6 +14,68 @@ export type TestCase = {
   error?: { message?: string; trace?: string };
 };
 
+export type CoverageMetric = {
+  covered?: number;
+  missed?: number;
+  total?: number;
+  percentage?: number;
+};
+
+export type CoverageFile = {
+  path: string;
+  packageName?: string;
+  statements?: CoverageMetric;
+  instructions?: CoverageMetric;
+  branches?: CoverageMetric;
+  lines?: CoverageMetric;
+  functions?: CoverageMetric;
+  methods?: CoverageMetric;
+};
+
+export type CoverageSummary = {
+  layer: string;
+  statements?: CoverageMetric;
+  instructions?: CoverageMetric;
+  branches?: CoverageMetric;
+  lines?: CoverageMetric;
+  functions?: CoverageMetric;
+  methods?: CoverageMetric;
+  files: CoverageFile[];
+  rawLinks: string[];
+};
+
+export type SecurityFinding = {
+  id: string;
+  tool: string;
+  ruleId?: string;
+  title: string;
+  message?: string;
+  severity: string;
+  helpUri?: string;
+  description?: string;
+  precision?: string;
+  tags: string[];
+  confidence?: string;
+  riskCode?: string;
+  evidence?: string;
+  cweId?: string;
+  wascId?: string;
+  remediation?: string;
+  file?: string;
+  line?: number;
+  url?: string;
+  sourcePath?: string;
+};
+
+export type Download = {
+  id: string;
+  name: string;
+  category: string;
+  path: string;
+  sourcePath?: string;
+  sizeBytes?: number;
+};
+
 export type Manifest = {
   schemaVersion: string;
   metadata: {
@@ -44,13 +106,26 @@ export type Manifest = {
     requirements: RequirementCoverage;
   };
   requirements: RequirementCoverage;
-  coverage: Array<Record<string, unknown>>;
-  security: Array<Record<string, unknown>>;
+  coverage: CoverageSummary[];
+  security: SecurityFinding[];
   qualityGate: {
     status: string;
     checks: Array<{ id: string; label: string; status: string; actual: string | number; expected: string }>;
   };
-  downloads: Array<{ id: string; name: string; category: string; path: string; sizeBytes?: number }>;
+  downloads: Download[];
+  history: {
+    runs: Array<{
+      id: string;
+      generatedAt: string;
+      qualityGateStatus: string;
+      testsTotal: number;
+      testsFailed: number;
+      coveragePercentage?: number;
+      requirementCoveragePercentage?: number;
+      criticalFindings: number;
+      highFindings: number;
+    }>;
+  };
   warnings: Array<{ code: string; message: string; sourcePath?: string }>;
   chunks: { tests: string[] };
 };

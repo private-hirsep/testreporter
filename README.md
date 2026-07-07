@@ -73,6 +73,7 @@ Pages.
 - [Quality gates](docs/quality-gates.md)
 - [Adoption guide](docs/adoption-guide.md)
 - [Security model](docs/security.md)
+- [History model](docs/history.md)
 - [GitHub Actions integration](docs/github-actions.md)
 - [Local development](docs/local-development.md)
 - [Troubleshooting](docs/troubleshooting.md)

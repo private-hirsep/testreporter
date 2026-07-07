@@ -4,6 +4,7 @@ import {
   calculateRequirementCoverage,
   deduplicateTests,
   evaluateQualityGate,
+  QualityReportConfigSchema,
   type NormalizedTestCase,
   type QualityReportConfig
 } from "../src/index.js";
@@ -52,5 +53,26 @@ describe("core normalization and gates", () => {
       }
     } satisfies QualityReportConfig;
     expect(evaluateQualityGate(config, summary).status).toBe("failed");
+  });
+
+  it("uses strict quality gate defaults", () => {
+    const config = QualityReportConfigSchema.parse({ project: { name: "x" } });
+    expect(config.qualityGates.tests.allowFailed).toBe(0);
+    expect(config.qualityGates.tests.allowBroken).toBe(0);
+    expect(config.qualityGates.security.maxCritical).toBe(0);
+    expect(config.qualityGates.security.maxHigh).toBe(0);
+  });
+
+  it("allows configured relaxed quality gates", () => {
+    const requirements = calculateRequirementCoverage(["RFL-1"], [test({})]);
+    const summary = buildSummary([test({ status: "failed" })], [], requirements, []);
+    const config = QualityReportConfigSchema.parse({
+      project: { name: "x" },
+      qualityGates: {
+        tests: { allowFailed: 1, allowBroken: 0 },
+        security: { maxCritical: 0, maxHigh: 0 }
+      }
+    });
+    expect(evaluateQualityGate(config, summary).status).toBe("passed");
   });
 });

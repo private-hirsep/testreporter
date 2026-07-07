@@ -11,12 +11,15 @@
     <v-table density="compact">
       <thead><tr><th>Severity</th><th>Tool</th><th>Rule</th><th>Finding</th><th>Location</th></tr></thead>
       <tbody>
-        <tr v-for="finding in manifest.security" :key="String(finding.id)">
+        <tr v-for="finding in manifest.security" :key="finding.id">
           <td>{{ finding.severity }}</td>
           <td>{{ finding.tool }}</td>
           <td>{{ finding.ruleId }}</td>
-          <td>{{ finding.title }}</td>
-          <td>{{ finding.file }}<span v-if="finding.line">:{{ finding.line }}</span></td>
+          <td><router-link :to="`/security/${finding.id}`">{{ finding.title }}</router-link></td>
+          <td>
+            <span v-if="finding.file">{{ finding.file }}<span v-if="finding.line">:{{ finding.line }}</span></span>
+            <span v-else>{{ finding.url ?? "n/a" }}</span>
+          </td>
         </tr>
       </tbody>
     </v-table>

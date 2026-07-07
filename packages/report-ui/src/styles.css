@@ -50,6 +50,10 @@ pre {
   margin-bottom: 22px;
 }
 
+.metrics.compact {
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+}
+
 .metric-card {
   padding: 16px;
   min-height: 92px;
@@ -83,6 +87,18 @@ pre {
 
 .detail-list dt {
   color: #59635a;
+}
+
+.inline-link {
+  display: inline-block;
+  margin-right: 10px;
+  margin-bottom: 4px;
+}
+
+.section-heading {
+  font-size: 1.1rem;
+  font-weight: 650;
+  margin: 26px 0 10px;
 }
 
 @media (max-width: 900px) {
