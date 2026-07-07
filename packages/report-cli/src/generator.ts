@@ -1,5 +1,5 @@
 import { createWriteStream } from "node:fs";
-import { mkdir, readFile, readdir, rename, rm, stat, writeFile } from "node:fs/promises";
+import { mkdir, readFile, rename, rm, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import archiver from "archiver";
@@ -168,7 +168,19 @@ async function copyUi(outputPath: string) {
   if (!source) {
     await writeFile(
       path.join(outputPath, "index.html"),
-      '<!doctype html><meta charset="utf-8"><title>Quality Report</title><div id="app">Report UI was not built. Run npm run build.</div>'
+      [
+        "<!doctype html>",
+        '<html lang="en">',
+        "<head>",
+        '<meta charset="UTF-8" />',
+        '<meta name="viewport" content="width=device-width, initial-scale=1.0" />',
+        "<title>Quality Report</title>",
+        "</head>",
+        "<body>",
+        '<div id="app">Report UI was not built. Run npm run build.</div>',
+        "</body>",
+        "</html>"
+      ].join("")
     );
     return;
   }
@@ -217,11 +229,8 @@ async function zipDirectory(source: string, target: string) {
 }
 
 async function cleanOutput(outputPath: string) {
+  await rm(outputPath, { recursive: true, force: true });
   await mkdir(outputPath, { recursive: true });
-  for (const entry of await readdir(outputPath)) {
-    if (/^quality-report.*\.zip$/i.test(entry)) continue;
-    await rm(path.join(outputPath, entry), { recursive: true, force: true });
-  }
 }
 
 export async function buildReport(options: GenerateOptions): Promise<NormalizedReport> {

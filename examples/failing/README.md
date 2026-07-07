@@ -7,7 +7,8 @@ strict thresholds that intentionally fail.
 npm run quality-report -- generate \
   --config examples/failing/quality-report.yml \
   --input examples/minimal/quality-artifacts \
-  --output dist/failing-report
+  --output dist/failing-report \
+  --zip
 ```
 
 Expected result: the generated report is still produced, but the CLI exits with a
