@@ -1,22 +1,36 @@
 <template>
-  <v-app>
-    <v-navigation-drawer permanent width="260">
+  <v-app class="app-shell">
+    <v-navigation-drawer permanent width="282" class="sidebar desktop-drawer">
       <div class="brand">
         <div class="brand-title">{{ manifest?.metadata.projectName ?? "Quality Report" }}</div>
         <div class="brand-subtitle">{{ manifest?.metadata.repository ?? "Static quality portal" }}</div>
       </div>
+      <div v-if="manifest" class="brand-meta">
+        <div class="meta-row"><span>Branch</span><strong class="mono truncate">{{ manifest.metadata.branch ?? "n/a" }}</strong></div>
+        <div class="meta-row"><span>Commit</span><strong class="mono truncate">{{ shortSha(manifest.metadata.commitSha) }}</strong></div>
+        <div class="meta-row"><span>Run</span><strong class="mono truncate">{{ manifest.metadata.runId ?? "n/a" }}</strong></div>
+      </div>
       <v-list nav density="compact">
-        <v-list-item prepend-icon="mdi-view-dashboard" title="Dashboard" to="/" />
-        <v-list-item prepend-icon="mdi-test-tube" title="Tests" to="/tests" />
-        <v-list-item prepend-icon="mdi-chart-donut" title="Coverage" to="/coverage" />
-        <v-list-item prepend-icon="mdi-clipboard-check" title="Requirements" to="/requirements" />
-        <v-list-item prepend-icon="mdi-shield-alert" title="Security" to="/security" />
-        <v-list-item prepend-icon="mdi-download" title="Downloads" to="/downloads" />
+        <v-list-item v-for="item in navItems" :key="item.to" :prepend-icon="item.icon" :title="item.title" :to="item.to" />
       </v-list>
     </v-navigation-drawer>
-    <v-app-bar flat border>
-      <v-app-bar-title>Quality Portal</v-app-bar-title>
-      <v-chip v-if="manifest" :color="manifest.qualityGate.status === 'passed' ? 'success' : 'error'" label>
+    <v-app-bar flat border color="surface">
+      <v-menu class="mobile-nav">
+        <template #activator="{ props: menuProps }">
+          <v-btn v-bind="menuProps" icon="mdi-menu" class="mobile-nav" aria-label="Open navigation" />
+        </template>
+        <v-list density="compact">
+          <v-list-item v-for="item in navItems" :key="item.to" :prepend-icon="item.icon" :title="item.title" :to="item.to" />
+        </v-list>
+      </v-menu>
+      <v-app-bar-title>
+        <span>{{ manifest?.metadata.projectName ?? "Quality Portal" }}</span>
+      </v-app-bar-title>
+      <div v-if="manifest" class="app-bar-meta">
+        <v-chip prepend-icon="mdi-source-branch" label>{{ manifest.metadata.branch ?? "n/a" }}</v-chip>
+        <v-chip prepend-icon="mdi-source-commit" label class="mono">{{ shortSha(manifest.metadata.commitSha) }}</v-chip>
+      </div>
+      <v-chip v-if="manifest" :color="gateColor(manifest.qualityGate.status)" label class="ml-3">
         Gate {{ manifest.qualityGate.status }}
       </v-chip>
     </v-app-bar>
@@ -31,12 +45,23 @@
 
 <script setup lang="ts">
 import { onMounted, ref } from "vue";
+import { gateColor, shortSha } from "./format";
 import { loadManifest, loadTests } from "./services/reportData";
 import type { Manifest, TestCase } from "./types";
 
 const manifest = ref<Manifest>();
 const tests = ref<TestCase[]>([]);
 const error = ref("");
+const navItems = [
+  { title: "Dashboard", to: "/", icon: "mdi-view-dashboard" },
+  { title: "Tests", to: "/tests", icon: "mdi-test-tube" },
+  { title: "Coverage", to: "/coverage", icon: "mdi-chart-donut" },
+  { title: "Requirements", to: "/requirements", icon: "mdi-clipboard-check" },
+  { title: "Security", to: "/security", icon: "mdi-shield-alert" },
+  { title: "Downloads", to: "/downloads", icon: "mdi-download" },
+  { title: "Diagnostics", to: "/diagnostics", icon: "mdi-alert-circle-outline" },
+  { title: "History", to: "/history", icon: "mdi-history" }
+];
 
 onMounted(async () => {
   try {

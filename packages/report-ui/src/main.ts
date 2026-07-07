@@ -9,7 +9,9 @@ import * as directives from "vuetify/directives";
 import App from "./App.vue";
 import Coverage from "./views/Coverage.vue";
 import Dashboard from "./views/Dashboard.vue";
+import Diagnostics from "./views/Diagnostics.vue";
 import Downloads from "./views/Downloads.vue";
+import History from "./views/History.vue";
 import Requirements from "./views/Requirements.vue";
 import Security from "./views/Security.vue";
 import TestDetail from "./views/TestDetail.vue";
@@ -24,7 +26,9 @@ const router = createRouter({
     { path: "/coverage", component: Coverage },
     { path: "/requirements", component: Requirements },
     { path: "/security", component: Security },
-    { path: "/downloads", component: Downloads }
+    { path: "/downloads", component: Downloads },
+    { path: "/diagnostics", component: Diagnostics },
+    { path: "/history", component: History }
   ]
 });
 
