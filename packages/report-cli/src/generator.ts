@@ -44,6 +44,13 @@ export type GenerateOptions = {
 
 const MAX_PARSE_BYTES = 50 * 1024 * 1024;
 
+function safeRelativePath(file: string, root: string): string {
+  if (!path.isAbsolute(file)) return (redactSecrets(file) ?? file).replace(/\\/g, "/");
+  const relative = path.relative(root, file);
+  const safe = relative && !relative.startsWith("..") && !path.isAbsolute(relative) ? relative : path.basename(file);
+  return (redactSecrets(safe) ?? safe).replace(/\\/g, "/");
+}
+
 async function safeRead(file: string, warnings: ParserWarning[]): Promise<string | undefined> {
   const size = (await stat(file)).size;
   if (size > MAX_PARSE_BYTES) {
@@ -116,7 +123,8 @@ async function applyRequirementMappings(
 
 async function copyRawArtifacts(
   artifacts: DiscoveredArtifact[],
-  outputPath: string
+  outputPath: string,
+  inputRoot: string
 ): Promise<DownloadableArtifact[]> {
   const downloads: DownloadableArtifact[] = [];
   const rawDir = path.join(outputPath, "raw");
@@ -143,6 +151,7 @@ async function copyRawArtifacts(
                 ? "raw"
                 : "tests",
       path: path.relative(outputPath, target).replace(/\\/g, "/"),
+      sourcePath: safeRelativePath(artifact.path, inputRoot),
       sizeBytes: isDirectory ? undefined : (await stat(artifact.path)).size
     });
   }
@@ -189,6 +198,7 @@ async function writeData(outputPath: string, report: NormalizedReport) {
     qualityGate: report.qualityGate,
     downloads: report.downloads,
     warnings: report.warnings,
+    history: report.history,
     chunks: { tests: testChunks }
   };
   await writeFile(path.join(dataDir, "manifest.json"), JSON.stringify(manifest, null, 2));
@@ -217,6 +227,7 @@ async function cleanOutput(outputPath: string) {
 export async function buildReport(options: GenerateOptions): Promise<NormalizedReport> {
   await cleanOutput(options.outputPath);
   const artifacts = await discoverArtifacts(options.config, options.inputPath);
+  const inputRoot = path.resolve(options.inputPath);
   const warnings: ParserWarning[] = [];
   const tests: NormalizedTestCase[] = [];
   const coverage: CoverageSummary[] = [];
@@ -229,7 +240,7 @@ export async function buildReport(options: GenerateOptions): Promise<NormalizedR
     if (!content) continue;
     try {
       const context = {
-        sourcePath: artifact.path,
+        sourcePath: safeRelativePath(artifact.path, inputRoot),
         ...(artifact.layer ? { layer: artifact.layer } : {}),
         requirementPattern
       };
@@ -245,7 +256,7 @@ export async function buildReport(options: GenerateOptions): Promise<NormalizedR
       if (artifact.kind === "zapJson") security.push(...parseZapJson(content, context).items);
     } catch (error) {
       warnings.push({
-        sourcePath: artifact.path,
+        sourcePath: safeRelativePath(artifact.path, inputRoot),
         code: "artifact.parse-failed",
         message: error instanceof Error ? error.message : "Unknown parser error"
       });
@@ -257,12 +268,16 @@ export async function buildReport(options: GenerateOptions): Promise<NormalizedR
   const expected = await readExpectedRequirements(artifacts, warnings);
   const requirements = calculateRequirementCoverage(expected, dedupedTests);
   const mergedCoverage = mergeCoverage(coverage);
-  const downloads = await copyRawArtifacts(artifacts, options.outputPath);
+  for (const warning of warnings) {
+    if (warning.sourcePath) warning.sourcePath = safeRelativePath(warning.sourcePath, inputRoot);
+  }
+  const downloads = await copyRawArtifacts(artifacts, options.outputPath, inputRoot);
   const summary = buildSummary(dedupedTests, mergedCoverage, requirements, security);
   const qualityGate = evaluateQualityGate(options.config, summary);
+  const meta = metadata(options.config);
   const report = NormalizedReportSchema.parse({
     schemaVersion: "1.0",
-    metadata: metadata(options.config),
+    metadata: meta,
     summary,
     tests: dedupedTests,
     coverage: mergedCoverage,
@@ -270,6 +285,21 @@ export async function buildReport(options: GenerateOptions): Promise<NormalizedR
     security,
     qualityGate,
     downloads,
+    history: {
+      runs: [
+        {
+          id: stableId(["history", meta.generatedAt, process.env.GITHUB_RUN_ID]),
+          generatedAt: meta.generatedAt,
+          qualityGateStatus: qualityGate.status,
+          testsTotal: summary.tests.total,
+          testsFailed: summary.tests.failed,
+          coveragePercentage: summary.coverage.totalPercentage,
+          requirementCoveragePercentage: summary.requirements.percentage,
+          criticalFindings: summary.security.critical ?? 0,
+          highFindings: summary.security.high ?? 0
+        }
+      ]
+    },
     warnings
   });
 

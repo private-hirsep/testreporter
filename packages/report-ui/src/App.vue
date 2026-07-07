@@ -12,6 +12,7 @@
         <v-list-item prepend-icon="mdi-clipboard-check" title="Requirements" to="/requirements" />
         <v-list-item prepend-icon="mdi-shield-alert" title="Security" to="/security" />
         <v-list-item prepend-icon="mdi-download" title="Downloads" to="/downloads" />
+        <v-list-item prepend-icon="mdi-history" title="History" to="/history" />
       </v-list>
     </v-navigation-drawer>
     <v-app-bar flat border>

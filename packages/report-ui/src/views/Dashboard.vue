@@ -39,6 +39,10 @@
         </v-card>
       </v-col>
     </v-row>
+    <v-alert v-if="manifest.warnings.length" type="warning" variant="tonal" class="mt-4">
+      {{ manifest.warnings.length }} parser warning(s) or skipped malformed input(s) were recorded.
+      Review the Downloads page for details.
+    </v-alert>
   </div>
 </template>
 

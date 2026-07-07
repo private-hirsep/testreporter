@@ -26,3 +26,7 @@ names or paths if `quality-report.yml` maps them explicitly.
 
 Raw third-party HTML reports can be copied and linked as static downloads. The
 main SPA does not embed arbitrary HTML.
+
+Generated report JSON stores safe relative source labels and generated raw asset
+links. It must not expose absolute local filesystem paths from the machine that
+ran the generator.

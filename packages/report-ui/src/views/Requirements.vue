@@ -14,7 +14,17 @@
         <tr v-for="key in allKeys" :id="`requirement-${key}`" :key="key">
           <td>{{ key }}</td>
           <td>{{ status(key) }}</td>
-          <td>{{ manifest.requirements.testsByRequirement[key]?.length ?? 0 }}</td>
+          <td>
+            <router-link
+              v-for="testId in manifest.requirements.testsByRequirement[key] ?? []"
+              :key="testId"
+              :to="`/tests/${testId}`"
+              class="inline-link"
+            >
+              {{ testName(testId) }}
+            </router-link>
+            <span v-if="!manifest.requirements.testsByRequirement[key]?.length">none</span>
+          </td>
         </tr>
       </tbody>
     </v-table>
@@ -29,9 +39,14 @@ const props = defineProps<{ manifest?: Manifest; tests: TestCase[] }>();
 const allKeys = computed(() =>
   props.manifest ? [...new Set([...props.manifest.requirements.expected, ...props.manifest.requirements.extra])].sort() : []
 );
+const testById = computed(() => new Map(props.tests.map((test) => [test.id, test])));
 function status(key: string) {
   if (props.manifest?.requirements.missing.includes(key)) return "missing";
   if (props.manifest?.requirements.extra.includes(key)) return "extra";
   return "covered";
+}
+function testName(id: string) {
+  const test = testById.value.get(id);
+  return test?.fullName ?? test?.name ?? id;
 }
 </script>

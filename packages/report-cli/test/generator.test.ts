@@ -20,5 +20,10 @@ describe("report generator", () => {
     expect(report.tests.length).toBeGreaterThan(0);
     expect(report.summary.tests.byLayer.backend).toBeGreaterThan(0);
     expect(report.downloads.length).toBeGreaterThan(0);
+    const serialized = JSON.stringify(report);
+    expect(serialized).not.toContain(root.replace(/\\/g, "\\\\"));
+    expect(report.downloads.every((download) => !download.sourcePath || !path.isAbsolute(download.sourcePath))).toBe(
+      true
+    );
   });
 });
