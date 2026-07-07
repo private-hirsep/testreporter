@@ -1,0 +1,10 @@
+node_modules/
+dist/
+.quality-report-summary/
+test-results/
+playwright-report/
+/coverage/
+packages/*/dist/
+packages/report-ui/dist-ts/
+*.tsbuildinfo
+*.log

@@ -1,0 +1,26 @@
+{
+  "name": "@quality-report/report-cli",
+  "version": "0.1.0",
+  "type": "module",
+  "bin": {
+    "quality-report": "dist/index.js"
+  },
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsc -p tsconfig.json"
+  },
+  "dependencies": {
+    "@quality-report/adapters": "file:../adapters",
+    "@quality-report/report-core": "file:../report-core",
+    "archiver": "^7.0.1",
+    "commander": "^12.1.0",
+    "fast-glob": "^3.3.3",
+    "fs-extra": "^11.3.0",
+    "yaml": "^2.8.0",
+    "zod": "^3.25.67"
+  },
+  "devDependencies": {
+    "@types/archiver": "^6.0.3"
+  }
+}

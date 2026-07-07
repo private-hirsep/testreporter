@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="backend.service" tests="3" failures="1" errors="0" skipped="0">
+  <testcase classname="backend.service.UserService" name="creates user RFL-101" time="0.12">
+    <properties><property name="requirement" value="RFL-101"/></properties>
+  </testcase>
+  <testcase classname="backend.service.UserService" name="rejects duplicate email RFL-102" time="0.08">
+    <failure message="Expected duplicate error">AssertionError: expected duplicate error</failure>
+  </testcase>
+  <testcase classname="backend.service.HealthService" name="reports health RFL-103" time="0.02"/>
+</testsuite>

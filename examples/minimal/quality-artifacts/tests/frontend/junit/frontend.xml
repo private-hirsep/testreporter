@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="frontend.components" tests="2" failures="0" errors="0" skipped="1">
+  <testcase classname="frontend.components.LoginForm" name="renders validation RFL-201" time="0.04"/>
+  <testcase classname="frontend.components.ProfilePanel" name="shows optional avatar RFL-202" time="0.01">
+    <skipped message="feature flag disabled"/>
+  </testcase>
+</testsuite>

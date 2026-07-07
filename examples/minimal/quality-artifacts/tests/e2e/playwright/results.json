@@ -1,0 +1,20 @@
+{
+  "suites": [
+    {
+      "title": "checkout.spec.ts",
+      "tests": [
+        {
+          "title": "buyer can complete checkout RFL-301",
+          "location": { "file": "tests/checkout.spec.ts", "line": 12 },
+          "annotations": [{ "type": "requirement", "description": "RFL-301" }],
+          "results": [{ "status": "passed", "duration": 1510 }]
+        },
+        {
+          "title": "receipt is printable RFL-302",
+          "location": { "file": "tests/checkout.spec.ts", "line": 45 },
+          "results": [{ "status": "passed", "duration": 740 }]
+        }
+      ]
+    }
+  ]
+}

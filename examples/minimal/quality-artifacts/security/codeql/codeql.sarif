@@ -1,0 +1,34 @@
+{
+  "version": "2.1.0",
+  "runs": [
+    {
+      "tool": {
+        "driver": {
+          "name": "CodeQL",
+          "rules": [
+            {
+              "id": "js/example",
+              "name": "Example informational finding",
+              "properties": { "security-severity": "2.0" }
+            }
+          ]
+        }
+      },
+      "results": [
+        {
+          "ruleId": "js/example",
+          "level": "note",
+          "message": { "text": "Example low severity finding" },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": { "uri": "src/example.ts" },
+                "region": { "startLine": 10 }
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
