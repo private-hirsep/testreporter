@@ -231,12 +231,12 @@ permissions:
   contents: read
   actions: read
   issues: write
-  pull-requests: read
+  pull-requests: write
   pages: write
   id-token: write
 ```
 
-`issues: write` is required for PR comments because GitHub stores PR comments as issue comments. `pages: write` and `id-token: write` are required for `pages` and `pages-and-artifact`. If PR comments are configured outside a PR, the workflow skips them cleanly. Fork PRs are skipped by default; do not switch to `pull_request_target` without a security review. If Pages or comments are explicitly requested without sufficient permission, GitHub will fail the responsible step with a permission error.
+`issues: write` and `pull-requests: write` are required for PR comments because GitHub stores PR comments as issue comments and restricts pull request resources separately. `pages: write` and `id-token: write` are required for `pages` and `pages-and-artifact`. If PR comments are configured outside a PR, the workflow skips them cleanly. Fork PRs are skipped by default; do not switch to `pull_request_target` without a security review. If Pages or comments are explicitly requested without sufficient permission, GitHub will fail the responsible step with a permission error.
 
 ## Requirement Coverage Setup
 
@@ -249,7 +249,7 @@ Upload SARIF under `security/codeql/` and ZAP JSON under `security/zap/`, or map
 ## Troubleshooting
 
 - No files in the report: verify artifact names match `artifact-pattern` and paths inside the downloaded artifact match `quality-report.yml`.
-- No PR comment: verify the event is `pull_request`, `pr-comment-mode` is not `off`, and `issues: write` is granted.
+- No PR comment: verify the event is `pull_request`, `pr-comment-mode` is not `off`, and `issues: write` plus `pull-requests: write` are granted.
 - Pages failed: verify repository Pages is enabled and the caller grants `pages: write` and `id-token: write`.
 - Gate failed too early: use the reusable workflow or run `generate` without `--fail-on-quality-gate`; the workflow fails only after upload/comment/publish steps.
 

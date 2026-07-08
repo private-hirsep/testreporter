@@ -55,7 +55,7 @@ describe("GitHub workflow and documentation contracts", () => {
       actions: "read",
       contents: "read",
       issues: "write",
-      "pull-requests": "read",
+      "pull-requests": "write",
       pages: "write",
       "id-token": "write"
     });
@@ -116,7 +116,7 @@ describe("GitHub workflow and documentation contracts", () => {
     const docs = `${readme}\n${githubActions}`;
     expect(docs).toContain("publish-quality-report.yml");
     expect(docs).toContain("reusable-publish-quality-report.yml");
-    expect(docs).toContain("pull-requests: read");
+    expect(docs).toContain("pull-requests: write");
     expect(docs).toContain("issues: write");
     expect(docs).toContain("pages: write");
     expect(docs).toContain("quality-profile");
