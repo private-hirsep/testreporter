@@ -1,0 +1,40 @@
+project:
+  name: Failing Quality Example
+  repository: your-org/example
+
+artifacts:
+  tests:
+    backend:
+      junit: "tests/backend/junit/**/*.xml"
+    frontend:
+      junit: "tests/frontend/junit/**/*.xml"
+    e2e:
+      playwrightJson: "tests/e2e/playwright/**/*.json"
+  coverage:
+    backend:
+      jacocoXml: "coverage/backend/jacoco.xml"
+    frontend:
+      lcov: "coverage/frontend/lcov.info"
+      summaryJson: "coverage/frontend/coverage-summary.json"
+  requirements:
+    expectedKeys: "requirements/expected.csv"
+    mapping: "requirements/mapping.json"
+  security:
+    codeqlSarif: "security/codeql/**/*.sarif"
+    zapJson: "security/zap/**/*.json"
+
+requirements:
+  keyPattern: "[A-Z]+-[0-9]+"
+
+qualityGates:
+  tests:
+    allowFailed: 0
+    allowBroken: 0
+  coverage:
+    totalMinimum: 90
+  requirements:
+    minimum: 100
+    failOnMissing: true
+  security:
+    maxCritical: 0
+    maxHigh: 0

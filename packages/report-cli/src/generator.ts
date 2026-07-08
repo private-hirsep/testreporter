@@ -1,5 +1,5 @@
 import { createWriteStream } from "node:fs";
-import { mkdir, readFile, readdir, rename, rm, stat, writeFile } from "node:fs/promises";
+import { mkdir, readFile, rename, rm, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import archiver from "archiver";
@@ -122,7 +122,8 @@ async function applyRequirementMappings(
 
 async function copyRawArtifacts(
   artifacts: DiscoveredArtifact[],
-  outputPath: string
+  outputPath: string,
+  inputRoot: string
 ): Promise<DownloadableArtifact[]> {
   const downloads: DownloadableArtifact[] = [];
   const rawDir = path.join(outputPath, "raw");
@@ -149,6 +150,7 @@ async function copyRawArtifacts(
                 ? "raw"
                 : "tests",
       path: path.relative(outputPath, target).replace(/\\/g, "/"),
+      sourcePath: safeRelativePath(artifact.path, inputRoot),
       sizeBytes: isDirectory ? undefined : (await stat(artifact.path)).size
     });
   }
@@ -165,7 +167,19 @@ async function copyUi(outputPath: string) {
   if (!source) {
     await writeFile(
       path.join(outputPath, "index.html"),
-      '<!doctype html><meta charset="utf-8"><title>Quality Report</title><div id="app">Report UI was not built. Run npm run build.</div>'
+      [
+        "<!doctype html>",
+        '<html lang="en">',
+        "<head>",
+        '<meta charset="UTF-8" />',
+        '<meta name="viewport" content="width=device-width, initial-scale=1.0" />',
+        "<title>Quality Report</title>",
+        "</head>",
+        "<body>",
+        '<div id="app">Report UI was not built. Run npm run build.</div>',
+        "</body>",
+        "</html>"
+      ].join("")
     );
     return;
   }
@@ -195,6 +209,7 @@ async function writeData(outputPath: string, report: NormalizedReport) {
     qualityGate: report.qualityGate,
     downloads: report.downloads,
     warnings: report.warnings,
+    history: report.history,
     chunks: { tests: testChunks }
   };
   await writeFile(path.join(dataDir, "manifest.json"), JSON.stringify(manifest, null, 2));
@@ -213,6 +228,7 @@ async function zipDirectory(source: string, target: string) {
 }
 
 async function cleanOutput(outputPath: string) {
+  await rm(outputPath, { recursive: true, force: true });
   await mkdir(outputPath, { recursive: true });
   for (const entry of await readdir(outputPath)) {
     await rm(path.join(outputPath, entry), { recursive: true, force: true });
@@ -222,6 +238,7 @@ async function cleanOutput(outputPath: string) {
 export async function buildReport(options: GenerateOptions): Promise<NormalizedReport> {
   await cleanOutput(options.outputPath);
   const artifacts = await discoverArtifacts(options.config, options.inputPath);
+  const inputRoot = path.resolve(options.inputPath);
   const warnings: ParserWarning[] = [];
   const tests: NormalizedTestCase[] = [];
   const coverage: CoverageSummary[] = [];
@@ -263,12 +280,16 @@ export async function buildReport(options: GenerateOptions): Promise<NormalizedR
   const expected = await readExpectedRequirements(artifacts, warnings, options.inputPath);
   const requirements = calculateRequirementCoverage(expected, dedupedTests);
   const mergedCoverage = mergeCoverage(coverage);
-  const downloads = await copyRawArtifacts(artifacts, options.outputPath);
+  for (const warning of warnings) {
+    if (warning.sourcePath) warning.sourcePath = safeRelativePath(warning.sourcePath, inputRoot);
+  }
+  const downloads = await copyRawArtifacts(artifacts, options.outputPath, inputRoot);
   const summary = buildSummary(dedupedTests, mergedCoverage, requirements, security);
   const qualityGate = evaluateQualityGate(options.config, summary);
+  const meta = metadata(options.config);
   const report = NormalizedReportSchema.parse({
     schemaVersion: "1.0",
-    metadata: metadata(options.config),
+    metadata: meta,
     summary,
     tests: dedupedTests,
     coverage: mergedCoverage,
@@ -276,6 +297,21 @@ export async function buildReport(options: GenerateOptions): Promise<NormalizedR
     security,
     qualityGate,
     downloads,
+    history: {
+      runs: [
+        {
+          id: stableId(["history", meta.generatedAt, process.env.GITHUB_RUN_ID]),
+          generatedAt: meta.generatedAt,
+          qualityGateStatus: qualityGate.status,
+          testsTotal: summary.tests.total,
+          testsFailed: summary.tests.failed,
+          coveragePercentage: summary.coverage.totalPercentage,
+          requirementCoveragePercentage: summary.requirements.percentage,
+          criticalFindings: summary.security.critical ?? 0,
+          highFindings: summary.security.high ?? 0
+        }
+      ]
+    },
     warnings
   });
 

@@ -13,3 +13,7 @@
 
 The platform standardizes reporting contracts and quality gates, not every
 project's build or test execution commands.
+
+History is represented in the static data model from milestone one. The current
+implementation records the current run and leaves room for later trend imports
+without changing the UI contract.

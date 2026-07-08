@@ -7,8 +7,13 @@
           "pluginid": "10020",
           "alert": "Missing anti-clickjacking header",
           "riskdesc": "Low (Medium)",
+          "riskcode": "1",
+          "confidence": "2",
+          "cweid": "1021",
+          "wascid": "15",
           "desc": "Example ZAP alert",
-          "instances": [{ "uri": "http://localhost:3000/" }]
+          "solution": "Set a suitable Content-Security-Policy frame-ancestors directive.",
+          "instances": [{ "uri": "http://localhost:3000/", "evidence": "X-Frame-Options header missing" }]
         }
       ]
     }

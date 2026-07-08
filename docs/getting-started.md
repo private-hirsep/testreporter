@@ -12,5 +12,8 @@ npm run quality-report -- validate --config quality-report.yml --input quality-a
 npm run quality-report -- generate --config quality-report.yml --input quality-artifacts --output dist/report --zip
 ```
 
+When `--zip` is used, the generated ZIP is added to the Downloads section and can
+also be uploaded as a workflow artifact.
+
 The first milestone is report-from-artifacts only. Keep your project-specific
 test execution workflow and upload artifacts in the formats documented here.

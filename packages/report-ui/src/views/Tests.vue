@@ -48,6 +48,7 @@ import { computed, ref } from "vue";
 import { formatDuration, statusColor } from "../format";
 import type { Manifest, TestCase } from "../types";
 const props = defineProps<{ manifest?: Manifest; tests: TestCase[] }>();
+const tab = ref("all");
 const search = ref("");
 const status = ref("all");
 const layer = ref("all");

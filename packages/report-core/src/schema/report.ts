@@ -90,6 +90,16 @@ export const SecurityFindingSchema = z.object({
   title: z.string(),
   message: z.string().optional(),
   severity: SeveritySchema,
+  helpUri: z.string().optional(),
+  description: z.string().optional(),
+  precision: z.string().optional(),
+  tags: z.array(z.string()).default([]),
+  confidence: z.string().optional(),
+  riskCode: z.string().optional(),
+  evidence: z.string().optional(),
+  cweId: z.string().optional(),
+  wascId: z.string().optional(),
+  remediation: z.string().optional(),
   file: z.string().optional(),
   line: z.number().int().positive().optional(),
   url: z.string().optional(),
@@ -101,6 +111,7 @@ export const DownloadableArtifactSchema = z.object({
   name: z.string(),
   category: z.enum(["tests", "coverage", "security", "requirements", "raw", "report"]),
   path: z.string(),
+  sourcePath: z.string().optional(),
   sizeBytes: z.number().int().nonnegative().optional()
 });
 
@@ -134,6 +145,18 @@ export const QualityGateResultSchema = z.object({
   )
 });
 
+export const HistoryRunSchema = z.object({
+  id: z.string(),
+  generatedAt: z.string(),
+  qualityGateStatus: GateStatusSchema,
+  testsTotal: z.number().int().nonnegative(),
+  testsFailed: z.number().int().nonnegative(),
+  coveragePercentage: z.number().min(0).max(100).optional(),
+  requirementCoveragePercentage: z.number().min(0).max(100).optional(),
+  criticalFindings: z.number().int().nonnegative(),
+  highFindings: z.number().int().nonnegative()
+});
+
 export const ReportSummarySchema = z.object({
   tests: z.object({
     total: z.number().int().nonnegative(),
@@ -163,6 +186,7 @@ export const NormalizedReportSchema = z.object({
   security: z.array(SecurityFindingSchema),
   qualityGate: QualityGateResultSchema,
   downloads: z.array(DownloadableArtifactSchema),
+  history: z.object({ runs: z.array(HistoryRunSchema).default([]) }).default({ runs: [] }),
   warnings: z.array(ParserWarningSchema)
 });
 
@@ -179,5 +203,6 @@ export type DownloadableArtifact = z.infer<typeof DownloadableArtifactSchema>;
 export type ParserWarning = z.infer<typeof ParserWarningSchema>;
 export type RunMetadata = z.infer<typeof RunMetadataSchema>;
 export type QualityGateResult = z.infer<typeof QualityGateResultSchema>;
+export type HistoryRun = z.infer<typeof HistoryRunSchema>;
 export type ReportSummary = z.infer<typeof ReportSummarySchema>;
 export type NormalizedReport = z.infer<typeof NormalizedReportSchema>;

@@ -1,0 +1,14 @@
+<!doctype html>
+<meta charset="utf-8" />
+<title>Quality Report</title>
+<script>
+  const knownRoutes = new Set(["tests", "coverage", "requirements", "security", "downloads", "history"]);
+  const parts = window.location.pathname.split("/").filter(Boolean);
+  const first = parts[0] || "";
+  const isRootRoute = knownRoutes.has(first);
+  const base = isRootRoute ? "" : first ? `/${first}` : "";
+  const route = isRootRoute ? parts.join("/") : parts.slice(1).join("/");
+  const query = window.location.search || "";
+  const hashRoute = route ? `#/${route}${query}` : `/${query}`;
+  window.location.replace(`${window.location.origin}${base}/${hashRoute}`);
+</script>

@@ -49,7 +49,20 @@ describe("adapters", () => {
       JSON.stringify({
         runs: [
           {
-            tool: { driver: { rules: [{ id: "r", name: "Rule", properties: { "security-severity": "8.0" } }] } },
+            tool: {
+              driver: {
+                rules: [
+                  {
+                    id: "r",
+                    name: "Rule",
+                    fullDescription: { text: "Rule description" },
+                    help: { text: "Fix it" },
+                    helpUri: "https://example.test/rule",
+                    properties: { "security-severity": "8.0", precision: "high", tags: ["security"] }
+                  }
+                ]
+              }
+            },
             results: [{ ruleId: "r", message: { text: "msg" } }]
           }
         ]
@@ -57,10 +70,36 @@ describe("adapters", () => {
       context
     );
     const zap = parseZapJson(
-      JSON.stringify({ site: [{ alerts: [{ alert: "A", riskdesc: "High", instances: [{ uri: "http://x" }] }] }] }),
+      JSON.stringify({
+        site: [
+          {
+            alerts: [
+              {
+                alert: "A",
+                riskdesc: "High",
+                riskcode: "3",
+                confidence: "2",
+                cweid: "79",
+                wascid: "8",
+                solution: "Escape output",
+                instances: [{ uri: "http://x", evidence: "<script>" }]
+              }
+            ]
+          }
+        ]
+      }),
       context
     );
     expect(sarif.items[0]?.severity).toBe("high");
+    expect(sarif.items[0]?.helpUri).toBe("https://example.test/rule");
+    expect(sarif.items[0]?.description).toBe("Rule description");
+    expect(sarif.items[0]?.precision).toBe("high");
+    expect(sarif.items[0]?.tags).toEqual(["security"]);
     expect(zap.items[0]?.severity).toBe("high");
+    expect(zap.items[0]?.confidence).toBe("2");
+    expect(zap.items[0]?.riskCode).toBe("3");
+    expect(zap.items[0]?.evidence).toBe("<script>");
+    expect(zap.items[0]?.cweId).toBe("79");
+    expect(zap.items[0]?.wascId).toBe("8");
   });
 });

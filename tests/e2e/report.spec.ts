@@ -128,3 +128,9 @@ test("generated data does not leak absolute paths or embed raw html", async ({ r
   expect(html).toContain('<div id="app"></div>');
   expect(html).not.toContain("<iframe");
 });
+
+test("github pages fallback redirects clean paths to hash routes", async ({ page }) => {
+  await page.goto("/tests");
+  await expect(page).toHaveURL(/#\/tests$/);
+  await expect(page.getByRole("heading", { name: "Tests" })).toBeVisible();
+});
