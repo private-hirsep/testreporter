@@ -10,6 +10,8 @@ import {
   deduplicateTests,
   evaluateQualityGate,
   NormalizedReportSchema,
+  renderFullPrComment,
+  renderMinimalPrComment,
   redactSecrets,
   stableId,
   type CoverageSummary,
@@ -150,6 +152,7 @@ async function applyRequirementMappings(
       requirement: string;
     }>;
     for (const mapping of mappings) {
+      if (!mapping.requirement) continue;
       const matches = mapping.testId
         ? [byId.get(mapping.testId)].filter((test): test is NormalizedTestCase => Boolean(test))
         : tests.filter((test) => test.name === mapping.name || test.fullName === mapping.name);
@@ -449,5 +452,6 @@ export async function buildReport(options: GenerateOptions): Promise<NormalizedR
     await writeData(options.outputPath, report);
     await writeMeta(options.outputPath, report, prCommentMarker);
   }
+  await writeMeta(options.outputPath, report, options);
   return report;
 }

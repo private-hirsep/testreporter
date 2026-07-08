@@ -3,6 +3,7 @@
 The recommended integration is the reusable workflow:
 
 ```yaml
+# PR minimal comment only
 jobs:
   quality-report:
     uses: your-org/quality-report-platform/.github/workflows/publish-quality-report.yml@v1

@@ -24,6 +24,15 @@ Your project runs tests however it wants. Your project uploads standard artifact
 ```bash
 npm install
 npm run build
+npm run quality-report -- validate --config quality-report.yml --input quality-artifacts
+npm run quality-report -- generate --config quality-report.yml --input quality-artifacts --output dist/report --zip
+```
+
+Open `dist/report/index.html`, or publish `dist/report` to GitHub Pages.
+
+For this repository's sample:
+
+```bash
 npm run quality-report -- generate \
   --config examples/minimal/quality-report.yml \
   --quality-gates examples/minimal/quality-gates.yml \

@@ -1,10 +1,14 @@
-import { buildTestCase, numberOrUndefined, toArray } from "./helpers.js";
+import { buildTestCase, numberOrUndefined, parserWarning, toArray } from "./helpers.js";
 import type { ParseContext, TestParseResult } from "./types.js";
 import type { NormalizedTestCase } from "@quality-report/report-core";
 
 type JsonRecord = Record<string, unknown>;
 
-function visitSuite(suite: JsonRecord, context: ParseContext, parent: string[] = []): NormalizedTestCase[] {
+function visitSuite(
+  suite: JsonRecord,
+  context: ParseContext,
+  parent: string[] = []
+): NormalizedTestCase[] {
   const title = typeof suite.title === "string" && suite.title ? [...parent, suite.title] : parent;
   const tests = toArray(suite.tests as JsonRecord[] | JsonRecord | undefined).flatMap((test) => {
     const results = toArray(test.results as JsonRecord[] | JsonRecord | undefined);
@@ -18,14 +22,18 @@ function visitSuite(suite: JsonRecord, context: ParseContext, parent: string[] =
     for (const annotation of annotations) {
       const type = typeof annotation.type === "string" ? annotation.type : "annotation";
       const description =
-        typeof annotation.description === "string" ? annotation.description : String(annotation.description ?? "");
+        typeof annotation.description === "string"
+          ? annotation.description
+          : String(annotation.description ?? "");
       labels[type] = [...(labels[type] ?? []), description].filter(Boolean);
     }
     const attachments = toArray(latest.attachments as JsonRecord[] | JsonRecord | undefined)
       .map((attachment) => ({
         name: String(attachment.name ?? "attachment"),
         path: String(attachment.path ?? attachment.url ?? ""),
-        ...(typeof attachment.contentType === "string" ? { contentType: attachment.contentType } : {})
+        ...(typeof attachment.contentType === "string"
+          ? { contentType: attachment.contentType }
+          : {})
       }))
       .filter((attachment) => attachment.path);
     const name = typeof test.title === "string" ? test.title : "unnamed playwright test";
@@ -33,9 +41,14 @@ function visitSuite(suite: JsonRecord, context: ParseContext, parent: string[] =
       buildTestCase({
         name,
         suite: title.join(" > ") || undefined,
-        file: typeof test.location === "object" ? String((test.location as JsonRecord).file ?? "") : undefined,
+        file:
+          typeof test.location === "object"
+            ? String((test.location as JsonRecord).file ?? "")
+            : undefined,
         line:
-          typeof test.location === "object" ? numberOrUndefined((test.location as JsonRecord).line) : undefined,
+          typeof test.location === "object"
+            ? numberOrUndefined((test.location as JsonRecord).line)
+            : undefined,
         framework: "playwright",
         layer: context.layer ?? "e2e",
         status:
@@ -57,16 +70,42 @@ function visitSuite(suite: JsonRecord, context: ParseContext, parent: string[] =
       })
     ];
   });
-  const childTests: NormalizedTestCase[] = toArray(suite.suites as JsonRecord[] | JsonRecord | undefined).flatMap((child) =>
-    visitSuite(child, context, title)
-  );
+  const childTests: NormalizedTestCase[] = toArray(
+    suite.suites as JsonRecord[] | JsonRecord | undefined
+  ).flatMap((child) => visitSuite(child, context, title));
   return [...tests, ...childTests];
 }
 
 export function parsePlaywrightJson(content: string, context: ParseContext): TestParseResult {
-  const json = JSON.parse(content) as JsonRecord;
+  let json: JsonRecord;
+  try {
+    json = JSON.parse(content) as JsonRecord;
+  } catch (error) {
+    return {
+      items: [],
+      warnings: [
+        parserWarning(
+          context.sourcePath,
+          "playwright.malformed",
+          error instanceof Error ? error.message : "Malformed Playwright JSON file."
+        )
+      ]
+    };
+  }
   const items = toArray(json.suites as JsonRecord[] | JsonRecord | undefined).flatMap((suite) =>
     visitSuite(suite, context)
   );
-  return { items, warnings: [] };
+  return {
+    items,
+    warnings:
+      items.length === 0
+        ? [
+            parserWarning(
+              context.sourcePath,
+              "playwright.no-tests",
+              "No test cases found in Playwright JSON file."
+            )
+          ]
+        : []
+  };
 }

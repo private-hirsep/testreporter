@@ -3,7 +3,7 @@ import path from "node:path";
 import { mkdir } from "node:fs/promises";
 import { Command } from "commander";
 import { ZodError } from "zod";
-import { loadConfig } from "./config.js";
+import { applyQualityProfile, loadConfig } from "./config.js";
 import { discoverArtifacts } from "./discovery.js";
 import { buildReport } from "./generator.js";
 

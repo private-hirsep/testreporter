@@ -17,6 +17,48 @@ inputs:
     description: Create quality-report.zip
     required: false
     default: "true"
+  quality-profile:
+    description: Quality gate profile to evaluate
+    required: false
+    default: standard
+  quality-gates-path:
+    description: Optional custom quality gate profile YAML
+    required: false
+    default: quality-gates.yml
+  fail-on-quality-gate:
+    description: Fail the action when the evaluated quality gate fails
+    required: false
+    default: "false"
+  publish-mode:
+    description: Resolved publish mode recorded in manifest metadata
+    required: false
+    default: artifact
+  pr-comment-mode:
+    description: Resolved PR comment mode recorded in manifest metadata
+    required: false
+    default: off
+outputs:
+  quality-gate-status:
+    description: Evaluated quality gate status
+    value: ${{ steps.outputs.outputs.quality-gate-status }}
+  quality-profile:
+    description: Selected quality profile
+    value: ${{ steps.outputs.outputs.quality-profile }}
+  report-path:
+    description: Static report output path
+    value: ${{ steps.outputs.outputs.report-path }}
+  report-zip-path:
+    description: Generated report ZIP path when present
+    value: ${{ steps.outputs.outputs.report-zip-path }}
+  summary-json-path:
+    description: Machine-readable quality summary path
+    value: ${{ steps.outputs.outputs.summary-json-path }}
+  minimal-comment-path:
+    description: Minimal PR comment markdown path
+    value: ${{ steps.outputs.outputs.minimal-comment-path }}
+  full-comment-path:
+    description: Full PR comment markdown path
+    value: ${{ steps.outputs.outputs.full-comment-path }}
 runs:
   using: composite
   steps:
@@ -34,4 +76,30 @@ runs:
         --config "${{ inputs.config-path }}"
         --input "${{ inputs.input-path }}"
         --output "${{ inputs.output-path }}"
+        --quality-profile "${{ inputs.quality-profile }}"
+        --quality-gates "${{ inputs.quality-gates-path }}"
+        --publish-mode "${{ inputs.publish-mode }}"
+        --pr-comment-mode "${{ inputs.pr-comment-mode }}"
         ${{ inputs.create-zip == 'true' && '--zip' || '' }}
+        ${{ inputs.fail-on-quality-gate == 'true' && '--fail-on-quality-gate' || '' }}
+    - id: outputs
+      shell: bash
+      run: |
+        node <<'NODE' >> "$GITHUB_OUTPUT"
+        const fs = require("fs");
+        const path = require("path");
+        const outputPath = process.env.OUTPUT_PATH;
+        const summary = JSON.parse(fs.readFileSync(path.join(outputPath, "meta", "quality-summary.json"), "utf8"));
+        const emit = (name, value) => {
+          if (value !== undefined && value !== null) console.log(`${name}=${String(value)}`);
+        };
+        emit("quality-gate-status", summary.qualityGateStatus);
+        emit("quality-profile", summary.qualityProfile);
+        emit("report-path", outputPath);
+        emit("report-zip-path", summary.reportZipPath);
+        emit("summary-json-path", summary.summaryJsonPath);
+        emit("minimal-comment-path", summary.minimalCommentPath);
+        emit("full-comment-path", summary.fullCommentPath);
+        NODE
+      env:
+        OUTPUT_PATH: ${{ inputs.output-path }}

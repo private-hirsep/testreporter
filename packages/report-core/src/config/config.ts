@@ -100,7 +100,20 @@ export const QualityReportConfigSchema = z.object({
     .default({}),
   requirements: z
     .object({
-      keyPattern: z.string().default("[A-Z]+-[0-9]+")
+      keyPattern: z
+        .string()
+        .refine(
+          (pattern) => {
+            try {
+              new RegExp(pattern, "g");
+              return true;
+            } catch {
+              return false;
+            }
+          },
+          { message: "requirements.keyPattern must be a valid regular expression" }
+        )
+        .default("[A-Z]+-[0-9]+")
     })
     .default({ keyPattern: "[A-Z]+-[0-9]+" }),
   qualityGates: QualityGateSchema,
