@@ -256,16 +256,17 @@ describe("core normalization and gates", () => {
   it("keeps reusable workflow conditionals and delayed gate failure in place", async () => {
     const root = path.resolve(import.meta.dirname, "../../..");
     const workflow = await readFile(path.join(root, ".github/workflows/publish-quality-report.yml"), "utf8");
-    expect(workflow).toContain("pull_request|pull_request_target) publish=\"none\"");
-    expect(workflow).toContain("workflow_dispatch|release) publish=\"pages-and-artifact\"");
-    expect(workflow).toContain("merge_group) publish=\"artifact\"");
-    expect(workflow).toContain("if: steps.modes.outputs.publish-mode == 'artifact' || steps.modes.outputs.publish-mode == 'pages-and-artifact'");
-    expect(workflow).toContain("if: steps.modes.outputs.publish-mode == 'pages' || steps.modes.outputs.publish-mode == 'pages-and-artifact'");
-    expect(workflow).toContain("if: steps.modes.outputs.pr-comment-mode != 'off'");
-    expect(workflow).toContain("github.rest.issues.updateComment");
-    expect(workflow).toContain("github.rest.issues.createComment");
-    expect(workflow).toContain("PR comment requested, but this run has no pull request context. Skipping.");
-    expect(workflow.indexOf("id: comment")).toBeGreaterThan(workflow.indexOf("uses: actions/upload-artifact@v4"));
-    expect(workflow.indexOf("Fail after publication if quality gate failed")).toBeGreaterThan(workflow.indexOf("id: comment"));
+    expect(workflow).toContain('if [[ "$publish_mode" == "auto" ]]');
+    expect(workflow).toContain('publish_mode="artifact"');
+    expect(workflow).toContain('publish_mode="pages-and-artifact"');
+    expect(workflow).toContain('pr_comment_mode="minimal"');
+    expect(workflow).toContain("if: steps.resolve.outputs.publish-mode == 'artifact' || steps.resolve.outputs.publish-mode == 'pages-and-artifact'");
+    expect(workflow).toContain("if: steps.resolve.outputs.publish-mode == 'pages' || steps.resolve.outputs.publish-mode == 'pages-and-artifact'");
+    expect(workflow).toContain("steps.resolve.outputs.pr-comment-mode != 'off'");
+    expect(workflow).toContain('gh api --method PATCH "repos/$REPO/issues/comments/$existing"');
+    expect(workflow).toContain('gh api --method POST "repos/$REPO/issues/$PR_NUMBER/comments"');
+    expect(workflow).toContain("PR comment mode is ${{ steps.resolve.outputs.pr-comment-mode }}, but this is not a pull_request event; skipping comment.");
+    expect(workflow.indexOf("id: pr-comment")).toBeGreaterThan(workflow.indexOf("uses: actions/upload-artifact@v4"));
+    expect(workflow.indexOf("Fail on quality gate")).toBeGreaterThan(workflow.indexOf("id: pr-comment"));
   });
 });

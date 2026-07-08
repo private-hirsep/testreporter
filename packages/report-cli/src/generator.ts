@@ -10,8 +10,6 @@ import {
   deduplicateTests,
   evaluateQualityGate,
   NormalizedReportSchema,
-  renderFullPrComment,
-  renderMinimalPrComment,
   redactSecrets,
   stableId,
   type CoverageSummary,
@@ -42,6 +40,7 @@ export type GenerateOptions = {
   inputPath: string;
   outputPath: string;
   zip?: boolean | undefined;
+  qualityProfile?: string | undefined;
   publishMode?: string | undefined;
   prCommentMode?: string | undefined;
   prCommentMarker?: string | undefined;
@@ -49,6 +48,11 @@ export type GenerateOptions = {
 
 const MAX_PARSE_BYTES = 50 * 1024 * 1024;
 const DEFAULT_PR_COMMENT_MARKER = "<!-- quality-report-platform:summary -->";
+
+function collectParseResult<T>(target: T[], result: { items: T[]; warnings: ParserWarning[] }, warnings: ParserWarning[]) {
+  target.push(...result.items);
+  warnings.push(...result.warnings);
+}
 
 function safeRelativePath(file: string, root: string): string {
   if (!path.isAbsolute(file)) return (redactSecrets(file) ?? file).replace(/\\/g, "/");
@@ -93,6 +97,7 @@ function metadata(config: QualityReportConfig, options: GenerateOptions) {
     commitSha: redactSecrets(process.env.GITHUB_SHA),
     runId: redactSecrets(process.env.GITHUB_RUN_ID),
     actor: redactSecrets(process.env.GITHUB_ACTOR),
+    ...(options.qualityProfile ? { qualityProfile: options.qualityProfile } : {}),
     ...(options.publishMode ? { publishMode: options.publishMode } : {}),
     ...(options.prCommentMode ? { prCommentMode: options.prCommentMode } : {})
   };
@@ -146,11 +151,25 @@ async function applyRequirementMappings(
       artifactDisplayPath(inputPath, artifact.path)
     );
     if (!content) continue;
-    const mappings = JSON.parse(content) as Array<{
+    let mappings: Array<{
       testId?: string;
       name?: string;
       requirement: string;
     }>;
+    try {
+      mappings = JSON.parse(content) as Array<{
+        testId?: string;
+        name?: string;
+        requirement: string;
+      }>;
+    } catch (error) {
+      warnings.push({
+        sourcePath: artifactDisplayPath(inputPath, artifact.path),
+        code: "requirements.mapping.parse-failed",
+        message: error instanceof Error ? error.message : "Malformed requirement mapping JSON."
+      });
+      continue;
+    }
     for (const mapping of mappings) {
       if (!mapping.requirement) continue;
       const matches = mapping.testId
@@ -363,26 +382,26 @@ export async function buildReport(options: GenerateOptions): Promise<NormalizedR
     if (["expectedRequirements", "requirementMapping", "rawHtml"].includes(artifact.kind)) continue;
     const displayPath = artifactDisplayPath(options.inputPath, artifact.path);
     const content = await safeRead(artifact.path, warnings, displayPath);
-    if (!content) continue;
+    if (content === undefined) continue;
     try {
       const context = {
         sourcePath: displayPath,
         ...(artifact.layer ? { layer: artifact.layer } : {}),
         requirementPattern
       };
-      if (artifact.kind === "junit") tests.push(...parseJUnitXml(content, context).items);
-      if (artifact.kind === "vitestJson") tests.push(...parseVitestJson(content, context).items);
+      if (artifact.kind === "junit") collectParseResult(tests, parseJUnitXml(content, context), warnings);
+      if (artifact.kind === "vitestJson") collectParseResult(tests, parseVitestJson(content, context), warnings);
       if (artifact.kind === "playwrightJson")
-        tests.push(...parsePlaywrightJson(content, context).items);
-      if (artifact.kind === "jacocoXml") coverage.push(...parseJaCoCoXml(content, context).items);
-      if (artifact.kind === "jacocoCsv") coverage.push(...parseJaCoCoCsv(content, context).items);
+        collectParseResult(tests, parsePlaywrightJson(content, context), warnings);
+      if (artifact.kind === "jacocoXml") collectParseResult(coverage, parseJaCoCoXml(content, context), warnings);
+      if (artifact.kind === "jacocoCsv") collectParseResult(coverage, parseJaCoCoCsv(content, context), warnings);
       if (artifact.kind === "coberturaXml")
-        coverage.push(...parseCoberturaXml(content, context).items);
-      if (artifact.kind === "lcov") coverage.push(...parseLcov(content, context).items);
+        collectParseResult(coverage, parseCoberturaXml(content, context), warnings);
+      if (artifact.kind === "lcov") collectParseResult(coverage, parseLcov(content, context), warnings);
       if (artifact.kind === "istanbulSummary")
-        coverage.push(...parseIstanbulSummary(content, context).items);
-      if (artifact.kind === "sarif") security.push(...parseSarif(content, context).items);
-      if (artifact.kind === "zapJson") security.push(...parseZapJson(content, context).items);
+        collectParseResult(coverage, parseIstanbulSummary(content, context), warnings);
+      if (artifact.kind === "sarif") collectParseResult(security, parseSarif(content, context), warnings);
+      if (artifact.kind === "zapJson") collectParseResult(security, parseZapJson(content, context), warnings);
     } catch (error) {
       warnings.push({
         sourcePath: displayPath,
@@ -402,7 +421,7 @@ export async function buildReport(options: GenerateOptions): Promise<NormalizedR
   }
   const downloads = await copyRawArtifacts(artifacts, options.outputPath, inputRoot);
   const summary = buildSummary(dedupedTests, mergedCoverage, requirements, security);
-  const qualityGate = evaluateQualityGate(options.config, summary);
+  const qualityGate = evaluateQualityGate(options.config, summary, warnings);
   const meta = metadata(options.config, options);
   const report = NormalizedReportSchema.parse({
     schemaVersion: "1.0",
@@ -452,6 +471,5 @@ export async function buildReport(options: GenerateOptions): Promise<NormalizedR
     await writeData(options.outputPath, report);
     await writeMeta(options.outputPath, report, prCommentMarker);
   }
-  await writeMeta(options.outputPath, report, options);
   return report;
 }
