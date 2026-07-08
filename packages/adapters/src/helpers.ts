@@ -2,6 +2,7 @@ import {
   extractRequirementKeys,
   type CoverageMetric,
   type NormalizedTestCase,
+  type ParserWarning,
   redactSecrets,
   stableId,
   type TestFramework,
@@ -23,6 +24,22 @@ export function numberOrUndefined(value: unknown): number | undefined {
 export function pct(covered: number | undefined, total: number | undefined): number | undefined {
   if (covered === undefined || total === undefined || total === 0) return undefined;
   return Math.round((covered / total) * 10000) / 100;
+}
+
+export function parserWarning(sourcePath: string, code: string, message: string): ParserWarning {
+  return { sourcePath, code, message };
+}
+
+export function safeDisplayPath(value: string | undefined): string | undefined {
+  if (!value) return value;
+  const redacted = redactSecrets(value) ?? value;
+  if (/^https?:\/\//i.test(redacted)) return redacted;
+  const normalized = redacted.replace(/\\/g, "/");
+  if (/^[A-Za-z]:\//.test(normalized) || normalized.startsWith("/")) {
+    const parts = normalized.split("/").filter(Boolean);
+    return parts.at(-1) ?? "unknown";
+  }
+  return normalized;
 }
 
 export function metric(covered: number, missed: number): CoverageMetric {
@@ -47,15 +64,28 @@ export function buildTestCase(input: {
   requirementPattern: RegExp;
   sourcePath: string;
 }): NormalizedTestCase {
-  const search = [input.name, input.suite, input.file, ...(Object.values(input.labels ?? {}).flat())].join(" ");
+  const search = [
+    input.name,
+    input.suite,
+    input.file,
+    ...Object.values(input.labels ?? {}).flat()
+  ].join(" ");
   const requirements = extractRequirementKeys(search, input.requirementPattern);
-  const id = stableId([input.framework, input.layer, input.suite, input.name, input.file, input.line]);
+  const id = stableId([
+    input.framework,
+    input.layer,
+    input.suite,
+    input.name,
+    input.file,
+    input.line
+  ]);
+  const file = safeDisplayPath(input.file);
   return {
     id,
     name: redactSecrets(input.name) ?? input.name,
     fullName: redactSecrets([input.suite, input.name].filter(Boolean).join(" > ")) || undefined,
     ...(input.suite ? { suite: redactSecrets(input.suite) } : {}),
-    ...(input.file ? { file: redactSecrets(input.file) } : {}),
+    ...(file ? { file } : {}),
     ...(input.line ? { line: input.line } : {}),
     framework: input.framework,
     layer: input.layer,
@@ -72,7 +102,10 @@ export function buildTestCase(input: {
           }
         }
       : {}),
-    attachments: input.attachments ?? [],
+    attachments: (input.attachments ?? []).map((attachment) => ({
+      ...attachment,
+      path: safeDisplayPath(attachment.path) ?? attachment.path
+    })),
     sourcePath: input.sourcePath
   };
 }
