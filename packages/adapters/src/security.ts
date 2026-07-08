@@ -1,11 +1,13 @@
 import { stableId, type SecurityFinding, type Severity } from "@quality-report/report-core";
-import { numberOrUndefined, toArray } from "./helpers.js";
+import { numberOrUndefined, parserWarning, safeDisplayPath, toArray } from "./helpers.js";
 import type { ParseContext, SecurityParseResult } from "./types.js";
 
 type JsonRecord = Record<string, unknown>;
 
 function text(value: unknown): string | undefined {
-  return typeof value === "string" || typeof value === "number" || typeof value === "boolean" ? String(value) : undefined;
+  return typeof value === "string" || typeof value === "number" || typeof value === "boolean"
+    ? String(value)
+    : undefined;
 }
 
 function messageText(value: unknown): string | undefined {
@@ -34,13 +36,30 @@ function sarifSeverity(rule: JsonRecord | undefined, result: JsonRecord): Severi
 }
 
 export function parseSarif(content: string, context: ParseContext): SecurityParseResult {
-  const json = JSON.parse(content) as JsonRecord;
+  let json: JsonRecord;
+  try {
+    json = JSON.parse(content) as JsonRecord;
+  } catch (error) {
+    return {
+      items: [],
+      warnings: [
+        parserWarning(
+          context.sourcePath,
+          "sarif.malformed",
+          error instanceof Error ? error.message : "Malformed SARIF JSON file."
+        )
+      ]
+    };
+  }
   const items: SecurityFinding[] = [];
   for (const run of toArray(json.runs as JsonRecord[] | JsonRecord | undefined)) {
     const tool = run.tool as JsonRecord | undefined;
     const driver = tool?.driver as JsonRecord | undefined;
     const rules = new Map(
-      toArray(driver?.rules as JsonRecord[] | JsonRecord | undefined).map((rule) => [String(rule.id), rule])
+      toArray(driver?.rules as JsonRecord[] | JsonRecord | undefined).map((rule) => [
+        String(rule.id),
+        rule
+      ])
     );
     for (const result of toArray(run.results as JsonRecord[] | JsonRecord | undefined)) {
       const ruleId = text(result.ruleId) ?? "";
@@ -71,13 +90,25 @@ export function parseSarif(content: string, context: ParseContext): SecurityPars
         ...(precision ? { precision } : {}),
         tags,
         ...(remediation ? { remediation } : {}),
-        file: typeof artifact.uri === "string" ? artifact.uri : undefined,
+        file: safeDisplayPath(typeof artifact.uri === "string" ? artifact.uri : undefined),
         line: numberOrUndefined(region.startLine),
         sourcePath: context.sourcePath
       });
     }
   }
-  return { items, warnings: [] };
+  return {
+    items,
+    warnings:
+      items.length === 0
+        ? [
+            parserWarning(
+              context.sourcePath,
+              "sarif.no-results",
+              "No findings found in SARIF file."
+            )
+          ]
+        : []
+  };
 }
 
 function zapRisk(risk: string): Severity {
@@ -91,9 +122,26 @@ function zapRisk(risk: string): Severity {
 }
 
 export function parseZapJson(content: string, context: ParseContext): SecurityParseResult {
-  const json = JSON.parse(content) as JsonRecord;
+  let json: JsonRecord;
+  try {
+    json = JSON.parse(content) as JsonRecord;
+  } catch (error) {
+    return {
+      items: [],
+      warnings: [
+        parserWarning(
+          context.sourcePath,
+          "zap.malformed",
+          error instanceof Error ? error.message : "Malformed OWASP ZAP JSON file."
+        )
+      ]
+    };
+  }
   const sites = toArray((json.site ?? json.sites) as JsonRecord[] | JsonRecord | undefined);
-  const alerts = sites.length > 0 ? sites.flatMap((site) => toArray(site.alerts as JsonRecord[] | JsonRecord)) : [];
+  const alerts =
+    sites.length > 0
+      ? sites.flatMap((site) => toArray(site.alerts as JsonRecord[] | JsonRecord))
+      : [];
   const items = alerts.map((alert) => {
     const instances = toArray(alert.instances as JsonRecord[] | JsonRecord | undefined);
     const first = instances[0];
@@ -119,9 +167,21 @@ export function parseZapJson(content: string, context: ParseContext): SecurityPa
       ...(cweId ? { cweId } : {}),
       ...(wascId ? { wascId } : {}),
       ...(remediation ? { remediation } : {}),
-      url: typeof first?.uri === "string" ? first.uri : undefined,
+      url: safeDisplayPath(typeof first?.uri === "string" ? first.uri : undefined),
       sourcePath: context.sourcePath
     };
   });
-  return { items, warnings: [] };
+  return {
+    items,
+    warnings:
+      items.length === 0
+        ? [
+            parserWarning(
+              context.sourcePath,
+              "zap.no-alerts",
+              "No alerts found in OWASP ZAP JSON file."
+            )
+          ]
+        : []
+  };
 }

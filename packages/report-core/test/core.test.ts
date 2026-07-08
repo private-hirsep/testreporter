@@ -18,6 +18,7 @@ import {
   QualityReportConfigSchema,
   type NormalizedReport,
   type NormalizedTestCase,
+  type SecurityFinding,
   type QualityReportConfig
 } from "../src/index.js";
 
@@ -37,22 +38,53 @@ function test(overrides: Partial<NormalizedTestCase>): NormalizedTestCase {
 }
 
 describe("core normalization and gates", () => {
-  it("deduplicates retries and keeps failing status", () => {
-    const result = deduplicateTests([test({ status: "passed" }), test({ status: "failed" })]);
+  it("deduplicates retries by stable identity and keeps latest final status", () => {
+    const result = deduplicateTests([
+      test({
+        status: "failed",
+        durationMs: 10,
+        requirements: ["RFL-1"],
+        attachments: [{ name: "trace", path: "trace.zip" }]
+      }),
+      test({ status: "passed", durationMs: 12, requirements: ["RFL-2"] })
+    ]);
     expect(result).toHaveLength(1);
-    expect(result[0]?.status).toBe("failed");
+    expect(result[0]?.status).toBe("passed");
     expect(result[0]?.retries).toBe(1);
+    expect(result[0]?.requirements).toEqual(["RFL-1", "RFL-2"]);
+    expect(result[0]?.attachments).toHaveLength(1);
+    expect(result[0]?.id).toBe(testIdentity(result[0]!));
   });
 
-  it("calculates requirement coverage", () => {
-    const result = calculateRequirementCoverage(["JIRA-1", "JIRA-2"], [test({})]);
-    expect(result.percentage).toBe(50);
-    expect(result.missing).toEqual(["JIRA-2"]);
+  it("extracts and calculates requirement coverage deterministically", () => {
+    expect(extractRequirementKeys("RFL-2 RFL-1 RFL-2", /RFL-[0-9]+/g)).toEqual(["RFL-2", "RFL-1"]);
+    const result = calculateRequirementCoverage(
+      ["RFL-2", "RFL-1", "RFL-1", "RFL-3"],
+      [
+        test({ id: "a", requirements: ["RFL-1", "RFL-2"] }),
+        test({ id: "b", name: "other", requirements: ["RFL-2", "RFL-99"] })
+      ]
+    );
+    expect(result.expected).toEqual(["RFL-1", "RFL-2", "RFL-3"]);
+    expect(result.covered).toEqual(["RFL-1", "RFL-2"]);
+    expect(result.missing).toEqual(["RFL-3"]);
+    expect(result.extra).toEqual(["RFL-99"]);
+    expect(result.percentage).toBe(66.67);
+    expect(result.testsByRequirement["RFL-2"]).toEqual(["a", "b"]);
   });
 
-  it("evaluates quality gates", () => {
-    const requirements = calculateRequirementCoverage(["JIRA-1"], [test({})]);
-    const summary = buildSummary([test({ status: "failed" })], [], requirements, []);
+  it("evaluates default strict failed, broken, and security quality gates", () => {
+    const requirements = calculateRequirementCoverage(["RFL-1"], [test({})]);
+    const security: SecurityFinding[] = [
+      { id: "s1", tool: "codeql", title: "critical", severity: "critical", tags: [] },
+      { id: "s2", tool: "zap", title: "high", severity: "high", tags: [] }
+    ];
+    const summary = buildSummary(
+      [test({ status: "failed" }), test({ name: "broken", status: "broken" })],
+      [],
+      requirements,
+      security
+    );
     const config = {
       project: { name: "x" },
       artifacts: {},
@@ -65,7 +97,11 @@ describe("core normalization and gates", () => {
         warnings: { maxWarnings: 10 }
       }
     } satisfies QualityReportConfig;
-    expect(evaluateQualityGate(config, summary).status).toBe("failed");
+    const result = evaluateQualityGate(config, summary);
+    expect(result.status).toBe("failed");
+    expect(
+      result.checks.filter((check) => check.status === "failed").map((check) => check.id)
+    ).toEqual(["tests.failed", "tests.broken", "security.critical", "security.high"]);
   });
 
   it("uses strict quality gate defaults", () => {

@@ -1,49 +1,51 @@
 # Quality Report Platform
 
-An organization-wide Testing Bible and Quality Portal for static test, coverage,
-requirements, and security reporting from CI artifacts.
+Static Testing Bible and Quality Portal for organization-wide test, coverage,
+requirement, and security reporting from CI artifacts.
 
-Milestone one focuses on a reusable artifact-based static report generator. It
-does not dictate how projects run tests. Projects keep their own Maven, Gradle,
-npm, pnpm, yarn, Pytest, Vitest, Playwright, CodeQL, ZAP, or custom workflows and
-publish standard artifacts that this platform normalizes into one report model.
+The platform generates a professional static report from files your existing CI
+already produces. It does not run your tests, require a backend server, require a
+database, or force a specific test runner. Teams keep their Maven, Gradle, npm,
+pnpm, yarn, Pytest, Vitest, Playwright, CodeQL, ZAP, or custom workflows and
+publish standard artifacts that this tool normalizes into one report model.
 
-## Architecture
+## What This Solves
 
-The platform is an npm workspace monorepo:
+- One static quality portal for many repositories.
+- Consistent artifact contracts across teams.
+- Normalized test health, retries, flaky signals, durations, layers, and
+  requirements.
+- Combined backend/frontend coverage and low-coverage file visibility.
+- Requirement coverage with missing and extra requirement tracking.
+- CodeQL/SARIF and OWASP ZAP security finding summaries.
+- Parser warnings and downloadable raw evidence from CI runs.
+- Quality gates that fail CI while still generating a complete report.
+- GitHub Pages-compatible output with no server-side runtime.
 
-- `packages/report-core`: Zod schemas, config loading, normalization,
-  deduplication, requirement coverage, quality gates, redaction, and utilities.
-- `packages/adapters`: framework-independent parsers for JUnit XML, Playwright
-  JSON, Vitest JSON, JaCoCo, LCOV, Istanbul, Cobertura, SARIF, and ZAP JSON.
-- `packages/report-cli`: `quality-report` CLI for `generate`, `validate`, and
-  `summarize`.
-- `packages/report-ui`: static Vue 3 + Vite + Vuetify report application.
-- `actions/generate-report`: GitHub Action wrapper around the CLI.
-- `docs`: adoption, artifact contract, configuration, gates, security, and
-  troubleshooting documentation.
+## Supported Formats
 
-The generator flow is:
+- Tests: Generic JUnit XML, Pytest JUnit XML, Maven Surefire/Failsafe JUnit XML,
+  Vitest JSON, Vitest JUnit XML, Playwright JSON, Playwright JUnit XML.
+- Coverage: JaCoCo XML, JaCoCo CSV, Istanbul `coverage-summary.json`, LCOV,
+  Cobertura XML.
+- Security: CodeQL/SARIF, OWASP ZAP JSON.
+- Requirements: expected requirement CSV, explicit requirement mapping JSON.
+- Raw evidence: optional downloadable files or directories copied under `raw/`.
 
-1. Load `quality-report.yml`.
-2. Discover configured artifact files.
-3. Parse supported formats through adapters.
-4. Normalize into the platform schema.
-5. Deduplicate repeated test results and retries.
-6. Evaluate requirement coverage and quality gates.
-7. Write chunked static JSON under `data/`.
-8. Build/copy the static UI.
-9. Copy allowed raw reports as downloadable static assets.
-10. Optionally create `quality-report.zip`.
-
-The generated report is a static SPA and works on GitHub Pages without a server,
-database, SSR runtime, or external service.
-
-## Quick Start
+## Quick Start: Local Generation
 
 ```bash
 npm install
 npm run build
+npm run quality-report -- validate --config quality-report.yml --input quality-artifacts
+npm run quality-report -- generate --config quality-report.yml --input quality-artifacts --output dist/report --zip
+```
+
+Open `dist/report/index.html`, or publish `dist/report` to GitHub Pages.
+
+For this repository's sample:
+
+```bash
 npm run quality-report -- generate \
   --config examples/minimal/quality-report.yml \
   --input examples/minimal/quality-artifacts \
@@ -52,10 +54,40 @@ npm run quality-report -- generate \
   --zip
 ```
 
-Open `dist/example-report/index.html` or publish `dist/example-report` to GitHub
-Pages.
+Node/Vitest frontend:
 
-## Example GitHub Action
+```yaml
+artifacts:
+  tests:
+    frontend:
+      junit: "quality-artifacts/tests/frontend/junit/**/*.xml"
+      vitestJson: "quality-artifacts/tests/frontend/vitest/**/*.json"
+  coverage:
+    frontend:
+      lcov: "quality-artifacts/coverage/frontend/lcov.info"
+      summaryJson: "quality-artifacts/coverage/frontend/coverage-summary.json"
+```
+
+Playwright E2E:
+
+```yaml
+artifacts:
+  tests:
+    e2e:
+      junit: "quality-artifacts/tests/e2e/junit/**/*.xml"
+      playwrightJson: "quality-artifacts/tests/e2e/playwright/**/*.json"
+```
+
+Pytest:
+
+```yaml
+artifacts:
+  tests:
+    backend:
+      pytestJunit: "quality-artifacts/tests/backend/junit/**/*.xml"
+```
+
+CodeQL/SARIF:
 
 ```yaml
 jobs:
