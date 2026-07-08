@@ -1,4 +1,4 @@
-import { readFile } from "node:fs/promises";
+﻿import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
 import {
@@ -18,6 +18,7 @@ import {
   resolveQualityProfile,
   testIdentity,
   QualityReportConfigSchema,
+  type QualityGateConfig,
   type NormalizedReport,
   type NormalizedTestCase,
   type SecurityFinding,
@@ -59,7 +60,10 @@ describe("core normalization and gates", () => {
   });
 
   it("extracts and calculates requirement coverage deterministically", () => {
-    expect(extractRequirementKeys("JIRA-2 JIRA-1 JIRA-2", /JIRA-[0-9]+/g)).toEqual(["JIRA-2", "JIRA-1"]);
+    expect(extractRequirementKeys("JIRA-2 JIRA-1 JIRA-2", /JIRA-[0-9]+/g)).toEqual([
+      "JIRA-2",
+      "JIRA-1"
+    ]);
     const result = calculateRequirementCoverage(
       ["JIRA-2", "JIRA-1", "JIRA-1", "JIRA-3"],
       [
@@ -114,6 +118,56 @@ describe("core normalization and gates", () => {
     expect(config.qualityGates.security.maxHigh).toBe(0);
   });
 
+  it("accepts extended custom quality gate fields", () => {
+    const gates = {
+      requirements: { failOnExtra: true },
+      security: { maxMedium: 0, maxLow: null },
+      warnings: { maxWarnings: 0 }
+    } satisfies QualityGateConfig;
+    const config = QualityReportConfigSchema.parse({ project: { name: "x" }, qualityGates: gates });
+    expect(config.qualityGates.requirements.failOnExtra).toBe(true);
+    expect(config.qualityGates.security.maxMedium).toBe(0);
+    expect(config.qualityGates.security.maxLow).toBeNull();
+    expect(config.qualityGates.warnings.maxWarnings).toBe(0);
+  });
+
+  it("evaluates skipped tests, extra requirements, medium security, low security, and warnings gates", () => {
+    const requirements = calculateRequirementCoverage([], [test({ requirements: ["JIRA-9"] })]);
+    const summary = buildSummary([test({ status: "skipped" })], [], requirements, [
+      { id: "s1", tool: "codeql", title: "Finding", severity: "medium", tags: [] },
+      { id: "s2", tool: "codeql", title: "Low finding", severity: "low", tags: [] }
+    ]);
+    const config = QualityReportConfigSchema.parse({
+      project: { name: "x" },
+      qualityGates: {
+        tests: { allowSkipped: 0 },
+        requirements: { failOnExtra: true },
+        security: { maxMedium: 0, maxLow: 0 },
+        warnings: { maxWarnings: 0 }
+      }
+    });
+    const result = evaluateQualityGate(config, summary, [
+      { code: "parser.warn", message: "warning" }
+    ]);
+    expect(
+      result.checks.some((check) => check.id === "tests.skipped" && check.status === "failed")
+    ).toBe(true);
+    expect(
+      result.checks.some((check) => check.id === "requirements.extra" && check.status === "failed")
+    ).toBe(true);
+    expect(
+      result.checks.some((check) => check.id === "security.medium" && check.status === "failed")
+    ).toBe(true);
+    expect(
+      result.checks.some((check) => check.id === "security.low" && check.status === "failed")
+    ).toBe(true);
+    expect(
+      result.checks.some(
+        (check) => check.id === "warnings.maxWarnings" && check.status === "failed"
+      )
+    ).toBe(true);
+  });
+
   it("allows configured relaxed quality gates", () => {
     const requirements = calculateRequirementCoverage(["JIRA-1"], [test({})]);
     const summary = buildSummary([test({ status: "failed" })], [], requirements, []);
@@ -136,7 +190,11 @@ describe("core normalization and gates", () => {
       }
     });
     expect(custom.qualityGates.requirements.failOnExtra).toBe(true);
-    expect(resolveQualityProfile("pr", { profiles: { pr: { extends: "standard", coverage: { totalMinimum: 75 } } } }).qualityGates.coverage.totalMinimum).toBe(75);
+    expect(
+      resolveQualityProfile("pr", {
+        profiles: { pr: { extends: "standard", coverage: { totalMinimum: 75 } } }
+      }).qualityGates.coverage.totalMinimum
+    ).toBe(75);
     expect(() => resolveQualityProfile("missing")).toThrow(/Unknown quality gate profile/);
   });
 
@@ -144,15 +202,22 @@ describe("core normalization and gates", () => {
     const requirements = calculateRequirementCoverage(["JIRA-1"], [test({})]);
     const summary = buildSummary([test({ status: "failed" })], [], requirements, []);
     const resolved = resolveQualityProfile("off");
-    const config = QualityReportConfigSchema.parse({ project: { name: "x" }, qualityGates: resolved.qualityGates });
-    expect(evaluateQualityGate(config, summary, [], { profile: "off", enabled: resolved.enabled }).status).toBe("skipped");
+    const config = QualityReportConfigSchema.parse({
+      project: { name: "x" },
+      qualityGates: resolved.qualityGates
+    });
+    expect(
+      evaluateQualityGate(config, summary, [], { profile: "off", enabled: resolved.enabled }).status
+    ).toBe("skipped");
   });
 
   it("resolves publish and PR comment modes by event", () => {
     expect(resolvePublishMode("auto", { eventName: "pull_request" })).toBe("none");
     expect(resolvePrCommentMode("auto", { eventName: "pull_request" })).toBe("minimal");
     expect(resolvePrCommentMode("auto", { isPullRequest: true })).toBe("minimal");
-    expect(resolvePublishMode("auto", { eventName: "workflow_dispatch" })).toBe("pages-and-artifact");
+    expect(resolvePublishMode("auto", { eventName: "workflow_dispatch" })).toBe(
+      "pages-and-artifact"
+    );
     expect(resolvePublishMode("auto", { eventName: "release" })).toBe("pages-and-artifact");
     expect(resolvePublishMode("auto", { eventName: "merge_group" })).toBe("artifact");
     expect(resolvePrCommentMode("auto", { eventName: "merge_group" })).toBe("off");
@@ -164,24 +229,34 @@ describe("core normalization and gates", () => {
   });
 
   it("formats markdown values without over-escaping inline code", () => {
-    expect(formatInlineCode("backend.user.UserServiceTest > rejects duplicate email JIRA-102 / src:test")).toBe(
-      "`backend.user.UserServiceTest > rejects duplicate email JIRA-102 / src:test`"
-    );
+    expect(
+      formatInlineCode("backend.user.UserServiceTest > rejects duplicate email JIRA-102 / src:test")
+    ).toBe("`backend.user.UserServiceTest > rejects duplicate email JIRA-102 / src:test`");
     expect(formatInlineCode("name with `backtick`")).toBe("`` name with `backtick` ``");
     expect(formatInlineCode("line one\nline two")).toBe("`line one line two`");
     expect(escapeMarkdownTableCell("left | right")).toBe("left \\| right");
   });
 
   it("renders safe compact and capped full PR comments", () => {
-    const requirements = calculateRequirementCoverage(["JIRA-1", "JIRA-2"], [test({ name: "danger <b>x</b>" })]);
-    const summary = buildSummary([test({ status: "failed", name: "bad | test", retries: 1 })], [], requirements, [
-      { id: "s1", tool: "zap", title: "XSS *finding*", severity: "high", tags: [] }
-    ]);
+    const requirements = calculateRequirementCoverage(
+      ["JIRA-1", "JIRA-2"],
+      [test({ name: "danger <b>x</b>" })]
+    );
+    const summary = buildSummary(
+      [test({ status: "failed", name: "bad | test", retries: 1 })],
+      [],
+      requirements,
+      [{ id: "s1", tool: "zap", title: "XSS *finding*", severity: "high", tags: [] }]
+    );
     const config = QualityReportConfigSchema.parse({ project: { name: "x" } });
     const longName = `backend.user.UserServiceTest > rejects duplicate email JIRA-102 / src:test ${"x".repeat(400)}`;
     const report: NormalizedReport = {
       schemaVersion: "1.0",
-      metadata: { projectName: "x", generatedAt: new Date(0).toISOString(), qualityProfile: "standard" },
+      metadata: {
+        projectName: "x",
+        generatedAt: new Date(0).toISOString(),
+        qualityProfile: "standard"
+      },
       summary,
       tests: [
         test({
@@ -237,7 +312,9 @@ describe("core normalization and gates", () => {
     expect(minimal).toContain("<!-- quality-report-platform:summary -->");
     expect(minimal).toContain("**Gate:** Failed");
     expect(minimal).toContain("**Profile:** `standard`");
-    expect(minimal).toContain("backend.user.UserServiceTest > rejects duplicate email JIRA-102 / src:test");
+    expect(minimal).toContain(
+      "backend.user.UserServiceTest > rejects duplicate email JIRA-102 / src:test"
+    );
     expect(minimal).toContain("``[link](https://example.test) &lt;b>html&lt;/b> `tick` JIRA-77``");
     expect(minimal).not.toContain("backend\\.user");
     expect(minimal).toContain("Full report: not published for this run.");
@@ -255,18 +332,31 @@ describe("core normalization and gates", () => {
 
   it("keeps reusable workflow conditionals and delayed gate failure in place", async () => {
     const root = path.resolve(import.meta.dirname, "../../..");
-    const workflow = await readFile(path.join(root, ".github/workflows/publish-quality-report.yml"), "utf8");
+    const workflow = await readFile(
+      path.join(root, ".github/workflows/publish-quality-report.yml"),
+      "utf8"
+    );
     expect(workflow).toContain('if [[ "$publish_mode" == "auto" ]]');
     expect(workflow).toContain('publish_mode="artifact"');
     expect(workflow).toContain('publish_mode="pages-and-artifact"');
     expect(workflow).toContain('pr_comment_mode="minimal"');
-    expect(workflow).toContain("if: steps.resolve.outputs.publish-mode == 'artifact' || steps.resolve.outputs.publish-mode == 'pages-and-artifact'");
-    expect(workflow).toContain("if: steps.resolve.outputs.publish-mode == 'pages' || steps.resolve.outputs.publish-mode == 'pages-and-artifact'");
+    expect(workflow).toContain(
+      "if: steps.resolve.outputs.publish-mode == 'artifact' || steps.resolve.outputs.publish-mode == 'pages-and-artifact'"
+    );
+    expect(workflow).toContain(
+      "if: steps.resolve.outputs.publish-mode == 'pages' || steps.resolve.outputs.publish-mode == 'pages-and-artifact'"
+    );
     expect(workflow).toContain("steps.resolve.outputs.pr-comment-mode != 'off'");
     expect(workflow).toContain('gh api --method PATCH "repos/$REPO/issues/comments/$existing"');
     expect(workflow).toContain('gh api --method POST "repos/$REPO/issues/$PR_NUMBER/comments"');
-    expect(workflow).toContain("PR comment mode is ${{ steps.resolve.outputs.pr-comment-mode }}, but this is not a pull_request event; skipping comment.");
-    expect(workflow.indexOf("id: pr-comment")).toBeGreaterThan(workflow.indexOf("uses: actions/upload-artifact@v4"));
-    expect(workflow.indexOf("Fail on quality gate")).toBeGreaterThan(workflow.indexOf("id: pr-comment"));
+    expect(workflow).toContain(
+      "PR comment mode is ${{ steps.resolve.outputs.pr-comment-mode }}, but this is not a pull_request event; skipping comment."
+    );
+    expect(workflow.indexOf("id: pr-comment")).toBeGreaterThan(
+      workflow.indexOf("uses: actions/upload-artifact@v4")
+    );
+    expect(workflow.indexOf("Fail on quality gate")).toBeGreaterThan(
+      workflow.indexOf("id: pr-comment")
+    );
   });
 });

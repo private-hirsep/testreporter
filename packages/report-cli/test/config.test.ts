@@ -49,6 +49,32 @@ describe("CLI config and discovery", () => {
     await expect(loadConfig(invalidRegex)).rejects.toThrow(/valid regular expression/);
   });
 
+  it("loads bare external quality gate files with extended fields", async () => {
+    const dir = await mkdtemp(path.join(os.tmpdir(), "quality-config-gates-"));
+    const configPath = path.join(dir, "quality-report.yml");
+    const gatesPath = path.join(dir, "quality-gates.yml");
+    await writeFile(configPath, "project:\n  name: Example\n");
+    await writeFile(
+      gatesPath,
+      [
+        "requirements:",
+        "  failOnExtra: true",
+        "security:",
+        "  maxMedium: 0",
+        "  maxLow: null",
+        "warnings:",
+        "  maxWarnings: 0"
+      ].join("\n")
+    );
+
+    const config = await loadConfig(configPath, { qualityGatesPath: gatesPath });
+
+    expect(config.qualityGates.requirements.failOnExtra).toBe(true);
+    expect(config.qualityGates.security.maxMedium).toBe(0);
+    expect(config.qualityGates.security.maxLow).toBeNull();
+    expect(config.qualityGates.warnings.maxWarnings).toBe(0);
+  });
+
   it("discovers configured required and optional artifact paths without crashing when optional paths are absent", async () => {
     const dir = await mkdtemp(path.join(os.tmpdir(), "quality-discovery-"));
     await mkdir(path.join(dir, "quality-artifacts", "tests", "backend", "junit"), {

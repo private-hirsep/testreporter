@@ -1,9 +1,9 @@
-import { mkdir, mkdtemp, readFile, readdir, stat, writeFile } from "node:fs/promises";
+﻿import { mkdir, mkdtemp, readFile, readdir, stat, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
 import { QualityReportConfigSchema } from "@quality-report/report-core";
-import { loadConfig } from "../src/config.js";
+import { BUILT_IN_QUALITY_PROFILES, loadConfig } from "../src/config.js";
 import { buildReport } from "../src/generator.js";
 
 async function assertFullHtml(output: string) {
@@ -77,6 +77,7 @@ describe("report generator", () => {
       inputPath: path.join(root, "examples/minimal/quality-artifacts"),
       outputPath: output,
       zip: true,
+      qualityProfile: "relaxed",
       publishMode: "artifact",
       prCommentMode: "minimal",
       prCommentMarker: "<!-- quality-report-platform:summary -->"
@@ -109,7 +110,7 @@ describe("report generator", () => {
     const manifest = JSON.parse(
       await readFile(path.join(output, "data/manifest.json"), "utf8")
     ) as {
-      metadata: { publishMode?: string; prCommentMode?: string };
+      metadata: { qualityProfile?: string; publishMode?: string; prCommentMode?: string };
     };
     const summary = JSON.parse(
       await readFile(path.join(output, "meta/quality-summary.json"), "utf8")
@@ -119,12 +120,27 @@ describe("report generator", () => {
     };
     const minimalComment = await readFile(path.join(output, "meta/pr-comment-minimal.md"), "utf8");
     const fullComment = await readFile(path.join(output, "meta/pr-comment-full.md"), "utf8");
+    expect(manifest.metadata.qualityProfile).toBe("relaxed");
     expect(manifest.metadata.publishMode).toBe("artifact");
     expect(manifest.metadata.prCommentMode).toBe("minimal");
     expect(summary.publishMode).toBe("artifact");
     expect(summary.prCommentMode).toBe("minimal");
     expect(minimalComment.startsWith("<!-- quality-report-platform:summary -->")).toBe(true);
     expect(fullComment.startsWith("<!-- quality-report-platform:summary -->")).toBe(true);
+  });
+
+  it("keeps built-in profiles and custom quality-gate fields typed", async () => {
+    expect(BUILT_IN_QUALITY_PROFILES.strict.requirements?.failOnExtra).toBe(true);
+    expect(BUILT_IN_QUALITY_PROFILES.relaxed.security?.maxMedium).toBe(10);
+    const root = path.resolve(import.meta.dirname, "../../..");
+    const configPath = path.join(root, "examples/minimal/quality-report.yml");
+    const config = await loadConfig(configPath, {
+      qualityGatesPath: path.join(root, "examples/minimal/quality-gates.yml"),
+      qualityProfile: "dogfood-strict"
+    });
+    expect(config.qualityGates.requirements.failOnExtra).toBe(true);
+    expect(config.qualityGates.security.maxMedium).toBe(0);
+    expect(config.qualityGates.warnings.maxWarnings).toBe(0);
   });
 
   it("generates passing and failing reports with the same UI bundle and downloadable ZIPs", async () => {
@@ -244,7 +260,10 @@ describe("report generator", () => {
       '<testsuite><testcase classname="A" name="uses JIRA-1" file="/home/runner/work/repo/src/a.test.ts" /></testsuite>'
     );
     await writeFile(path.join(input, "coverage", "frontend", "coverage-summary.json"), "{");
-    await writeFile(path.join(input, "requirements", "expected.csv"), "key\nJIRA-1\nJIRA-2\nJIRA-2\n");
+    await writeFile(
+      path.join(input, "requirements", "expected.csv"),
+      "key\nJIRA-1\nJIRA-2\nJIRA-2\n"
+    );
     await writeFile(path.join(input, "requirements", "mapping.json"), "{");
     await writeFile(path.join(input, "security", "codeql", "bad.sarif"), "{");
     await writeFile(path.join(input, "raw", "evidence.txt"), "raw");

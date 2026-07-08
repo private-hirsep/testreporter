@@ -1,4 +1,4 @@
-import type { QualityReportConfig } from "../config/config.js";
+﻿import type { QualityReportConfig } from "../config/config.js";
 import type { ParserWarning, QualityGateResult, ReportSummary } from "../schema/report.js";
 
 export function evaluateQualityGate(
@@ -7,7 +7,7 @@ export function evaluateQualityGate(
   warnings: ParserWarning[] = [],
   options: { profile?: string; enabled?: boolean } = {}
 ): QualityGateResult {
-  if (options.enabled === false) {
+  if (options.enabled === false || config.qualityGates.enabled === false) {
     return {
       status: "skipped",
       profile: options.profile,
@@ -57,7 +57,22 @@ export function evaluateQualityGate(
     `<= ${config.qualityGates.tests.allowBroken}`,
     summary.tests.broken <= config.qualityGates.tests.allowBroken
   );
-  if (config.qualityGates.coverage.totalMinimum !== undefined && summary.coverage.totalPercentage !== undefined) {
+  if (
+    config.qualityGates.tests.allowSkipped !== undefined &&
+    config.qualityGates.tests.allowSkipped !== null
+  ) {
+    add(
+      "tests.skipped",
+      "Skipped tests",
+      summary.tests.skipped,
+      `<= ${config.qualityGates.tests.allowSkipped}`,
+      summary.tests.skipped <= config.qualityGates.tests.allowSkipped
+    );
+  }
+  if (
+    config.qualityGates.coverage.totalMinimum !== undefined &&
+    summary.coverage.totalPercentage !== undefined
+  ) {
     add(
       "coverage.total",
       "Total coverage",
@@ -131,20 +146,42 @@ export function evaluateQualityGate(
     `<= ${config.qualityGates.security.maxHigh}`,
     (summary.security.high ?? 0) <= config.qualityGates.security.maxHigh
   );
-  add(
-    "security.medium",
-    "Medium security findings",
-    summary.security.medium ?? 0,
-    `<= ${config.qualityGates.security.maxMedium}`,
-    (summary.security.medium ?? 0) <= config.qualityGates.security.maxMedium
-  );
-  add(
-    "warnings.count",
-    "Parser warnings",
-    warnings.length,
-    `<= ${config.qualityGates.warnings.maxWarnings}`,
-    warnings.length <= config.qualityGates.warnings.maxWarnings
-  );
+  if (
+    config.qualityGates.security.maxMedium !== undefined &&
+    config.qualityGates.security.maxMedium !== null
+  ) {
+    add(
+      "security.medium",
+      "Medium security findings",
+      summary.security.medium ?? 0,
+      `<= ${config.qualityGates.security.maxMedium}`,
+      (summary.security.medium ?? 0) <= config.qualityGates.security.maxMedium
+    );
+  }
+  if (
+    config.qualityGates.security.maxLow !== undefined &&
+    config.qualityGates.security.maxLow !== null
+  ) {
+    add(
+      "security.low",
+      "Low security findings",
+      summary.security.low ?? 0,
+      `<= ${config.qualityGates.security.maxLow}`,
+      (summary.security.low ?? 0) <= config.qualityGates.security.maxLow
+    );
+  }
+  if (
+    config.qualityGates.warnings.maxWarnings !== undefined &&
+    config.qualityGates.warnings.maxWarnings !== null
+  ) {
+    add(
+      "warnings.maxWarnings",
+      "Parser warnings",
+      warnings.length,
+      `<= ${config.qualityGates.warnings.maxWarnings}`,
+      warnings.length <= config.qualityGates.warnings.maxWarnings
+    );
+  }
 
   return {
     status: checks.some((check) => check.status === "failed") ? "failed" : "passed",

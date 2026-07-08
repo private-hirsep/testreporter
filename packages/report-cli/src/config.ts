@@ -1,18 +1,21 @@
-import { readFile } from "node:fs/promises";
+﻿import { readFile } from "node:fs/promises";
 import { parse as parseYaml } from "yaml";
 import {
+  QualityGateConfigSchema,
   QualityReportConfigSchema,
   type QualityGateConfig,
   type QualityReportConfig
 } from "@quality-report/report-core";
 import { z } from "zod";
 
-const ExternalQualityGatesSchema = z.object({
-  qualityGates: QualityReportConfigSchema.shape.qualityGates.optional(),
-  qualityGateProfiles: QualityReportConfigSchema.shape.qualityGateProfiles.optional()
-});
+const ExternalQualityGatesSchema = z
+  .object({
+    qualityGates: QualityReportConfigSchema.shape.qualityGates.optional(),
+    qualityGateProfiles: QualityReportConfigSchema.shape.qualityGateProfiles.optional()
+  })
+  .strict();
 
-const builtInProfiles: Record<string, QualityGateConfig> = {
+export const BUILT_IN_QUALITY_PROFILES: Record<string, QualityGateConfig> = {
   off: {
     tests: { allowFailed: 999999, allowBroken: 999999 },
     coverage: {},
@@ -50,10 +53,10 @@ const builtInProfiles: Record<string, QualityGateConfig> = {
   }
 };
 
-export type QualityProfileName = keyof typeof builtInProfiles | string;
+export type QualityProfileName = string;
 
 export function availableProfiles(config: QualityReportConfig): string[] {
-  return [...Object.keys(builtInProfiles), ...Object.keys(config.qualityGateProfiles)];
+  return [...Object.keys(BUILT_IN_QUALITY_PROFILES), ...Object.keys(config.qualityGateProfiles)];
 }
 
 export function applyQualityProfile(
@@ -61,13 +64,13 @@ export function applyQualityProfile(
   profile: QualityProfileName
 ): QualityReportConfig {
   if (!profile) return config;
-  const gates = config.qualityGateProfiles[profile] ?? builtInProfiles[profile];
+  const gates = config.qualityGateProfiles[profile] ?? BUILT_IN_QUALITY_PROFILES[profile];
   if (!gates) {
     throw new Error(
       `Unknown quality profile "${profile}". Available profiles: ${availableProfiles(config).join(", ")}`
     );
   }
-  return { ...config, qualityGates: gates };
+  return { ...config, qualityGates: QualityGateConfigSchema.parse(gates) };
 }
 
 async function loadExternalQualityGates(
@@ -77,10 +80,15 @@ async function loadExternalQualityGates(
   if (!path) return config;
   const content = await readFile(path, "utf8");
   const raw = parseYaml(content) as unknown;
-  const external = ExternalQualityGatesSchema.parse(raw);
+  const wrapped = ExternalQualityGatesSchema.safeParse(raw);
+  const external = wrapped.success
+    ? wrapped.data
+    : { qualityGates: QualityGateConfigSchema.parse(raw) };
   return {
     ...config,
-    ...(external.qualityGates ? { qualityGates: external.qualityGates } : {}),
+    ...(external.qualityGates
+      ? { qualityGates: QualityGateConfigSchema.parse(external.qualityGates) }
+      : {}),
     qualityGateProfiles: {
       ...config.qualityGateProfiles,
       ...(external.qualityGateProfiles ?? {})
@@ -90,14 +98,15 @@ async function loadExternalQualityGates(
 
 export async function loadConfig(
   path: string,
-  profile?: string,
+  profileOrOptions?: string | { qualityProfile?: string; qualityGatesPath?: string },
   qualityGatesPath?: string
 ): Promise<QualityReportConfig> {
   const content = await readFile(path, "utf8");
   const raw = parseYaml(content) as unknown;
-  const config = await loadExternalQualityGates(
-    QualityReportConfigSchema.parse(raw),
-    qualityGatesPath
-  );
+  const profile =
+    typeof profileOrOptions === "string" ? profileOrOptions : profileOrOptions?.qualityProfile;
+  const externalPath =
+    typeof profileOrOptions === "string" ? qualityGatesPath : profileOrOptions?.qualityGatesPath;
+  const config = await loadExternalQualityGates(QualityReportConfigSchema.parse(raw), externalPath);
   return profile ? applyQualityProfile(config, profile) : config;
 }

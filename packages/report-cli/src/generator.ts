@@ -1,4 +1,4 @@
-import { createWriteStream } from "node:fs";
+﻿import { createWriteStream } from "node:fs";
 import { mkdir, readFile, rename, rm, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -17,6 +17,7 @@ import {
   type NormalizedReport,
   type NormalizedTestCase,
   type ParserWarning,
+  type QualityGateCheck,
   type QualityReportConfig,
   type SecurityFinding
 } from "@quality-report/report-core";
@@ -49,7 +50,11 @@ export type GenerateOptions = {
 const MAX_PARSE_BYTES = 50 * 1024 * 1024;
 const DEFAULT_PR_COMMENT_MARKER = "<!-- quality-report-platform:summary -->";
 
-function collectParseResult<T>(target: T[], result: { items: T[]; warnings: ParserWarning[] }, warnings: ParserWarning[]) {
+function collectParseResult<T>(
+  target: T[],
+  result: { items: T[]; warnings: ParserWarning[] },
+  warnings: ParserWarning[]
+) {
   target.push(...result.items);
   warnings.push(...result.warnings);
 }
@@ -296,7 +301,9 @@ function qualitySummary(report: NormalizedReport) {
     },
     security: report.summary.security,
     warnings: report.warnings.length,
-    failedChecks: report.qualityGate.checks.filter((check) => check.status === "failed")
+    failedChecks: report.qualityGate.checks.filter(
+      (check: QualityGateCheck) => check.status === "failed"
+    )
   };
 }
 
@@ -325,7 +332,7 @@ async function writeMeta(outputPath: string, report: NormalizedReport, prComment
   ].join("\n");
 
   const failedChecks = report.qualityGate.checks
-    .filter((check) => check.status === "failed")
+    .filter((check: QualityGateCheck) => check.status === "failed")
     .map(
       (check) =>
         `- ${markdownEscape(check.label)}: ${markdownEscape(check.actual)} expected ${markdownEscape(check.expected)}`
@@ -338,7 +345,7 @@ async function writeMeta(outputPath: string, report: NormalizedReport, prComment
     "| Check | Actual | Expected | Status |",
     "| --- | ---: | --- | --- |",
     ...report.qualityGate.checks.map(
-      (check) =>
+      (check: QualityGateCheck) =>
         `| ${markdownEscape(check.label)} | ${markdownEscape(check.actual)} | ${markdownEscape(check.expected)} | ${markdownEscape(check.status)} |`
     ),
     "",
@@ -389,19 +396,26 @@ export async function buildReport(options: GenerateOptions): Promise<NormalizedR
         ...(artifact.layer ? { layer: artifact.layer } : {}),
         requirementPattern
       };
-      if (artifact.kind === "junit") collectParseResult(tests, parseJUnitXml(content, context), warnings);
-      if (artifact.kind === "vitestJson") collectParseResult(tests, parseVitestJson(content, context), warnings);
+      if (artifact.kind === "junit")
+        collectParseResult(tests, parseJUnitXml(content, context), warnings);
+      if (artifact.kind === "vitestJson")
+        collectParseResult(tests, parseVitestJson(content, context), warnings);
       if (artifact.kind === "playwrightJson")
         collectParseResult(tests, parsePlaywrightJson(content, context), warnings);
-      if (artifact.kind === "jacocoXml") collectParseResult(coverage, parseJaCoCoXml(content, context), warnings);
-      if (artifact.kind === "jacocoCsv") collectParseResult(coverage, parseJaCoCoCsv(content, context), warnings);
+      if (artifact.kind === "jacocoXml")
+        collectParseResult(coverage, parseJaCoCoXml(content, context), warnings);
+      if (artifact.kind === "jacocoCsv")
+        collectParseResult(coverage, parseJaCoCoCsv(content, context), warnings);
       if (artifact.kind === "coberturaXml")
         collectParseResult(coverage, parseCoberturaXml(content, context), warnings);
-      if (artifact.kind === "lcov") collectParseResult(coverage, parseLcov(content, context), warnings);
+      if (artifact.kind === "lcov")
+        collectParseResult(coverage, parseLcov(content, context), warnings);
       if (artifact.kind === "istanbulSummary")
         collectParseResult(coverage, parseIstanbulSummary(content, context), warnings);
-      if (artifact.kind === "sarif") collectParseResult(security, parseSarif(content, context), warnings);
-      if (artifact.kind === "zapJson") collectParseResult(security, parseZapJson(content, context), warnings);
+      if (artifact.kind === "sarif")
+        collectParseResult(security, parseSarif(content, context), warnings);
+      if (artifact.kind === "zapJson")
+        collectParseResult(security, parseZapJson(content, context), warnings);
     } catch (error) {
       warnings.push({
         sourcePath: displayPath,

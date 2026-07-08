@@ -1,4 +1,4 @@
-import { z } from "zod";
+﻿import { z } from "zod";
 
 export const TestStatusSchema = z.enum(["passed", "failed", "broken", "skipped", "unknown"]);
 export const TestLayerSchema = z.enum(["backend", "frontend", "e2e", "unknown"]);
@@ -128,20 +128,20 @@ export const RunMetadataSchema = z.object({
   prCommentMode: z.string().optional()
 });
 
+export const QualityGateCheckSchema = z.object({
+  id: z.string(),
+  label: z.string(),
+  status: GateStatusSchema,
+  actual: z.union([z.string(), z.number()]),
+  expected: z.string(),
+  message: z.string().optional()
+});
+
 export const QualityGateResultSchema = z.object({
   status: GateStatusSchema,
   profile: z.string().optional(),
   enabled: z.boolean().default(true),
-  checks: z.array(
-    z.object({
-      id: z.string(),
-      label: z.string(),
-      status: GateStatusSchema,
-      actual: z.union([z.string(), z.number()]),
-      expected: z.string(),
-      message: z.string().optional()
-    })
-  )
+  checks: z.array(QualityGateCheckSchema)
 });
 
 export const HistoryRunSchema = z.object({
@@ -201,6 +201,8 @@ export type SecurityFinding = z.infer<typeof SecurityFindingSchema>;
 export type DownloadableArtifact = z.infer<typeof DownloadableArtifactSchema>;
 export type ParserWarning = z.infer<typeof ParserWarningSchema>;
 export type RunMetadata = z.infer<typeof RunMetadataSchema>;
+export type ReportMetadata = RunMetadata;
+export type QualityGateCheck = z.infer<typeof QualityGateCheckSchema>;
 export type QualityGateResult = z.infer<typeof QualityGateResultSchema>;
 export type HistoryRun = z.infer<typeof HistoryRunSchema>;
 export type ReportSummary = z.infer<typeof ReportSummarySchema>;

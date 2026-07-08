@@ -1,4 +1,4 @@
-qualityGates:
+﻿qualityGates:
   tests:
     allowFailed: 3
     allowBroken: 2
@@ -9,9 +9,14 @@ qualityGates:
   requirements:
     minimum: 75
     failOnMissing: false
+    failOnExtra: false
   security:
     maxCritical: 0
     maxHigh: 0
+    maxMedium: null
+    maxLow: null
+  warnings:
+    maxWarnings: null
 
 qualityGateProfiles:
   dogfood-strict:
@@ -25,6 +30,10 @@ qualityGateProfiles:
     requirements:
       minimum: 100
       failOnMissing: true
+      failOnExtra: true
     security:
       maxCritical: 0
       maxHigh: 0
+      maxMedium: 0
+    warnings:
+      maxWarnings: 0

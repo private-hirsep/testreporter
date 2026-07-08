@@ -1,12 +1,14 @@
-import { z } from "zod";
+﻿import { z } from "zod";
 
 const MaybeGlobSchema = z.union([z.string(), z.array(z.string())]).optional();
-const QualityGateSchema = z
+export const QualityGateConfigSchema = z
   .object({
+    enabled: z.boolean().default(true),
     tests: z
       .object({
         allowFailed: z.number().int().nonnegative().default(0),
-        allowBroken: z.number().int().nonnegative().default(0)
+        allowBroken: z.number().int().nonnegative().default(0),
+        allowSkipped: z.number().int().nonnegative().nullable().optional()
       })
       .default({ allowFailed: 0, allowBroken: 0 }),
     coverage: z
@@ -27,12 +29,13 @@ const QualityGateSchema = z
       .object({
         maxCritical: z.number().int().nonnegative().default(0),
         maxHigh: z.number().int().nonnegative().default(0),
-        maxMedium: z.number().int().nonnegative().default(3)
+        maxMedium: z.number().int().nonnegative().nullable().default(3),
+        maxLow: z.number().int().nonnegative().nullable().optional()
       })
       .default({ maxCritical: 0, maxHigh: 0, maxMedium: 3 }),
     warnings: z
       .object({
-        maxWarnings: z.number().int().nonnegative().default(10)
+        maxWarnings: z.number().int().nonnegative().nullable().default(10)
       })
       .default({ maxWarnings: 10 })
   })
@@ -123,12 +126,13 @@ export const QualityReportConfigSchema = z.object({
         .default("[A-Z]+-[0-9]+")
     })
     .default({ keyPattern: "[A-Z]+-[0-9]+" }),
-  qualityGates: QualityGateSchema,
-  qualityGateProfiles: z.record(QualityGateSchema).default({})
+  qualityGates: QualityGateConfigSchema,
+  qualityGateProfiles: z.record(QualityGateConfigSchema).default({})
 });
 
 export type QualityReportConfig = z.infer<typeof QualityReportConfigSchema>;
-export type QualityGateConfig = QualityReportConfig["qualityGates"];
+export type ResolvedQualityGateConfig = z.infer<typeof QualityGateConfigSchema>;
+export type QualityGateConfig = z.input<typeof QualityGateConfigSchema>;
 
 export function asArray(value: string | string[] | undefined): string[] {
   if (!value) return [];
