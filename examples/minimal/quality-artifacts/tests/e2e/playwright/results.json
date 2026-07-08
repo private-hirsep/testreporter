@@ -4,15 +4,117 @@
       "title": "checkout.spec.ts",
       "tests": [
         {
-          "title": "buyer can complete checkout RFL-301",
-          "location": { "file": "tests/checkout.spec.ts", "line": 12 },
+          "title": "buyer can complete checkout RFL-301 RFL-501",
+          "projectName": "chromium-desktop",
+          "browserName": "chromium",
+          "location": { "file": "tests/e2e/checkout.spec.ts", "line": 12 },
           "annotations": [{ "type": "requirement", "description": "RFL-301" }],
-          "results": [{ "status": "passed", "duration": 1510 }]
+          "results": [{ "status": "passed", "duration": 1510, "retry": 0 }]
         },
         {
           "title": "receipt is printable RFL-302",
-          "location": { "file": "tests/checkout.spec.ts", "line": 45 },
-          "results": [{ "status": "passed", "duration": 740 }]
+          "projectName": "chromium-desktop",
+          "browserName": "chromium",
+          "location": { "file": "tests/e2e/checkout.spec.ts", "line": 45 },
+          "results": [{ "status": "passed", "duration": 740, "retry": 0 }]
+        },
+        {
+          "title": "payment decline shows recovery path RFL-501",
+          "projectName": "firefox-desktop",
+          "browserName": "firefox",
+          "location": { "file": "tests/e2e/checkout.spec.ts", "line": 88 },
+          "results": [
+            {
+              "status": "failed",
+              "duration": 2200,
+              "retry": 0,
+              "errors": [
+                {
+                  "message": "Expected recovery CTA to be visible",
+                  "stack": "Error: Expected recovery CTA to be visible\n    at CheckoutPage.expectRecoveryCta (tests/e2e/pages/CheckoutPage.ts:64:13)\n    at tests/e2e/checkout.spec.ts:88:7"
+                }
+              ],
+              "attachments": [
+                { "name": "screenshot", "path": "attachments/payment-decline.png", "contentType": "image/png" },
+                { "name": "trace", "path": "attachments/payment-decline-trace.zip", "contentType": "application/zip" },
+                { "name": "video", "path": "attachments/payment-decline.webm", "contentType": "video/webm" }
+              ]
+            },
+            { "status": "passed", "duration": 1850, "retry": 1, "attachments": [{ "name": "trace", "path": "attachments/payment-decline-retry-trace.zip", "contentType": "application/zip" }] }
+          ]
+        },
+        {
+          "title": "mobile checkout preserves cart RFL-301",
+          "projectName": "webkit-mobile",
+          "browserName": "webkit",
+          "location": { "file": "tests/e2e/checkout.spec.ts", "line": 131 },
+          "results": [{ "status": "passed", "duration": 2640, "retry": 0 }]
+        }
+      ]
+    },
+    {
+      "title": "identity.spec.ts",
+      "tests": [
+        {
+          "title": "new user onboarding reaches dashboard RFL-101 RFL-201",
+          "projectName": "chromium-desktop",
+          "browserName": "chromium",
+          "location": { "file": "tests/e2e/identity.spec.ts", "line": 21 },
+          "results": [{ "status": "passed", "duration": 1320, "retry": 0 }]
+        },
+        {
+          "title": "locked account warning appears RFL-401",
+          "projectName": "chromium-desktop",
+          "browserName": "chromium",
+          "location": { "file": "tests/e2e/identity.spec.ts", "line": 58 },
+          "results": [{ "status": "passed", "duration": 980, "retry": 0 }]
+        },
+        {
+          "title": "profile avatar upload works RFL-202",
+          "projectName": "webkit-mobile",
+          "browserName": "webkit",
+          "location": { "file": "tests/e2e/identity.spec.ts", "line": 93 },
+          "results": [{ "status": "skipped", "duration": 0, "retry": 0 }]
+        },
+        {
+          "title": "session survives refresh RFL-203",
+          "projectName": "firefox-desktop",
+          "browserName": "firefox",
+          "location": { "file": "tests/e2e/identity.spec.ts", "line": 126 },
+          "results": [{ "status": "passed", "duration": 1120, "retry": 0 }]
+        }
+      ]
+    },
+    {
+      "title": "reports.spec.ts",
+      "tests": [
+        {
+          "title": "audit export downloads RFL-601",
+          "projectName": "chromium-desktop",
+          "browserName": "chromium",
+          "location": { "file": "tests/e2e/reports.spec.ts", "line": 19 },
+          "results": [{ "status": "passed", "duration": 3310, "retry": 0 }]
+        },
+        {
+          "title": "invoice event appears in timeline RFL-602",
+          "projectName": "chromium-desktop",
+          "browserName": "chromium",
+          "location": { "file": "tests/e2e/reports.spec.ts", "line": 52 },
+          "results": [{ "status": "passed", "duration": 890, "retry": 0 }]
+        },
+        {
+          "title": "search index status updates RFL-777",
+          "projectName": "firefox-desktop",
+          "browserName": "firefox",
+          "location": { "file": "tests/e2e/reports.spec.ts", "line": 81 },
+          "results": [{ "status": "passed", "duration": 4210, "retry": 0 }]
+        },
+        {
+          "title": "feature flag matrix is visible RFL-701",
+          "projectName": "webkit-mobile",
+          "browserName": "webkit",
+          "location": { "file": "tests/e2e/reports.spec.ts", "line": 117 },
+          "results": [{ "status": "passed", "duration": 1510, "retry": 0 }]
         }
       ]
     }

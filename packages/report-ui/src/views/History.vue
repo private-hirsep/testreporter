@@ -10,19 +10,23 @@
     <v-alert type="info" variant="tonal" class="mb-4">
       Historical trend merging is not enabled for this static report yet. This page shows the current run without inventing prior data.
     </v-alert>
-    <div class="metrics">
-      <MetricCard label="Generated" :value="generatedDate" />
-      <MetricCard label="Tests" :value="manifest.summary.tests.total" />
-      <MetricCard label="Coverage" :value="formatPercent(manifest.summary.coverage.totalPercentage)" />
-      <MetricCard label="Requirements" :value="formatPercent(manifest.requirements.percentage)" />
-      <MetricCard label="Security Findings" :value="securityTotal" :tone="securityTotal ? 'fail' : 'pass'" />
-    </div>
+    <section class="summary-strip">
+      <div>
+        <div class="page-kicker">Current run</div>
+        <div class="summary-number">{{ generatedDate }}</div>
+      </div>
+      <div class="inline-metrics">
+        <div><strong>{{ manifest.summary.tests.total }}</strong><span>Tests</span></div>
+        <div><strong>{{ formatPercent(manifest.summary.coverage.totalPercentage) }}</strong><span>Coverage</span></div>
+        <div><strong>{{ formatPercent(manifest.requirements.percentage) }}</strong><span>Requirements</span></div>
+        <div><strong :class="securityTotal ? 'text-error' : 'text-success'">{{ securityTotal }}</strong><span>Security findings</span></div>
+      </div>
+    </section>
   </div>
 </template>
 
 <script setup lang="ts">
 import { computed } from "vue";
-import MetricCard from "../components/MetricCard.vue";
 import { formatPercent, gateColor } from "../format";
 import type { Manifest, TestCase } from "../types";
 const props = defineProps<{ manifest?: Manifest; tests: TestCase[] }>();

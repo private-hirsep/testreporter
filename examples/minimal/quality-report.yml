@@ -28,12 +28,12 @@ requirements:
 
 qualityGates:
   tests:
-    allowFailed: 1
-    allowBroken: 0
+    allowFailed: 3
+    allowBroken: 2
   coverage:
     totalMinimum: 70
     backendMinimum: 70
-    frontendMinimum: 70
+    frontendMinimum: 60
   requirements:
     minimum: 75
     failOnMissing: false

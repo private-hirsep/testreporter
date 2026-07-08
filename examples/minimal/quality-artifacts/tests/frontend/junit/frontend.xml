@@ -1,7 +1,31 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<testsuite name="frontend.components" tests="2" failures="0" errors="0" skipped="1">
-  <testcase classname="frontend.components.LoginForm" name="renders validation RFL-201" time="0.04"/>
-  <testcase classname="frontend.components.ProfilePanel" name="shows optional avatar RFL-202" time="0.01">
+<testsuite name="frontend.components" tests="16" failures="1" errors="1" skipped="2">
+  <testcase classname="frontend.components.LoginForm" name="renders validation copy RFL-201" file="src/components/LoginForm.test.ts" line="18" time="0.04"/>
+  <testcase classname="frontend.components.LoginForm" name="submits valid login RFL-201 RFL-203" file="src/components/LoginForm.test.ts" line="46" time="0.07"/>
+  <testcase classname="frontend.components.LoginForm" name="shows locked account warning RFL-101 RFL-401" file="src/components/LoginForm.test.ts" line="83" time="0.05"/>
+  <testcase classname="frontend.components.ProfilePanel" name="shows optional avatar RFL-202" file="src/components/ProfilePanel.test.ts" line="29" time="0.01">
     <skipped message="feature flag disabled"/>
+  </testcase>
+  <testcase classname="frontend.components.ProfilePanel" name="rejects unsupported image type RFL-202 RFL-401" file="src/components/ProfilePanel.test.ts" line="62" time="0.06"/>
+  <testcase classname="frontend.components.CheckoutSummary" name="renders order totals RFL-301" file="src/components/CheckoutSummary.test.ts" line="33" time="0.09"/>
+  <testcase classname="frontend.components.CheckoutSummary" name="surfaces inventory reservation failure RFL-501" file="src/components/CheckoutSummary.test.ts" line="78" time="0.11">
+    <failure message="Expected reservation error banner">AssertionError: expected element to contain text: inventory reservation failed
+  at src/components/CheckoutSummary.test.ts:78:22
+  at src/components/CheckoutSummary.vue:141:9</failure>
+  </testcase>
+  <testcase classname="frontend.components.ReceiptPanel" name="renders printable receipt RFL-302" file="src/components/ReceiptPanel.test.ts" line="24" time="0.05"/>
+  <testcase classname="frontend.components.ReceiptPanel" name="archives receipt metadata RFL-302 RFL-601" file="src/components/ReceiptPanel.test.ts" line="57" time="0.08"/>
+  <testcase classname="frontend.components.SecurityBanner" name="shows webhook warning RFL-401" file="src/components/SecurityBanner.test.ts" line="42" time="0.03"/>
+  <testcase classname="frontend.components.ReportExport" name="downloads audit export RFL-601" file="src/components/ReportExport.test.ts" line="36" time="0.13"/>
+  <testcase classname="frontend.components.ReportExport" name="handles empty export state" file="src/components/ReportExport.test.ts" line="64" time="0.02"/>
+  <testcase classname="frontend.components.BillingEvents" name="renders invoice timeline RFL-602" file="src/components/BillingEvents.test.ts" line="31" time="0.01">
+    <skipped message="contract fixture unavailable"/>
+  </testcase>
+  <testcase classname="frontend.components.SearchPanel" name="renders search index status RFL-777" file="src/components/SearchPanel.test.ts" line="27" time="0.16"/>
+  <testcase classname="frontend.components.SearchPanel" name="refreshes search index RFL-777" file="src/components/SearchPanel.test.ts" line="58" time="0.42"/>
+  <testcase classname="frontend.components.FeatureFlags" name="loads feature flag matrix RFL-701" file="src/components/FeatureFlags.test.ts" line="88" time="0.05">
+    <error message="Mock service worker did not start">Error: Mock service worker did not start
+  at src/test/setup/msw.ts:19:11
+  at src/components/FeatureFlags.test.ts:88:5</error>
   </testcase>
 </testsuite>

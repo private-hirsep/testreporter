@@ -9,13 +9,18 @@
         {{ formatPercent(manifest.requirements.percentage) }} covered
       </v-chip>
     </div>
-    <div class="metrics">
-      <MetricCard label="Coverage" :value="formatPercent(manifest.requirements.percentage)" :tone="manifest.requirements.missing.length ? 'warn' : 'pass'" />
-      <MetricCard label="Expected" :value="manifest.requirements.expected.length" />
-      <MetricCard label="Covered" :value="manifest.requirements.covered.length" tone="pass" />
-      <MetricCard label="Missing" :value="manifest.requirements.missing.length" :tone="manifest.requirements.missing.length ? 'fail' : 'pass'" />
-      <MetricCard label="Extra" :value="manifest.requirements.extra.length" :tone="manifest.requirements.extra.length ? 'warn' : 'neutral'" />
-    </div>
+    <section class="summary-strip">
+      <div>
+        <div class="page-kicker">Requirement coverage</div>
+        <div class="summary-number">{{ formatPercent(manifest.requirements.percentage) }}</div>
+      </div>
+      <div class="inline-metrics">
+        <div><strong>{{ manifest.requirements.expected.length }}</strong><span>Expected</span></div>
+        <div><strong class="text-success">{{ manifest.requirements.covered.length }}</strong><span>Covered</span></div>
+        <div><strong class="text-error">{{ manifest.requirements.missing.length }}</strong><span>Missing</span></div>
+        <div><strong class="text-warning">{{ manifest.requirements.extra.length }}</strong><span>Extra</span></div>
+      </div>
+    </section>
     <div class="toolbar">
       <v-text-field v-model="search" label="Search requirements" density="compact" hide-details prepend-inner-icon="mdi-magnify" />
       <v-select v-model="filter" :items="['all', 'covered', 'missing', 'extra']" label="Status" density="compact" hide-details />
@@ -28,6 +33,7 @@
           <td class="mono">{{ key }}</td>
           <td><v-chip size="small" :color="statusColor(status(key))" label>{{ status(key) }}</v-chip></td>
           <td>
+            <strong class="mr-2">{{ manifest.requirements.testsByRequirement[key]?.length ?? 0 }}</strong>
             <v-chip
               v-for="testId in manifest.requirements.testsByRequirement[key] ?? []"
               :key="testId"
@@ -48,7 +54,6 @@
 
 <script setup lang="ts">
 import { computed, ref } from "vue";
-import MetricCard from "../components/MetricCard.vue";
 import { formatPercent, statusColor } from "../format";
 import type { Manifest, TestCase } from "../types";
 const props = defineProps<{ manifest?: Manifest; tests: TestCase[] }>();

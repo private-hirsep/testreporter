@@ -1,9 +1,15 @@
 key,title
-RFL-101,Create user
-RFL-102,Reject duplicate email
-RFL-103,Health endpoint
+RFL-101,User onboarding and account state
+RFL-102,Duplicate email validation
+RFL-104,User profile update
 RFL-201,Login validation
-RFL-202,Profile avatar
-RFL-301,Checkout
+RFL-202,Profile avatar handling
+RFL-203,Session refresh and token expiry
+RFL-301,Checkout order creation
 RFL-302,Printable receipt
-RFL-999,Future requirement
+RFL-401,Security audit and warnings
+RFL-501,Payment and inventory recovery
+RFL-601,Audit export and receipt archive
+RFL-602,Invoice event timeline
+RFL-701,Feature flag matrix
+RFL-999,Future history trend import

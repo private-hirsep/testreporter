@@ -39,9 +39,11 @@ export function buildTestCase(input: {
   layer: TestLayer;
   status: TestStatus;
   durationMs?: number | undefined;
+  retries?: number | undefined;
   message?: string | undefined;
   trace?: string | undefined;
   labels?: Record<string, string[]> | undefined;
+  attachments?: Array<{ name: string; path: string; contentType?: string | undefined }> | undefined;
   requirementPattern: RegExp;
   sourcePath: string;
 }): NormalizedTestCase {
@@ -59,7 +61,7 @@ export function buildTestCase(input: {
     layer: input.layer,
     status: input.status,
     ...(input.durationMs !== undefined ? { durationMs: input.durationMs } : {}),
-    retries: 0,
+    retries: input.retries ?? 0,
     requirements,
     labels: input.labels ?? {},
     ...(input.message || input.trace
@@ -70,7 +72,7 @@ export function buildTestCase(input: {
           }
         }
       : {}),
-    attachments: [],
+    attachments: input.attachments ?? [],
     sourcePath: input.sourcePath
   };
 }

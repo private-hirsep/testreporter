@@ -18,22 +18,16 @@
         {{ manifest.warnings.length }} warning{{ manifest.warnings.length === 1 ? "" : "s" }}
       </v-btn>
     </section>
-    <div class="metrics">
-      <MetricCard label="Total Tests" :value="manifest.summary.tests.total" />
-      <MetricCard label="Passed Tests" :value="manifest.summary.tests.passed" tone="pass" />
-      <MetricCard label="Failed Tests" :value="manifest.summary.tests.failed" :tone="manifest.summary.tests.failed ? 'fail' : 'pass'" />
-      <MetricCard label="Skipped / Broken" :value="manifest.summary.tests.skipped + manifest.summary.tests.broken" :tone="manifest.summary.tests.broken ? 'fail' : 'warn'" />
-      <MetricCard label="Total Coverage" :value="formatPercent(manifest.summary.coverage.totalPercentage)" />
-      <MetricCard label="Backend Coverage" :value="formatPercent(manifest.summary.coverage.backendPercentage)" />
-      <MetricCard label="Frontend Coverage" :value="formatPercent(manifest.summary.coverage.frontendPercentage)" />
-      <MetricCard label="Requirement Coverage" :value="formatPercent(manifest.requirements.percentage)" :tone="manifest.requirements.missing.length ? 'warn' : 'pass'" />
-      <MetricCard label="Security Findings" :value="securityTotal" :tone="securityTotal ? 'fail' : 'pass'" />
-      <MetricCard label="Parser Warnings" :value="manifest.warnings.length" :tone="manifest.warnings.length ? 'warn' : 'pass'" />
-    </div>
-    <div class="chart-grid">
-      <v-card class="portal-card" variant="flat">
+    <div class="dashboard-overview">
+      <v-card class="portal-card summary-panel" variant="flat">
         <div class="portal-card-title"><h2>Test Status Distribution</h2><v-btn to="/tests" size="small" variant="text">Open tests</v-btn></div>
         <v-card-text>
+          <div class="inline-metrics">
+            <div><strong>{{ manifest.summary.tests.total }}</strong><span>Total</span></div>
+            <div><strong class="text-success">{{ manifest.summary.tests.passed }}</strong><span>Passed</span></div>
+            <div><strong class="text-error">{{ manifest.summary.tests.failed }}</strong><span>Failed</span></div>
+            <div><strong>{{ manifest.summary.tests.broken + manifest.summary.tests.skipped }}</strong><span>Skipped/Broken</span></div>
+          </div>
           <div class="distribution" aria-label="Test status distribution">
             <span class="bar-pass" :style="{ width: widthFor(manifest.summary.tests.passed) }" />
             <span class="bar-failed" :style="{ width: widthFor(manifest.summary.tests.failed) }" />
@@ -46,7 +40,7 @@
           </div>
         </v-card-text>
       </v-card>
-      <v-card class="portal-card" variant="flat">
+      <v-card class="portal-card summary-panel" variant="flat">
         <div class="portal-card-title"><h2>Coverage Comparison</h2><v-btn to="/coverage" size="small" variant="text">Open coverage</v-btn></div>
         <v-card-text>
           <div v-for="item in coverageBreakdown" :key="item.label" class="chart-row">
@@ -54,27 +48,35 @@
           </div>
         </v-card-text>
       </v-card>
-      <v-card class="portal-card" variant="flat">
-        <div class="portal-card-title"><h2>Security Severity</h2><v-btn to="/security" size="small" variant="text">Open security</v-btn></div>
+      <v-card class="portal-card summary-panel" variant="flat">
+        <div class="portal-card-title"><h2>Security & Requirements</h2><v-btn to="/security" size="small" variant="text">Open security</v-btn></div>
         <v-card-text>
+          <div class="inline-metrics">
+            <div><strong :class="securityTotal ? 'text-error' : 'text-success'">{{ securityTotal }}</strong><span>Findings</span></div>
+            <div><strong>{{ formatPercent(manifest.requirements.percentage) }}</strong><span>Req. coverage</span></div>
+            <div><strong :class="manifest.requirements.missing.length ? 'text-warning' : 'text-success'">{{ manifest.requirements.missing.length }}</strong><span>Missing reqs</span></div>
+          </div>
           <div v-for="item in severityBreakdown" :key="item.label" class="chart-row">
             <span>{{ item.label }}</span><div class="progress-track"><div class="progress-fill" :class="item.class" :style="{ width: severityWidth(item.value) }" /></div><strong>{{ item.value }}</strong>
           </div>
         </v-card-text>
       </v-card>
     </div>
-    <div class="section-grid">
-      <v-card v-for="section in sections" :key="section.to" class="portal-card" variant="flat" :to="section.to">
-        <v-card-title><v-icon :icon="section.icon" class="mr-2" />{{ section.title }}</v-card-title>
-        <v-card-text>{{ section.text }}</v-card-text>
-      </v-card>
-    </div>
+    <section class="quality-areas">
+      <div class="portal-card-title"><h2>Quality Areas</h2></div>
+      <v-list lines="two" bg-color="transparent">
+        <v-list-item v-for="section in sections" :key="section.to" :to="section.to" :prepend-icon="section.icon">
+          <v-list-item-title>{{ section.title }}</v-list-item-title>
+          <v-list-item-subtitle>{{ section.text }}</v-list-item-subtitle>
+          <template #append><v-icon icon="mdi-chevron-right" /></template>
+        </v-list-item>
+      </v-list>
+    </section>
   </div>
 </template>
 
 <script setup lang="ts">
 import { computed } from "vue";
-import MetricCard from "../components/MetricCard.vue";
 import { formatPercent, gateColor } from "../format";
 import type { Manifest, TestCase } from "../types";
 const props = defineProps<{ manifest?: Manifest; tests: TestCase[] }>();

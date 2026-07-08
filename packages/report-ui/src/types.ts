@@ -11,7 +11,10 @@ export type TestCase = {
   durationMs?: number;
   retries: number;
   requirements: string[];
+  labels?: Record<string, string[]>;
   error?: { message?: string; trace?: string };
+  attachments?: Array<{ name: string; path: string; contentType?: string }>;
+  sourcePath?: string;
 };
 
 export type CoverageMetric = {

@@ -6,11 +6,20 @@
         <div class="page-kicker">Backend, frontend, and file-level coverage from static artifacts</div>
       </div>
     </div>
-    <div class="metrics">
-      <MetricCard label="Total Coverage" :value="formatPercent(manifest.summary.coverage.totalPercentage)" :tone="tone(manifest.summary.coverage.totalPercentage)" />
-      <MetricCard label="Backend Coverage" :value="formatPercent(manifest.summary.coverage.backendPercentage)" :tone="tone(manifest.summary.coverage.backendPercentage)" />
-      <MetricCard label="Frontend Coverage" :value="formatPercent(manifest.summary.coverage.frontendPercentage)" :tone="tone(manifest.summary.coverage.frontendPercentage)" />
-    </div>
+    <section class="summary-strip">
+      <div>
+        <div class="page-kicker">Total coverage</div>
+        <div class="summary-number">{{ formatPercent(manifest.summary.coverage.totalPercentage) }}</div>
+        <v-chip v-if="lowCoverageFiles.length" color="warning" label class="mt-3">{{ lowCoverageFiles.length }} low coverage file(s)</v-chip>
+      </div>
+      <div>
+        <div v-for="item in coverageBreakdown" :key="item.label" class="chart-row">
+          <span>{{ item.label }}</span>
+          <div class="progress-track"><div class="progress-fill" :class="coverageClass(item.value)" :style="{ width: `${item.value ?? 0}%` }" /></div>
+          <strong>{{ formatPercent(item.value) }}</strong>
+        </div>
+      </div>
+    </section>
     <div v-if="!manifest.coverage.length" class="empty-state">No coverage artifacts were parsed for this run.</div>
     <v-expansion-panels v-else variant="accordion">
       <v-expansion-panel v-for="item in manifest.coverage" :key="item.layer" class="portal-card">
@@ -51,10 +60,19 @@
 </template>
 
 <script setup lang="ts">
-import MetricCard from "../components/MetricCard.vue";
+import { computed } from "vue";
 import { formatPercent } from "../format";
 import type { CoverageSummary, Manifest, TestCase } from "../types";
-defineProps<{ manifest?: Manifest; tests: TestCase[] }>();
+const props = defineProps<{ manifest?: Manifest; tests: TestCase[] }>();
+
+const coverageBreakdown = computed(() => [
+  { label: "Total", value: props.manifest?.summary.coverage.totalPercentage },
+  { label: "Backend", value: props.manifest?.summary.coverage.backendPercentage },
+  { label: "Frontend", value: props.manifest?.summary.coverage.frontendPercentage }
+]);
+const lowCoverageFiles = computed(() =>
+  (props.manifest?.coverage ?? []).flatMap((item) => item.files ?? []).filter((file) => (file.lines?.percentage ?? 100) < 70)
+);
 
 function metricsFor(item: CoverageSummary) {
   return [
@@ -72,10 +90,4 @@ function coverageClass(value?: number) {
   return "";
 }
 
-function tone(value?: number) {
-  if (value === undefined) return "neutral";
-  if (value < 70) return "fail";
-  if (value < 85) return "warn";
-  return "pass";
-}
 </script>
