@@ -26,13 +26,6 @@
       <v-app-bar-title>
         <span>{{ manifest?.metadata.projectName ?? "Quality Portal" }}</span>
       </v-app-bar-title>
-      <div v-if="manifest" class="app-bar-meta">
-        <v-chip prepend-icon="mdi-source-branch" label>{{ manifest.metadata.branch ?? "n/a" }}</v-chip>
-        <v-chip prepend-icon="mdi-source-commit" label class="mono">{{ shortSha(manifest.metadata.commitSha) }}</v-chip>
-      </div>
-      <v-chip v-if="manifest" :color="gateColor(manifest.qualityGate.status)" label class="ml-3">
-        Gate {{ manifest.qualityGate.status }}
-      </v-chip>
     </v-app-bar>
     <v-main>
       <v-container fluid class="page">
@@ -45,7 +38,7 @@
 
 <script setup lang="ts">
 import { onMounted, ref } from "vue";
-import { gateColor, shortSha } from "./format";
+import { shortSha } from "./format";
 import { loadManifest, loadTests } from "./services/reportData";
 import type { Manifest, TestCase } from "./types";
 

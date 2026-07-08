@@ -1,12 +1,8 @@
 <template>
   <div v-if="manifest">
-    <div class="page-heading">
-      <div>
-        <h1>Diagnostics</h1>
-        <div class="page-kicker">Parser warnings and report generation diagnostics</div>
-      </div>
+    <PageHeader title="Diagnostics" subtitle="Parser warnings and report generation diagnostics">
       <v-chip :color="manifest.warnings.length ? 'warning' : 'success'" label>{{ manifest.warnings.length }} warning(s)</v-chip>
-    </div>
+    </PageHeader>
     <v-alert v-if="!manifest.warnings.length" type="success" variant="tonal">
       No parser warnings were recorded for this run.
     </v-alert>
@@ -25,6 +21,7 @@
 </template>
 
 <script setup lang="ts">
+import PageHeader from "../components/PageHeader.vue";
 import type { Manifest, TestCase } from "../types";
 defineProps<{ manifest?: Manifest; tests: TestCase[] }>();
 </script>
