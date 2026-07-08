@@ -42,17 +42,13 @@ export type GenerateOptions = {
   inputPath: string;
   outputPath: string;
   zip?: boolean | undefined;
-  qualityProfile?: string | undefined;
-  qualityGateEnabled?: boolean | undefined;
   publishMode?: string | undefined;
   prCommentMode?: string | undefined;
   prCommentMarker?: string | undefined;
-  prCommentMaxItems?: number | undefined;
-  fullReportUrl?: string | undefined;
-  artifactName?: string | undefined;
 };
 
 const MAX_PARSE_BYTES = 50 * 1024 * 1024;
+const DEFAULT_PR_COMMENT_MARKER = "<!-- quality-report-platform:summary -->";
 
 function safeRelativePath(file: string, root: string): string {
   if (!path.isAbsolute(file)) return (redactSecrets(file) ?? file).replace(/\\/g, "/");
@@ -97,9 +93,8 @@ function metadata(config: QualityReportConfig, options: GenerateOptions) {
     commitSha: redactSecrets(process.env.GITHUB_SHA),
     runId: redactSecrets(process.env.GITHUB_RUN_ID),
     actor: redactSecrets(process.env.GITHUB_ACTOR),
-    qualityProfile: options.qualityProfile ?? "standard",
-    publishMode: options.publishMode,
-    prCommentMode: options.prCommentMode
+    ...(options.publishMode ? { publishMode: options.publishMode } : {}),
+    ...(options.prCommentMode ? { prCommentMode: options.prCommentMode } : {})
   };
 }
 
@@ -151,22 +146,11 @@ async function applyRequirementMappings(
       artifactDisplayPath(inputPath, artifact.path)
     );
     if (!content) continue;
-    let mappings: Array<{ testId?: string; name?: string; requirement: string }>;
-    try {
-      mappings = JSON.parse(content) as Array<{
-        testId?: string;
-        name?: string;
-        requirement: string;
-      }>;
-      if (!Array.isArray(mappings)) throw new Error("Requirement mapping JSON must be an array.");
-    } catch (error) {
-      warnings.push({
-        sourcePath: artifactDisplayPath(inputPath, artifact.path),
-        code: "requirements.mapping.parse-failed",
-        message: error instanceof Error ? error.message : "Invalid requirement mapping JSON."
-      });
-      continue;
-    }
+    const mappings = JSON.parse(content) as Array<{
+      testId?: string;
+      name?: string;
+      requirement: string;
+    }>;
     for (const mapping of mappings) {
       if (!mapping.requirement) continue;
       const matches = mapping.testId
@@ -272,32 +256,80 @@ async function writeData(outputPath: string, report: NormalizedReport) {
   await writeFile(path.join(dataDir, "manifest.json"), JSON.stringify(manifest, null, 2));
 }
 
-async function writeMeta(outputPath: string, report: NormalizedReport, options: GenerateOptions) {
+function markdownEscape(value: string | number | undefined): string {
+  return String(value ?? "n/a").replace(/[\\`*_{}[\]()#+\-.!|<>]/g, "\\$&");
+}
+
+function qualitySummary(report: NormalizedReport) {
+  return {
+    qualityGateStatus: report.qualityGate.status,
+    projectName: report.metadata.projectName,
+    generatedAt: report.metadata.generatedAt,
+    publishMode: report.metadata.publishMode,
+    prCommentMode: report.metadata.prCommentMode,
+    tests: report.summary.tests,
+    coverage: report.summary.coverage,
+    requirements: {
+      percentage: report.summary.requirements.percentage,
+      expected: report.summary.requirements.expected.length,
+      covered: report.summary.requirements.covered.length,
+      missing: report.summary.requirements.missing.length
+    },
+    security: report.summary.security,
+    warnings: report.warnings.length,
+    failedChecks: report.qualityGate.checks.filter((check) => check.status === "failed")
+  };
+}
+
+async function writeMeta(outputPath: string, report: NormalizedReport, prCommentMarker: string) {
   const metaDir = path.join(outputPath, "meta");
   await mkdir(metaDir, { recursive: true });
-  const zipDownload = report.downloads.find((download) => download.category === "report" && download.path.endsWith(".zip"));
-  const summary = {
-    qualityGateStatus: report.qualityGate.status,
-    qualityProfile: report.qualityGate.profile ?? report.metadata.qualityProfile ?? "standard",
-    reportPath: ".",
-    reportZipPath: zipDownload?.path,
-    summaryJsonPath: "meta/quality-summary.json",
-    minimalCommentPath: "meta/pr-comment-minimal.md",
-    fullCommentPath: "meta/pr-comment-full.md",
-    publishMode: options.publishMode,
-    prCommentMode: options.prCommentMode
-  };
-  const commentOptions = {
-    marker: options.prCommentMarker ?? "<!-- quality-report-platform:summary -->",
-    maxItems: options.prCommentMaxItems ?? 10,
-    ...(options.fullReportUrl ? { fullReportUrl: options.fullReportUrl } : {}),
-    ...(options.artifactName ?? zipDownload ? { artifactName: options.artifactName ?? "quality-report" } : {}),
-    ...(options.publishMode ? { publishMode: options.publishMode } : {}),
-    ...(options.prCommentMode ? { prCommentMode: options.prCommentMode } : {})
-  };
+  const summary = qualitySummary(report);
   await writeFile(path.join(metaDir, "quality-summary.json"), JSON.stringify(summary, null, 2));
-  await writeFile(path.join(metaDir, "pr-comment-minimal.md"), renderMinimalPrComment(report, commentOptions));
-  await writeFile(path.join(metaDir, "pr-comment-full.md"), renderFullPrComment(report, commentOptions));
+
+  const gateIcon = report.qualityGate.status === "passed" ? "PASS" : "FAIL";
+  const minimal = [
+    prCommentMarker,
+    `## Quality Report: ${gateIcon}`,
+    "",
+    `Project: **${markdownEscape(report.metadata.projectName)}**`,
+    "",
+    "| Metric | Value |",
+    "| --- | ---: |",
+    `| Tests | ${report.summary.tests.total} total, ${report.summary.tests.failed} failed, ${report.summary.tests.broken} broken |`,
+    `| Coverage | ${markdownEscape(report.summary.coverage.totalPercentage)}% |`,
+    `| Requirements | ${report.summary.requirements.percentage}% |`,
+    `| Security | critical ${report.summary.security.critical ?? 0}, high ${report.summary.security.high ?? 0} |`,
+    `| Warnings | ${report.warnings.length} |`,
+    "",
+    `Generated from run \`${markdownEscape(report.metadata.runId)}\`.`
+  ].join("\n");
+
+  const failedChecks = report.qualityGate.checks
+    .filter((check) => check.status === "failed")
+    .map(
+      (check) =>
+        `- ${markdownEscape(check.label)}: ${markdownEscape(check.actual)} expected ${markdownEscape(check.expected)}`
+    );
+  const full = [
+    minimal,
+    "",
+    "### Quality Gate Checks",
+    "",
+    "| Check | Actual | Expected | Status |",
+    "| --- | ---: | --- | --- |",
+    ...report.qualityGate.checks.map(
+      (check) =>
+        `| ${markdownEscape(check.label)} | ${markdownEscape(check.actual)} | ${markdownEscape(check.expected)} | ${markdownEscape(check.status)} |`
+    ),
+    "",
+    "### Failed Checks",
+    "",
+    ...(failedChecks.length > 0 ? failedChecks : ["- None"])
+  ].join("\n");
+
+  await writeFile(path.join(metaDir, "pr-comment-minimal.md"), `${minimal}\n`);
+  await writeFile(path.join(metaDir, "pr-comment-full.md"), `${full}\n`);
 }
 
 async function zipDirectory(source: string, target: string) {
@@ -338,56 +370,19 @@ export async function buildReport(options: GenerateOptions): Promise<NormalizedR
         ...(artifact.layer ? { layer: artifact.layer } : {}),
         requirementPattern
       };
-      if (artifact.kind === "junit") {
-        const result = parseJUnitXml(content, context);
-        tests.push(...result.items);
-        warnings.push(...result.warnings);
-      }
-      if (artifact.kind === "vitestJson") {
-        const result = parseVitestJson(content, context);
-        tests.push(...result.items);
-        warnings.push(...result.warnings);
-      }
-      if (artifact.kind === "playwrightJson") {
-        const result = parsePlaywrightJson(content, context);
-        tests.push(...result.items);
-        warnings.push(...result.warnings);
-      }
-      if (artifact.kind === "jacocoXml") {
-        const result = parseJaCoCoXml(content, context);
-        coverage.push(...result.items);
-        warnings.push(...result.warnings);
-      }
-      if (artifact.kind === "jacocoCsv") {
-        const result = parseJaCoCoCsv(content, context);
-        coverage.push(...result.items);
-        warnings.push(...result.warnings);
-      }
-      if (artifact.kind === "coberturaXml") {
-        const result = parseCoberturaXml(content, context);
-        coverage.push(...result.items);
-        warnings.push(...result.warnings);
-      }
-      if (artifact.kind === "lcov") {
-        const result = parseLcov(content, context);
-        coverage.push(...result.items);
-        warnings.push(...result.warnings);
-      }
-      if (artifact.kind === "istanbulSummary") {
-        const result = parseIstanbulSummary(content, context);
-        coverage.push(...result.items);
-        warnings.push(...result.warnings);
-      }
-      if (artifact.kind === "sarif") {
-        const result = parseSarif(content, context);
-        security.push(...result.items);
-        warnings.push(...result.warnings);
-      }
-      if (artifact.kind === "zapJson") {
-        const result = parseZapJson(content, context);
-        security.push(...result.items);
-        warnings.push(...result.warnings);
-      }
+      if (artifact.kind === "junit") tests.push(...parseJUnitXml(content, context).items);
+      if (artifact.kind === "vitestJson") tests.push(...parseVitestJson(content, context).items);
+      if (artifact.kind === "playwrightJson")
+        tests.push(...parsePlaywrightJson(content, context).items);
+      if (artifact.kind === "jacocoXml") coverage.push(...parseJaCoCoXml(content, context).items);
+      if (artifact.kind === "jacocoCsv") coverage.push(...parseJaCoCoCsv(content, context).items);
+      if (artifact.kind === "coberturaXml")
+        coverage.push(...parseCoberturaXml(content, context).items);
+      if (artifact.kind === "lcov") coverage.push(...parseLcov(content, context).items);
+      if (artifact.kind === "istanbulSummary")
+        coverage.push(...parseIstanbulSummary(content, context).items);
+      if (artifact.kind === "sarif") security.push(...parseSarif(content, context).items);
+      if (artifact.kind === "zapJson") security.push(...parseZapJson(content, context).items);
     } catch (error) {
       warnings.push({
         sourcePath: displayPath,
@@ -407,10 +402,7 @@ export async function buildReport(options: GenerateOptions): Promise<NormalizedR
   }
   const downloads = await copyRawArtifacts(artifacts, options.outputPath, inputRoot);
   const summary = buildSummary(dedupedTests, mergedCoverage, requirements, security);
-  const qualityGate = evaluateQualityGate(options.config, summary, warnings, {
-    profile: options.qualityProfile ?? "standard",
-    ...(options.qualityGateEnabled !== undefined ? { enabled: options.qualityGateEnabled } : {})
-  });
+  const qualityGate = evaluateQualityGate(options.config, summary);
   const meta = metadata(options.config, options);
   const report = NormalizedReportSchema.parse({
     schemaVersion: "1.0",
@@ -442,6 +434,8 @@ export async function buildReport(options: GenerateOptions): Promise<NormalizedR
 
   await copyUi(options.outputPath);
   await writeData(options.outputPath, report);
+  const prCommentMarker = options.prCommentMarker ?? DEFAULT_PR_COMMENT_MARKER;
+  await writeMeta(options.outputPath, report, prCommentMarker);
   if (options.zip) {
     const zipFile = `quality-report-${Date.now()}.zip`;
     const zipPath = path.join(options.outputPath, zipFile);
@@ -456,6 +450,7 @@ export async function buildReport(options: GenerateOptions): Promise<NormalizedR
       sizeBytes: (await stat(zipPath)).size
     });
     await writeData(options.outputPath, report);
+    await writeMeta(options.outputPath, report, prCommentMarker);
   }
   await writeMeta(options.outputPath, report, options);
   return report;

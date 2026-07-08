@@ -4,129 +4,160 @@ on:
   workflow_call:
     inputs:
       artifact-pattern:
+        description: Artifact name pattern to download from the current workflow run.
         type: string
         required: false
         default: quality-*
       artifact-path:
+        description: Directory where downloaded artifacts are merged before generation.
         type: string
         required: false
         default: quality-artifacts
       config-path:
+        description: Path to quality-report.yml in the caller repository.
         type: string
         required: false
         default: quality-report.yml
       quality-gates-path:
+        description: Optional path to a quality-gates.yml override/profile file.
         type: string
         required: false
-        default: quality-gates.yml
+        default: ""
       quality-profile:
+        description: "Quality profile to apply: off, relaxed, standard, strict, release, or a custom profile."
         type: string
         required: false
         default: standard
-      output-path:
-        type: string
-        required: false
-        default: dist/quality-report
       publish-mode:
+        description: "Delivery mode: auto, none, artifact, pages, or pages-and-artifact."
         type: string
         required: false
         default: auto
       pr-comment-mode:
+        description: "PR comment mode: auto, off, minimal, or full."
         type: string
         required: false
         default: auto
-      update-pr-comment:
-        type: boolean
-        required: false
-        default: true
       pr-comment-marker:
+        description: Hidden marker used to update PR comments in place.
         type: string
         required: false
         default: "<!-- quality-report-platform:summary -->"
-      pr-comment-max-items:
-        type: number
-        required: false
-        default: 10
-      fail-on-quality-gate:
+      update-pr-comment:
+        description: Update an existing marked PR comment instead of creating a new one.
         type: boolean
         required: false
         default: true
+      fail-on-quality-gate:
+        description: Fail the reusable workflow after publishing if the selected quality gate fails.
+        type: boolean
+        required: false
+        default: true
+      report-title:
+        description: Reserved for future report title overrides.
+        type: string
+        required: false
+        default: ""
     outputs:
       quality-gate-status:
+        description: Final quality gate status.
         value: ${{ jobs.publish.outputs.quality-gate-status }}
       quality-profile:
+        description: Selected quality profile.
         value: ${{ jobs.publish.outputs.quality-profile }}
       report-path:
+        description: Generated static report directory.
         value: ${{ jobs.publish.outputs.report-path }}
       report-zip-path:
+        description: Generated report ZIP path.
         value: ${{ jobs.publish.outputs.report-zip-path }}
       pages-url:
+        description: GitHub Pages URL when Pages was deployed.
         value: ${{ jobs.publish.outputs.pages-url }}
       pr-comment-url:
+        description: Created or updated PR comment URL.
         value: ${{ jobs.publish.outputs.pr-comment-url }}
       summary-json-path:
+        description: Generated quality summary JSON path.
         value: ${{ jobs.publish.outputs.summary-json-path }}
       minimal-comment-path:
+        description: Generated minimal PR comment markdown path.
         value: ${{ jobs.publish.outputs.minimal-comment-path }}
       full-comment-path:
+        description: Generated full PR comment markdown path.
         value: ${{ jobs.publish.outputs.full-comment-path }}
+
+permissions:
+  actions: read
+  contents: read
+  issues: write
+  pull-requests: read
+  pages: write
+  id-token: write
 
 jobs:
   publish:
     runs-on: ubuntu-latest
     outputs:
-      quality-gate-status: ${{ steps.outputs.outputs.quality-gate-status }}
-      quality-profile: ${{ steps.outputs.outputs.quality-profile }}
-      report-path: ${{ steps.outputs.outputs.report-path }}
-      report-zip-path: ${{ steps.outputs.outputs.report-zip-path }}
-      pages-url: ${{ steps.deployment.outputs.page_url }}
-      pr-comment-url: ${{ steps.comment.outputs.comment-url }}
-      summary-json-path: ${{ steps.outputs.outputs.summary-json-path }}
-      minimal-comment-path: ${{ steps.outputs.outputs.minimal-comment-path }}
-      full-comment-path: ${{ steps.outputs.outputs.full-comment-path }}
+      quality-gate-status: ${{ steps.summary.outputs.quality-gate-status }}
+      quality-profile: ${{ steps.resolve.outputs.quality-profile }}
+      report-path: ${{ steps.paths.outputs.report-path }}
+      report-zip-path: ${{ steps.paths.outputs.report-zip-path }}
+      pages-url: ${{ steps.deploy-pages.outputs.page_url }}
+      pr-comment-url: ${{ steps.pr-comment.outputs.pr-comment-url }}
+      summary-json-path: ${{ steps.paths.outputs.summary-json-path }}
+      minimal-comment-path: ${{ steps.paths.outputs.minimal-comment-path }}
+      full-comment-path: ${{ steps.paths.outputs.full-comment-path }}
     steps:
       - uses: actions/checkout@v4
+
+      - id: resolve
+        name: Resolve delivery modes
+        shell: bash
+        run: |
+          set -euo pipefail
+          event_name="${{ github.event_name }}"
+          publish_mode="${{ inputs.publish-mode }}"
+          pr_comment_mode="${{ inputs.pr-comment-mode }}"
+
+          if [[ "$publish_mode" == "auto" ]]; then
+            if [[ "$event_name" == "pull_request" ]]; then
+              publish_mode="artifact"
+            else
+              publish_mode="pages-and-artifact"
+            fi
+          fi
+
+          if [[ "$pr_comment_mode" == "auto" ]]; then
+            if [[ "$event_name" == "pull_request" ]]; then
+              pr_comment_mode="minimal"
+            else
+              pr_comment_mode="off"
+            fi
+          fi
+
+          case "$publish_mode" in
+            none|artifact|pages|pages-and-artifact) ;;
+            *) echo "::error::Invalid publish-mode: $publish_mode"; exit 2 ;;
+          esac
+          case "$pr_comment_mode" in
+            off|minimal|full) ;;
+            *) echo "::error::Invalid pr-comment-mode: $pr_comment_mode"; exit 2 ;;
+          esac
+
+          echo "publish-mode=$publish_mode" >> "$GITHUB_OUTPUT"
+          echo "pr-comment-mode=$pr_comment_mode" >> "$GITHUB_OUTPUT"
+          echo "quality-profile=${{ inputs.quality-profile }}" >> "$GITHUB_OUTPUT"
+          echo "Resolved publish mode: $publish_mode"
+          echo "Resolved PR comment mode: $pr_comment_mode"
+          echo "Selected quality profile: ${{ inputs.quality-profile }}"
 
       - uses: actions/download-artifact@v4
         with:
           pattern: ${{ inputs.artifact-pattern }}
           path: ${{ inputs.artifact-path }}
           merge-multiple: true
-
-      - id: modes
-        shell: bash
-        run: |
-          publish="${{ inputs.publish-mode }}"
-          comment="${{ inputs.pr-comment-mode }}"
-          event="${{ github.event_name }}"
-          ref="${{ github.ref_name }}"
-          default_branch="${{ github.event.repository.default_branch }}"
-          is_pr="false"
-          if [[ "$event" == "pull_request" || "$event" == "pull_request_target" ]]; then is_pr="true"; fi
-
-          if [[ "$publish" == "auto" ]]; then
-            case "$event" in
-              pull_request|pull_request_target) publish="none" ;;
-              merge_group) publish="artifact" ;;
-              workflow_dispatch|release) publish="pages-and-artifact" ;;
-              push)
-                if [[ "$ref" == "$default_branch" ]]; then publish="pages-and-artifact"; else publish="artifact"; fi
-                ;;
-              *) publish="artifact" ;;
-            esac
-          fi
-
-          if [[ "$comment" == "auto" ]]; then
-            if [[ "$is_pr" == "true" ]]; then comment="minimal"; else comment="off"; fi
-          fi
-
-          case "$publish" in none|artifact|pages|pages-and-artifact) ;; *) echo "Invalid publish-mode: $publish" >&2; exit 2 ;; esac
-          case "$comment" in off|minimal|full) ;; *) echo "Invalid pr-comment-mode: $comment" >&2; exit 2 ;; esac
-
-          echo "publish-mode=$publish" >> "$GITHUB_OUTPUT"
-          echo "pr-comment-mode=$comment" >> "$GITHUB_OUTPUT"
-          echo "Resolved publish-mode=$publish"
-          echo "Resolved pr-comment-mode=$comment"
+          if-no-artifacts-found: error
 
       - uses: actions/setup-node@v4
         with:
@@ -134,103 +165,118 @@ jobs:
           cache: npm
 
       - run: npm ci
+
       - run: npm run build
 
-      - name: Generate report
-        run: >
-          npm run quality-report -- generate
-          --config "${{ inputs.config-path }}"
-          --input "${{ inputs.artifact-path }}"
-          --output "${{ inputs.output-path }}"
-          --zip
-          --quality-profile "${{ inputs.quality-profile }}"
-          --quality-gates "${{ inputs.quality-gates-path }}"
-          --publish-mode "${{ steps.modes.outputs.publish-mode }}"
-          --pr-comment-mode "${{ steps.modes.outputs.pr-comment-mode }}"
-          --pr-comment-marker "${{ inputs.pr-comment-marker }}"
-          --pr-comment-max-items "${{ inputs.pr-comment-max-items }}"
-          --artifact-name quality-report
-
-      - id: outputs
-        name: Read report outputs
+      - name: Validate quality report config
         shell: bash
         run: |
-          node <<'NODE' >> "$GITHUB_OUTPUT"
-          const fs = require("fs");
-          const path = require("path");
-          const outputPath = process.env.OUTPUT_PATH;
-          const summaryPath = path.join(outputPath, "meta", "quality-summary.json");
-          const summary = JSON.parse(fs.readFileSync(summaryPath, "utf8"));
-          const emit = (name, value) => {
-            if (value !== undefined && value !== null) console.log(`${name}=${String(value)}`);
-          };
-          emit("quality-gate-status", summary.qualityGateStatus);
-          emit("quality-profile", summary.qualityProfile);
-          emit("report-path", outputPath);
-          emit("report-zip-path", summary.reportZipPath);
-          emit("summary-json-path", summary.summaryJsonPath);
-          emit("minimal-comment-path", summary.minimalCommentPath);
-          emit("full-comment-path", summary.fullCommentPath);
-          NODE
-        env:
-          OUTPUT_PATH: ${{ inputs.output-path }}
+          set -euo pipefail
+          args=(--config "${{ inputs.config-path }}" --input "${{ inputs.artifact-path }}" --quality-profile "${{ inputs.quality-profile }}")
+          if [[ -n "${{ inputs.quality-gates-path }}" ]]; then
+            args+=(--quality-gates "${{ inputs.quality-gates-path }}")
+          fi
+          npm run quality-report -- validate "${args[@]}"
 
-      - uses: actions/upload-artifact@v4
-        if: steps.modes.outputs.publish-mode == 'artifact' || steps.modes.outputs.publish-mode == 'pages-and-artifact'
+      - name: Generate static quality report
+        shell: bash
+        run: |
+          set -euo pipefail
+          args=(--config "${{ inputs.config-path }}" --input "${{ inputs.artifact-path }}" --output dist/report --quality-profile "${{ inputs.quality-profile }}" --publish-mode "${{ steps.resolve.outputs.publish-mode }}" --pr-comment-mode "${{ steps.resolve.outputs.pr-comment-mode }}" --pr-comment-marker "${{ inputs.pr-comment-marker }}" --zip)
+          if [[ -n "${{ inputs.quality-gates-path }}" ]]; then
+            args+=(--quality-gates "${{ inputs.quality-gates-path }}")
+          fi
+          npm run quality-report -- generate "${args[@]}"
+
+      - id: paths
+        name: Resolve generated paths
+        shell: bash
+        run: |
+          set -euo pipefail
+          report_zip="$(find dist/report -maxdepth 1 -type f -name 'quality-report*.zip' | head -n 1)"
+          if [[ -z "$report_zip" ]]; then
+            echo "::error::Report ZIP was not generated."
+            exit 1
+          fi
+          echo "report-path=dist/report" >> "$GITHUB_OUTPUT"
+          echo "report-zip-path=$report_zip" >> "$GITHUB_OUTPUT"
+          echo "summary-json-path=dist/report/meta/quality-summary.json" >> "$GITHUB_OUTPUT"
+          echo "minimal-comment-path=dist/report/meta/pr-comment-minimal.md" >> "$GITHUB_OUTPUT"
+          echo "full-comment-path=dist/report/meta/pr-comment-full.md" >> "$GITHUB_OUTPUT"
+
+      - id: summary
+        name: Read quality summary
+        shell: bash
+        run: |
+          set -euo pipefail
+          status="$(node -e "console.log(require('./dist/report/meta/quality-summary.json').qualityGateStatus)")"
+          echo "quality-gate-status=$status" >> "$GITHUB_OUTPUT"
+          echo "Quality gate status: $status"
+
+      - name: Upload report ZIP artifact
+        if: steps.resolve.outputs.publish-mode == 'artifact' || steps.resolve.outputs.publish-mode == 'pages-and-artifact'
+        uses: actions/upload-artifact@v4
         with:
           name: quality-report
-          path: ${{ inputs.output-path }}
+          path: ${{ steps.paths.outputs.report-zip-path }}
 
-      - uses: actions/upload-pages-artifact@v3
-        if: steps.modes.outputs.publish-mode == 'pages' || steps.modes.outputs.publish-mode == 'pages-and-artifact'
+      - name: Upload Pages artifact
+        if: steps.resolve.outputs.publish-mode == 'pages' || steps.resolve.outputs.publish-mode == 'pages-and-artifact'
+        uses: actions/upload-pages-artifact@v3
         with:
-          path: ${{ inputs.output-path }}
+          path: dist/report
 
-      - id: deployment
+      - id: deploy-pages
+        name: Deploy GitHub Pages
+        if: steps.resolve.outputs.publish-mode == 'pages' || steps.resolve.outputs.publish-mode == 'pages-and-artifact'
         uses: actions/deploy-pages@v4
-        if: steps.modes.outputs.publish-mode == 'pages' || steps.modes.outputs.publish-mode == 'pages-and-artifact'
 
-      - id: comment
-        if: steps.modes.outputs.pr-comment-mode != 'off'
-        uses: actions/github-script@v7
+      - id: pr-comment
+        name: Post or update PR comment
+        if: >
+          steps.resolve.outputs.pr-comment-mode != 'off' &&
+          github.event_name == 'pull_request' &&
+          github.event.pull_request.head.repo.full_name == github.repository
         env:
-          COMMENT_MODE: ${{ steps.modes.outputs.pr-comment-mode }}
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          COMMENT_MODE: ${{ steps.resolve.outputs.pr-comment-mode }}
           UPDATE_COMMENT: ${{ inputs.update-pr-comment }}
-          COMMENT_MARKER: ${{ inputs.pr-comment-marker }}
-          OUTPUT_PATH: ${{ inputs.output-path }}
-        with:
-          script: |
-            const fs = require("fs");
-            const path = require("path");
-            const pull = context.payload.pull_request;
-            if (!pull) {
-              core.info("PR comment requested, but this run has no pull request context. Skipping.");
-              return;
-            }
-            const mode = process.env.COMMENT_MODE;
-            const marker = process.env.COMMENT_MARKER;
-            const fileName = mode === "full" ? "pr-comment-full.md" : "pr-comment-minimal.md";
-            const body = fs.readFileSync(path.join(process.env.OUTPUT_PATH, "meta", fileName), "utf8");
-            const params = {
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              issue_number: pull.number
-            };
-            let comment;
-            if (process.env.UPDATE_COMMENT === "true") {
-              const comments = await github.paginate(github.rest.issues.listComments, { ...params, per_page: 100 });
-              comment = comments.find((item) =>
-                item.body?.includes(marker) &&
-                (item.user?.type === "Bot" || item.user?.login === "github-actions[bot]")
-              );
-            }
-            const response = comment
-              ? await github.rest.issues.updateComment({ owner: params.owner, repo: params.repo, comment_id: comment.id, body })
-              : await github.rest.issues.createComment({ ...params, body });
-            core.setOutput("comment-url", response.data.html_url);
-
-      - name: Fail after publication if quality gate failed
-        if: inputs.fail-on-quality-gate && steps.outputs.outputs.quality-gate-status == 'failed'
+          PR_COMMENT_MARKER: ${{ inputs.pr-comment-marker }}
+          REPO: ${{ github.repository }}
+        shell: bash
         run: |
-          echo "Quality gate failed after report publication/comment steps completed." >&2
+          set -euo pipefail
+          comment_file="dist/report/meta/pr-comment-${COMMENT_MODE}.md"
+          existing=""
+          if [[ "$UPDATE_COMMENT" == "true" ]]; then
+            existing="$(
+              gh api "repos/$REPO/issues/$PR_NUMBER/comments?per_page=100" --paginate --slurp |
+                jq -r --arg marker "$PR_COMMENT_MARKER" '[.[][] | select(.user.login == "github-actions[bot]" and (.body // "" | contains($marker)))][0].id // empty'
+            )"
+          fi
+
+          if [[ -n "$existing" ]]; then
+            url="$(gh api --method PATCH "repos/$REPO/issues/comments/$existing" --field body=@"$comment_file" --jq .html_url)"
+          else
+            url="$(gh api --method POST "repos/$REPO/issues/$PR_NUMBER/comments" --field body=@"$comment_file" --jq .html_url)"
+          fi
+          echo "pr-comment-url=$url" >> "$GITHUB_OUTPUT"
+          echo "PR comment URL: $url"
+
+      - name: Skip PR comment outside pull requests
+        if: steps.resolve.outputs.pr-comment-mode != 'off' && github.event_name != 'pull_request'
+        run: echo "PR comment mode is ${{ steps.resolve.outputs.pr-comment-mode }}, but this is not a pull_request event; skipping comment."
+
+      - name: Skip PR comment for fork pull requests
+        if: >
+          steps.resolve.outputs.pr-comment-mode != 'off' &&
+          github.event_name == 'pull_request' &&
+          github.event.pull_request.head.repo.full_name != github.repository
+        run: echo "PR comments are skipped for fork pull requests. Use pull_request_target only after a security review."
+
+      - name: Fail on quality gate
+        if: inputs.fail-on-quality-gate && steps.summary.outputs.quality-gate-status == 'failed'
+        run: |
+          echo "::error::Quality gate failed for profile ${{ inputs.quality-profile }}."
           exit 1

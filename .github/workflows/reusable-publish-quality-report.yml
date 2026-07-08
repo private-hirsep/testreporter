@@ -1,4 +1,6 @@
-name: Publish Quality Report
+# Deprecated compatibility wrapper. New projects should use
+# .github/workflows/publish-quality-report.yml directly.
+name: Reusable Publish Quality Report Deprecated Wrapper
 
 on:
   workflow_call:
@@ -18,15 +20,11 @@ on:
       quality-gates-path:
         type: string
         required: false
-        default: quality-gates.yml
+        default: ""
       quality-profile:
         type: string
         required: false
         default: standard
-      output-path:
-        type: string
-        required: false
-        default: dist/quality-report
       publish-mode:
         type: string
         required: false
@@ -35,202 +33,62 @@ on:
         type: string
         required: false
         default: auto
-      update-pr-comment:
-        type: boolean
-        required: false
-        default: true
       pr-comment-marker:
         type: string
         required: false
         default: "<!-- quality-report-platform:summary -->"
-      pr-comment-max-items:
-        type: number
+      update-pr-comment:
+        type: boolean
         required: false
-        default: 10
+        default: true
       fail-on-quality-gate:
         type: boolean
         required: false
         default: true
+      report-title:
+        type: string
+        required: false
+        default: ""
     outputs:
       quality-gate-status:
-        value: ${{ jobs.publish.outputs.quality-gate-status }}
+        value: ${{ jobs.forward.outputs.quality-gate-status }}
       quality-profile:
-        value: ${{ jobs.publish.outputs.quality-profile }}
+        value: ${{ jobs.forward.outputs.quality-profile }}
       report-path:
-        value: ${{ jobs.publish.outputs.report-path }}
+        value: ${{ jobs.forward.outputs.report-path }}
       report-zip-path:
-        value: ${{ jobs.publish.outputs.report-zip-path }}
+        value: ${{ jobs.forward.outputs.report-zip-path }}
       pages-url:
-        value: ${{ jobs.publish.outputs.pages-url }}
+        value: ${{ jobs.forward.outputs.pages-url }}
       pr-comment-url:
-        value: ${{ jobs.publish.outputs.pr-comment-url }}
+        value: ${{ jobs.forward.outputs.pr-comment-url }}
       summary-json-path:
-        value: ${{ jobs.publish.outputs.summary-json-path }}
+        value: ${{ jobs.forward.outputs.summary-json-path }}
       minimal-comment-path:
-        value: ${{ jobs.publish.outputs.minimal-comment-path }}
+        value: ${{ jobs.forward.outputs.minimal-comment-path }}
       full-comment-path:
-        value: ${{ jobs.publish.outputs.full-comment-path }}
+        value: ${{ jobs.forward.outputs.full-comment-path }}
+
+permissions:
+  actions: read
+  contents: read
+  issues: write
+  pull-requests: read
+  pages: write
+  id-token: write
 
 jobs:
-  publish:
-    runs-on: ubuntu-latest
-    outputs:
-      quality-gate-status: ${{ steps.outputs.outputs.quality-gate-status }}
-      quality-profile: ${{ steps.outputs.outputs.quality-profile }}
-      report-path: ${{ steps.outputs.outputs.report-path }}
-      report-zip-path: ${{ steps.outputs.outputs.report-zip-path }}
-      pages-url: ${{ steps.deployment.outputs.page_url }}
-      pr-comment-url: ${{ steps.comment.outputs.comment-url }}
-      summary-json-path: ${{ steps.outputs.outputs.summary-json-path }}
-      minimal-comment-path: ${{ steps.outputs.outputs.minimal-comment-path }}
-      full-comment-path: ${{ steps.outputs.outputs.full-comment-path }}
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: actions/download-artifact@v4
-        with:
-          pattern: ${{ inputs.artifact-pattern }}
-          path: ${{ inputs.artifact-path }}
-          merge-multiple: true
-
-      - id: modes
-        shell: bash
-        run: |
-          publish="${{ inputs.publish-mode }}"
-          comment="${{ inputs.pr-comment-mode }}"
-          event="${{ github.event_name }}"
-          ref="${{ github.ref_name }}"
-          default_branch="${{ github.event.repository.default_branch }}"
-          is_pr="false"
-          if [[ "$event" == "pull_request" || "$event" == "pull_request_target" ]]; then is_pr="true"; fi
-
-          if [[ "$publish" == "auto" ]]; then
-            case "$event" in
-              pull_request|pull_request_target) publish="none" ;;
-              merge_group) publish="artifact" ;;
-              workflow_dispatch|release) publish="pages-and-artifact" ;;
-              push)
-                if [[ "$ref" == "$default_branch" ]]; then publish="pages-and-artifact"; else publish="artifact"; fi
-                ;;
-              *) publish="artifact" ;;
-            esac
-          fi
-
-          if [[ "$comment" == "auto" ]]; then
-            if [[ "$is_pr" == "true" ]]; then comment="minimal"; else comment="off"; fi
-          fi
-
-          case "$publish" in none|artifact|pages|pages-and-artifact) ;; *) echo "Invalid publish-mode: $publish" >&2; exit 2 ;; esac
-          case "$comment" in off|minimal|full) ;; *) echo "Invalid pr-comment-mode: $comment" >&2; exit 2 ;; esac
-
-          echo "publish-mode=$publish" >> "$GITHUB_OUTPUT"
-          echo "pr-comment-mode=$comment" >> "$GITHUB_OUTPUT"
-          echo "Resolved publish-mode=$publish"
-          echo "Resolved pr-comment-mode=$comment"
-
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22
-          cache: npm
-
-      - run: npm ci
-      - run: npm run build
-
-      - name: Generate report
-        run: >
-          npm run quality-report -- generate
-          --config "${{ inputs.config-path }}"
-          --input "${{ inputs.artifact-path }}"
-          --output "${{ inputs.output-path }}"
-          --zip
-          --quality-profile "${{ inputs.quality-profile }}"
-          --quality-gates "${{ inputs.quality-gates-path }}"
-          --publish-mode "${{ steps.modes.outputs.publish-mode }}"
-          --pr-comment-mode "${{ steps.modes.outputs.pr-comment-mode }}"
-          --pr-comment-marker "${{ inputs.pr-comment-marker }}"
-          --pr-comment-max-items "${{ inputs.pr-comment-max-items }}"
-          --artifact-name quality-report
-
-      - id: outputs
-        name: Read report outputs
-        shell: bash
-        run: |
-          node <<'NODE' >> "$GITHUB_OUTPUT"
-          const fs = require("fs");
-          const path = require("path");
-          const outputPath = process.env.OUTPUT_PATH;
-          const summaryPath = path.join(outputPath, "meta", "quality-summary.json");
-          const summary = JSON.parse(fs.readFileSync(summaryPath, "utf8"));
-          const emit = (name, value) => {
-            if (value !== undefined && value !== null) console.log(`${name}=${String(value)}`);
-          };
-          emit("quality-gate-status", summary.qualityGateStatus);
-          emit("quality-profile", summary.qualityProfile);
-          emit("report-path", outputPath);
-          emit("report-zip-path", summary.reportZipPath);
-          emit("summary-json-path", summary.summaryJsonPath);
-          emit("minimal-comment-path", summary.minimalCommentPath);
-          emit("full-comment-path", summary.fullCommentPath);
-          NODE
-        env:
-          OUTPUT_PATH: ${{ inputs.output-path }}
-
-      - uses: actions/upload-artifact@v4
-        if: steps.modes.outputs.publish-mode == 'artifact' || steps.modes.outputs.publish-mode == 'pages-and-artifact'
-        with:
-          name: quality-report
-          path: ${{ inputs.output-path }}
-
-      - uses: actions/upload-pages-artifact@v3
-        if: steps.modes.outputs.publish-mode == 'pages' || steps.modes.outputs.publish-mode == 'pages-and-artifact'
-        with:
-          path: ${{ inputs.output-path }}
-
-      - id: deployment
-        uses: actions/deploy-pages@v4
-        if: steps.modes.outputs.publish-mode == 'pages' || steps.modes.outputs.publish-mode == 'pages-and-artifact'
-
-      - id: comment
-        if: steps.modes.outputs.pr-comment-mode != 'off'
-        uses: actions/github-script@v7
-        env:
-          COMMENT_MODE: ${{ steps.modes.outputs.pr-comment-mode }}
-          UPDATE_COMMENT: ${{ inputs.update-pr-comment }}
-          COMMENT_MARKER: ${{ inputs.pr-comment-marker }}
-          OUTPUT_PATH: ${{ inputs.output-path }}
-        with:
-          script: |
-            const fs = require("fs");
-            const path = require("path");
-            const pull = context.payload.pull_request;
-            if (!pull) {
-              core.info("PR comment requested, but this run has no pull request context. Skipping.");
-              return;
-            }
-            const mode = process.env.COMMENT_MODE;
-            const marker = process.env.COMMENT_MARKER;
-            const fileName = mode === "full" ? "pr-comment-full.md" : "pr-comment-minimal.md";
-            const body = fs.readFileSync(path.join(process.env.OUTPUT_PATH, "meta", fileName), "utf8");
-            const params = {
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              issue_number: pull.number
-            };
-            let comment;
-            if (process.env.UPDATE_COMMENT === "true") {
-              const comments = await github.paginate(github.rest.issues.listComments, { ...params, per_page: 100 });
-              comment = comments.find((item) =>
-                item.body?.includes(marker) &&
-                (item.user?.type === "Bot" || item.user?.login === "github-actions[bot]")
-              );
-            }
-            const response = comment
-              ? await github.rest.issues.updateComment({ owner: params.owner, repo: params.repo, comment_id: comment.id, body })
-              : await github.rest.issues.createComment({ ...params, body });
-            core.setOutput("comment-url", response.data.html_url);
-
-      - name: Fail after publication if quality gate failed
-        if: inputs.fail-on-quality-gate && steps.outputs.outputs.quality-gate-status == 'failed'
-        run: |
-          echo "Quality gate failed after report publication/comment steps completed." >&2
-          exit 1
+  forward:
+    uses: ./.github/workflows/publish-quality-report.yml
+    with:
+      artifact-pattern: ${{ inputs.artifact-pattern }}
+      artifact-path: ${{ inputs.artifact-path }}
+      config-path: ${{ inputs.config-path }}
+      quality-gates-path: ${{ inputs.quality-gates-path }}
+      quality-profile: ${{ inputs.quality-profile }}
+      publish-mode: ${{ inputs.publish-mode }}
+      pr-comment-mode: ${{ inputs.pr-comment-mode }}
+      pr-comment-marker: ${{ inputs.pr-comment-marker }}
+      update-pr-comment: ${{ inputs.update-pr-comment }}
+      fail-on-quality-gate: ${{ inputs.fail-on-quality-gate }}
+      report-title: ${{ inputs.report-title }}

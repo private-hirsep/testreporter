@@ -1,174 +1,27 @@
 # GitHub Actions Integration
 
-## Composite action
-
-```yaml
-- uses: your-org/quality-report-platform/actions/generate-report@v1
-  with:
-    config-path: quality-report.yml
-    input-path: quality-artifacts
-    output-path: dist/report
-    quality-profile: standard
-```
-
-The action writes:
-
-- `data/manifest.json`
-- `meta/quality-summary.json`
-- `meta/pr-comment-minimal.md`
-- `meta/pr-comment-full.md`
-
-## Reusable workflow
-
-```yaml
-jobs:
-  quality-report:
-    uses: your-org/quality-report-platform/.github/workflows/publish-quality-report.yml@v1
-    with:
-      artifact-pattern: "quality-*"
-      quality-profile: standard
-      publish-mode: auto
-      pr-comment-mode: auto
-```
-
-Inputs:
-
-- `publish-mode`: `auto`, `none`, `artifact`, `pages`, `pages-and-artifact`
-- `pr-comment-mode`: `auto`, `off`, `minimal`, `full`
-- `update-pr-comment`: defaults to `true` and updates the bot comment containing
-  `<!-- quality-report-platform:summary -->`
-- `fail-on-quality-gate`: defaults to `true`, but failure happens after report
-  generation, artifact upload, Pages deploy, and PR comment steps.
-
-`auto` resolves as:
-
-| Event | Publish mode | PR comment mode |
-|---|---|---|
-| `pull_request` | `none` | `minimal` |
-| `merge_group` | `artifact` | `off` |
-| `workflow_dispatch` | `pages-and-artifact` | `off` |
-| `release` | `pages-and-artifact` | `off` |
-| `push` to default branch | `pages-and-artifact` | `off` |
-
-Common setups:
+The recommended integration is the reusable workflow:
 
 ```yaml
 # PR minimal comment only
 jobs:
   quality-report:
     uses: your-org/quality-report-platform/.github/workflows/publish-quality-report.yml@v1
-    permissions:
-      contents: read
-      actions: read
-      issues: write
-      pull-requests: read
     with:
       artifact-pattern: quality-*
-      quality-profile: standard
-      publish-mode: none
-      pr-comment-mode: minimal
-      fail-on-quality-gate: true
-```
-
-```yaml
-# PR full comment with downloadable artifact
-jobs:
-  quality-report:
-    uses: your-org/quality-report-platform/.github/workflows/publish-quality-report.yml@v1
-    permissions:
-      contents: read
-      actions: read
-      issues: write
-      pull-requests: read
-    with:
-      artifact-pattern: quality-*
+      artifact-path: quality-artifacts
+      config-path: quality-report.yml
+      quality-gates-path: quality-gates.yml
       quality-profile: standard
       publish-mode: artifact
-      pr-comment-mode: full
-      fail-on-quality-gate: true
-```
-
-```yaml
-# Manual full Pages publish
-jobs:
-  quality-report:
-    uses: your-org/quality-report-platform/.github/workflows/publish-quality-report.yml@v1
-    permissions:
-      contents: read
-      actions: read
-      pages: write
-      id-token: write
-    with:
-      artifact-pattern: quality-*
-      quality-profile: strict
-      publish-mode: pages-and-artifact
-      pr-comment-mode: off
-      fail-on-quality-gate: false
-```
-
-```yaml
-# Release full Pages publish
-jobs:
-  quality-report:
-    uses: your-org/quality-report-platform/.github/workflows/publish-quality-report.yml@v1
-    permissions:
-      contents: read
-      actions: read
-      pages: write
-      id-token: write
-    with:
-      artifact-pattern: quality-*
-      quality-profile: release
-      publish-mode: pages-and-artifact
-      pr-comment-mode: off
-      fail-on-quality-gate: true
-```
-
-```yaml
-# Report-only adoption mode
-jobs:
-  quality-report:
-    uses: your-org/quality-report-platform/.github/workflows/publish-quality-report.yml@v1
-    permissions:
-      contents: read
-      actions: read
-      issues: write
-      pull-requests: read
-    with:
-      artifact-pattern: quality-*
-      quality-profile: off
-      publish-mode: artifact
       pr-comment-mode: minimal
-      fail-on-quality-gate: false
+      pr-comment-marker: "<!-- quality-report-platform:summary -->"
+      update-pr-comment: true
+      fail-on-quality-gate: true
 ```
 
-Use combined permissions when both Pages and PR comments are enabled:
+Run tests in your own jobs, upload their outputs with `actions/upload-artifact`, and let the reusable workflow consume those artifacts. The workflow generates the static report before it evaluates the final failure condition, so artifacts, Pages deployments, and PR comments can still be produced for failing gates.
 
-```yaml
-permissions:
-  contents: read
-  actions: read
-  issues: write
-  pull-requests: read
-  pages: write
-  id-token: write
-```
+Use `publish-mode: none` or `artifact` on PRs. Use `pages-and-artifact` for manual dispatch, releases, or trusted main-branch publishing. PR comments require `issues: write` and use `<!-- quality-report-platform:summary -->` for update-in-place lookup. Fork PR comments are skipped by default; do not use `pull_request_target` without a security review. Pages publishing requires `pages: write` and `id-token: write`.
 
-The workflow exposes `quality-gate-status`, `quality-profile`, `report-path`,
-`report-zip-path`, `pages-url`, `pr-comment-url`, `summary-json-path`,
-`minimal-comment-path`, and `full-comment-path`.
-
-## PR comment smoke checks
-
-Use a test pull request with `pr-comment-mode: minimal` or `full`:
-
-- First run creates one comment containing `<!-- quality-report-platform:summary -->`.
-- Rerun updates that same marker comment when `update-pr-comment: true`.
-- No duplicate marker comments are created by default.
-- Setting `update-pr-comment: false` creates a new comment each run.
-- Running outside `pull_request` context logs a skip message and does not comment.
-- Removing `issues: write` causes the comment API step to fail with a permissions
-  error from GitHub.
-
-The final quality-gate failure step is intentionally last; report generation,
-artifact upload, Pages deployment, and PR commenting run before it.
+The old `reusable-publish-quality-report.yml` filename is kept only as a compatibility wrapper. New consumers should use `publish-quality-report.yml`.
