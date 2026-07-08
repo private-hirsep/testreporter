@@ -1,4 +1,4 @@
 [
-  { "name": "exports daily quality metrics", "requirement": "RFL-601" },
-  { "name": "handles empty export state", "requirement": "RFL-601" }
+  { "name": "exports daily quality metrics", "requirement": "JIRA-601" },
+  { "name": "handles empty export state", "requirement": "JIRA-601" }
 ]

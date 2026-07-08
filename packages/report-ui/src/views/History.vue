@@ -1,12 +1,8 @@
 <template>
   <div v-if="manifest">
-    <div class="page-heading">
-      <div>
-        <h1>History</h1>
-        <div class="page-kicker">Current-run summary prepared for future history merging</div>
-      </div>
+    <PageHeader title="History" subtitle="Current-run summary prepared for future history merging">
       <v-chip :color="gateColor(manifest.qualityGate.status)" label>{{ manifest.qualityGate.status }}</v-chip>
-    </div>
+    </PageHeader>
     <v-alert type="info" variant="tonal" class="mb-4">
       Historical trend merging is not enabled for this static report yet. This page shows the current run without inventing prior data.
     </v-alert>
@@ -27,6 +23,7 @@
 
 <script setup lang="ts">
 import { computed } from "vue";
+import PageHeader from "../components/PageHeader.vue";
 import { formatPercent, gateColor } from "../format";
 import type { Manifest, TestCase } from "../types";
 const props = defineProps<{ manifest?: Manifest; tests: TestCase[] }>();

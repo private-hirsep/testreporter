@@ -1,11 +1,6 @@
 <template>
   <div v-if="manifest">
-    <div class="page-heading">
-      <div>
-        <h1>Downloads</h1>
-        <div class="page-kicker">{{ manifest.downloads.length }} static artifact links in this report</div>
-      </div>
-    </div>
+    <PageHeader title="Downloads" :subtitle="`${manifest.downloads.length} static artifact links in this report`" />
     <v-table density="compact" class="data-table list-table">
       <thead><tr><th>Category</th><th>Name</th><th>Size</th><th class="text-right">Action</th></tr></thead>
       <tbody>
@@ -35,6 +30,7 @@
 
 <script setup lang="ts">
 import { computed } from "vue";
+import PageHeader from "../components/PageHeader.vue";
 import { formatBytes } from "../format";
 import type { Manifest, TestCase } from "../types";
 const props = defineProps<{ manifest?: Manifest; tests: TestCase[] }>();

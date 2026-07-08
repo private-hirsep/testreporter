@@ -1,14 +1,10 @@
 <template>
   <div v-if="manifest">
-    <div class="page-heading">
-      <div>
-        <h1>Security</h1>
-        <div class="page-kicker">{{ filtered.length }} of {{ manifest.security.length }} findings shown</div>
-      </div>
+    <PageHeader title="Security" :subtitle="`${filtered.length} of ${manifest.security.length} findings shown`">
       <v-chip :color="criticalOrHigh ? 'error' : 'success'" label>
         {{ criticalOrHigh }} critical/high
       </v-chip>
-    </div>
+    </PageHeader>
     <section class="summary-strip">
       <div>
         <div class="page-kicker">Security findings</div>
@@ -20,11 +16,14 @@
         </div>
       </div>
       <div>
-        <div v-for="item in severityBreakdown" :key="item.label" class="chart-row">
-          <span class="text-capitalize">{{ item.label }}</span>
-          <div class="progress-track"><div class="progress-fill" :class="item.class" :style="{ width: severityWidth(item.value) }" /></div>
-          <strong>{{ item.value }}</strong>
-        </div>
+        <ProgressMetric
+          v-for="item in severityBreakdown"
+          :key="item.label"
+          :label="item.label"
+          :percent="severityPercent(item.value)"
+          :display="item.value"
+          :tone="item.class"
+        />
       </div>
     </section>
     <div class="toolbar">
@@ -32,12 +31,12 @@
       <v-select v-model="severity" :items="['all', 'critical', 'high', 'medium', 'low', 'info', 'unknown']" label="Severity" density="compact" hide-details />
       <v-select v-model="tool" :items="tools" label="Tool" density="compact" hide-details />
     </div>
-    <div v-if="!filtered.length" class="empty-state">No security findings match the current filters.</div>
+    <EmptyState v-if="!filtered.length" message="No security findings match the current filters." />
     <v-expansion-panels v-else variant="accordion">
       <v-expansion-panel v-for="finding in filtered" :key="finding.id" class="portal-card">
         <v-expansion-panel-title>
           <div class="d-flex align-center ga-3 flex-wrap">
-            <v-chip size="small" :color="severityColor(finding.severity)" label>{{ finding.severity }}</v-chip>
+            <SeverityChip :severity="finding.severity" />
             <v-chip size="small" variant="outlined" label>{{ finding.tool }}</v-chip>
             <strong>{{ finding.title }}</strong>
           </div>
@@ -74,7 +73,10 @@
 
 <script setup lang="ts">
 import { computed, ref } from "vue";
-import { severityColor } from "../format";
+import EmptyState from "../components/EmptyState.vue";
+import PageHeader from "../components/PageHeader.vue";
+import ProgressMetric from "../components/ProgressMetric.vue";
+import SeverityChip from "../components/SeverityChip.vue";
 import type { Download, Manifest, SecurityFinding, TestCase } from "../types";
 const props = defineProps<{ manifest?: Manifest; tests: TestCase[] }>();
 const search = ref("");
@@ -87,7 +89,7 @@ const toolSummaries = computed(() =>
     .filter((item) => item !== "all")
     .map((item) => ({ tool: item, count: props.manifest?.security.filter((finding) => finding.tool === item).length ?? 0 }))
 );
-const severityBreakdown = computed(() =>
+const severityBreakdown = computed<Array<{ label: string; value: number; class: "" | "low" | "medium" }>>(() =>
   ["critical", "high", "medium", "low", "info"].map((label) => ({
     label,
     value: props.manifest?.summary.security[label] ?? 0,
@@ -105,9 +107,9 @@ const filtered = computed(() =>
     )
 );
 
-function severityWidth(value: number) {
+function severityPercent(value: number) {
   const max = Math.max(...Object.values(props.manifest?.summary.security ?? {}), 1);
-  return `${Math.max((value / max) * 100, value > 0 ? 6 : 0)}%`;
+  return Math.max((value / max) * 100, value > 0 ? 6 : 0);
 }
 
 function location(finding: SecurityFinding) {
