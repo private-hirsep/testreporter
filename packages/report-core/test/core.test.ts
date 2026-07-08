@@ -5,6 +5,7 @@ import {
   deduplicateTests,
   evaluateQualityGate,
   QualityReportConfigSchema,
+  type QualityGateConfig,
   type NormalizedTestCase,
   type QualityReportConfig
 } from "../src/index.js";
@@ -41,17 +42,13 @@ describe("core normalization and gates", () => {
   it("evaluates quality gates", () => {
     const requirements = calculateRequirementCoverage(["JIRA-1"], [test({})]);
     const summary = buildSummary([test({ status: "failed" })], [], requirements, []);
-    const config = {
+    const config = QualityReportConfigSchema.parse({
       project: { name: "x" },
-      artifacts: {},
-      requirements: { keyPattern: "[A-Z]+-[0-9]+" },
       qualityGates: {
         tests: { allowFailed: 0, allowBroken: 0 },
-        coverage: {},
-        requirements: { failOnMissing: false },
         security: { maxCritical: 0, maxHigh: 0 }
       }
-    } satisfies QualityReportConfig;
+    }) satisfies QualityReportConfig;
     expect(evaluateQualityGate(config, summary).status).toBe("failed");
   });
 
@@ -61,6 +58,45 @@ describe("core normalization and gates", () => {
     expect(config.qualityGates.tests.allowBroken).toBe(0);
     expect(config.qualityGates.security.maxCritical).toBe(0);
     expect(config.qualityGates.security.maxHigh).toBe(0);
+  });
+
+  it("accepts extended custom quality gate fields", () => {
+    const gates = {
+      requirements: { failOnExtra: true },
+      security: { maxMedium: 0, maxLow: null },
+      warnings: { maxWarnings: 0 }
+    } satisfies QualityGateConfig;
+    const config = QualityReportConfigSchema.parse({ project: { name: "x" }, qualityGates: gates });
+    expect(config.qualityGates.requirements.failOnExtra).toBe(true);
+    expect(config.qualityGates.security.maxMedium).toBe(0);
+    expect(config.qualityGates.warnings.maxWarnings).toBe(0);
+  });
+
+  it("evaluates extra requirements, medium security, and warnings gates", () => {
+    const requirements = calculateRequirementCoverage([], [test({ requirements: ["JIRA-9"] })]);
+    const summary = buildSummary([test({})], [], requirements, [
+      { id: "s1", tool: "codeql", title: "Finding", severity: "medium", tags: [] }
+    ]);
+    const config = QualityReportConfigSchema.parse({
+      project: { name: "x" },
+      qualityGates: {
+        requirements: { failOnExtra: true },
+        security: { maxMedium: 0 },
+        warnings: { maxWarnings: 0 }
+      }
+    });
+    const result = evaluateQualityGate(config, summary, 1);
+    expect(
+      result.checks.some((check) => check.id === "requirements.extra" && check.status === "failed")
+    ).toBe(true);
+    expect(
+      result.checks.some((check) => check.id === "security.medium" && check.status === "failed")
+    ).toBe(true);
+    expect(
+      result.checks.some(
+        (check) => check.id === "warnings.maxWarnings" && check.status === "failed"
+      )
+    ).toBe(true);
   });
 
   it("allows configured relaxed quality gates", () => {

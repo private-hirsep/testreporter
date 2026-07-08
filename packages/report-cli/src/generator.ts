@@ -17,6 +17,7 @@ import {
   type NormalizedReport,
   type NormalizedTestCase,
   type ParserWarning,
+  type QualityGateCheck,
   type QualityReportConfig,
   type SecurityFinding
 } from "@quality-report/report-core";
@@ -40,6 +41,15 @@ export type GenerateOptions = {
   inputPath: string;
   outputPath: string;
   zip?: boolean | undefined;
+  qualityProfile?: string | undefined;
+  publishMode?: string | undefined;
+  prCommentMode?: string | undefined;
+  prCommentMarker?: string | undefined;
+};
+
+export type PrCommentRenderOptions = {
+  prCommentMarker?: string | undefined;
+  prCommentMode?: string | undefined;
 };
 
 const MAX_PARSE_BYTES = 50 * 1024 * 1024;
@@ -47,16 +57,25 @@ const MAX_PARSE_BYTES = 50 * 1024 * 1024;
 function safeRelativePath(file: string, root: string): string {
   if (!path.isAbsolute(file)) return (redactSecrets(file) ?? file).replace(/\\/g, "/");
   const relative = path.relative(root, file);
-  const safe = relative && !relative.startsWith("..") && !path.isAbsolute(relative) ? relative : path.basename(file);
+  const safe =
+    relative && !relative.startsWith("..") && !path.isAbsolute(relative)
+      ? relative
+      : path.basename(file);
   return (redactSecrets(safe) ?? safe).replace(/\\/g, "/");
 }
 
 function artifactDisplayPath(inputPath: string, file: string) {
   const relative = path.relative(inputPath, file).replace(/\\/g, "/");
-  return relative && !relative.startsWith("..") && !path.isAbsolute(relative) ? relative : path.basename(file);
+  return relative && !relative.startsWith("..") && !path.isAbsolute(relative)
+    ? relative
+    : path.basename(file);
 }
 
-async function safeRead(file: string, warnings: ParserWarning[], displayPath: string): Promise<string | undefined> {
+async function safeRead(
+  file: string,
+  warnings: ParserWarning[],
+  displayPath: string
+): Promise<string | undefined> {
   const size = (await stat(file)).size;
   if (size > MAX_PARSE_BYTES) {
     warnings.push({
@@ -69,7 +88,8 @@ async function safeRead(file: string, warnings: ParserWarning[], displayPath: st
   return readFile(file, "utf8");
 }
 
-function metadata(config: QualityReportConfig) {
+function metadata(options: GenerateOptions) {
+  const { config } = options;
   return {
     projectName: config.project.name,
     ...(config.project.repository ? { repository: config.project.repository } : {}),
@@ -77,8 +97,38 @@ function metadata(config: QualityReportConfig) {
     branch: redactSecrets(process.env.GITHUB_REF_NAME),
     commitSha: redactSecrets(process.env.GITHUB_SHA),
     runId: redactSecrets(process.env.GITHUB_RUN_ID),
-    actor: redactSecrets(process.env.GITHUB_ACTOR)
+    actor: redactSecrets(process.env.GITHUB_ACTOR),
+    ...(options.qualityProfile ? { qualityProfile: options.qualityProfile } : {}),
+    ...(options.publishMode ? { publishMode: options.publishMode } : {}),
+    ...(options.prCommentMode ? { prCommentMode: options.prCommentMode } : {})
   };
+}
+
+export function renderPrComment(
+  report: NormalizedReport,
+  options: PrCommentRenderOptions | string = {}
+): string {
+  const renderOptions: PrCommentRenderOptions =
+    typeof options === "string" ? { prCommentMarker: options } : options;
+  const marker = renderOptions.prCommentMarker ?? "<!-- quality-report-comment -->";
+  const mode = renderOptions.prCommentMode ?? "summary";
+  const gate = report.qualityGate;
+  const failedChecks = gate.checks.filter((check: QualityGateCheck) => check.status === "failed");
+  const lines = [
+    marker,
+    `## Quality report: ${gate.status.toUpperCase()}`,
+    "",
+    `Project: ${report.metadata.projectName}`,
+    `Tests: ${report.summary.tests.total} total, ${report.summary.tests.failed} failed, ${report.summary.tests.broken} broken`,
+    `Coverage: ${report.summary.coverage.totalPercentage ?? "n/a"}%`,
+    `Requirements: ${report.summary.requirements.percentage}%`
+  ];
+  if (mode !== "minimal" && failedChecks.length > 0) {
+    lines.push("", "Failed checks:");
+    for (const check of failedChecks)
+      lines.push(`- ${check.label}: ${check.actual} expected ${check.expected}`);
+  }
+  return `${lines.join("\n")}\n`;
 }
 
 function mergeCoverage(items: CoverageSummary[]): CoverageSummary[] {
@@ -94,10 +144,18 @@ function mergeCoverage(items: CoverageSummary[]): CoverageSummary[] {
   });
 }
 
-async function readExpectedRequirements(artifacts: DiscoveredArtifact[], warnings: ParserWarning[], inputPath: string) {
+async function readExpectedRequirements(
+  artifacts: DiscoveredArtifact[],
+  warnings: ParserWarning[],
+  inputPath: string
+) {
   const keys: string[] = [];
   for (const artifact of artifacts.filter((item) => item.kind === "expectedRequirements")) {
-    const content = await safeRead(artifact.path, warnings, artifactDisplayPath(inputPath, artifact.path));
+    const content = await safeRead(
+      artifact.path,
+      warnings,
+      artifactDisplayPath(inputPath, artifact.path)
+    );
     if (!content) continue;
     for (const line of content.split(/\r?\n/)) {
       const key = line.split(",")[0]?.trim();
@@ -115,14 +173,23 @@ async function applyRequirementMappings(
 ) {
   const byId = new Map(tests.map((test) => [test.id, test]));
   for (const artifact of artifacts.filter((item) => item.kind === "requirementMapping")) {
-    const content = await safeRead(artifact.path, warnings, artifactDisplayPath(inputPath, artifact.path));
+    const content = await safeRead(
+      artifact.path,
+      warnings,
+      artifactDisplayPath(inputPath, artifact.path)
+    );
     if (!content) continue;
-    const mappings = JSON.parse(content) as Array<{ testId?: string; name?: string; requirement: string }>;
+    const mappings = JSON.parse(content) as Array<{
+      testId?: string;
+      name?: string;
+      requirement: string;
+    }>;
     for (const mapping of mappings) {
       const matches = mapping.testId
         ? [byId.get(mapping.testId)].filter((test): test is NormalizedTestCase => Boolean(test))
         : tests.filter((test) => test.name === mapping.name || test.fullName === mapping.name);
-      for (const test of matches) test.requirements = [...new Set([...test.requirements, mapping.requirement])];
+      for (const test of matches)
+        test.requirements = [...new Set([...test.requirements, mapping.requirement])];
     }
   }
 }
@@ -261,12 +328,15 @@ export async function buildReport(options: GenerateOptions): Promise<NormalizedR
       };
       if (artifact.kind === "junit") tests.push(...parseJUnitXml(content, context).items);
       if (artifact.kind === "vitestJson") tests.push(...parseVitestJson(content, context).items);
-      if (artifact.kind === "playwrightJson") tests.push(...parsePlaywrightJson(content, context).items);
+      if (artifact.kind === "playwrightJson")
+        tests.push(...parsePlaywrightJson(content, context).items);
       if (artifact.kind === "jacocoXml") coverage.push(...parseJaCoCoXml(content, context).items);
       if (artifact.kind === "jacocoCsv") coverage.push(...parseJaCoCoCsv(content, context).items);
-      if (artifact.kind === "coberturaXml") coverage.push(...parseCoberturaXml(content, context).items);
+      if (artifact.kind === "coberturaXml")
+        coverage.push(...parseCoberturaXml(content, context).items);
       if (artifact.kind === "lcov") coverage.push(...parseLcov(content, context).items);
-      if (artifact.kind === "istanbulSummary") coverage.push(...parseIstanbulSummary(content, context).items);
+      if (artifact.kind === "istanbulSummary")
+        coverage.push(...parseIstanbulSummary(content, context).items);
       if (artifact.kind === "sarif") security.push(...parseSarif(content, context).items);
       if (artifact.kind === "zapJson") security.push(...parseZapJson(content, context).items);
     } catch (error) {
@@ -288,8 +358,8 @@ export async function buildReport(options: GenerateOptions): Promise<NormalizedR
   }
   const downloads = await copyRawArtifacts(artifacts, options.outputPath, inputRoot);
   const summary = buildSummary(dedupedTests, mergedCoverage, requirements, security);
-  const qualityGate = evaluateQualityGate(options.config, summary);
-  const meta = metadata(options.config);
+  const qualityGate = evaluateQualityGate(options.config, summary, warnings.length);
+  const meta = metadata(options);
   const report = NormalizedReportSchema.parse({
     schemaVersion: "1.0",
     metadata: meta,
@@ -320,6 +390,12 @@ export async function buildReport(options: GenerateOptions): Promise<NormalizedR
 
   await copyUi(options.outputPath);
   await writeData(options.outputPath, report);
+  if (options.prCommentMode && options.prCommentMode !== "off") {
+    await writeFile(
+      path.join(options.outputPath, "pr-comment.md"),
+      renderPrComment(report, options)
+    );
+  }
   if (options.zip) {
     const zipFile = `quality-report-${Date.now()}.zip`;
     const zipPath = path.join(options.outputPath, zipFile);

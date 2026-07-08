@@ -2,8 +2,8 @@ import { mkdir, mkdtemp, readFile, readdir, stat, writeFile } from "node:fs/prom
 import os from "node:os";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
-import { loadConfig } from "../src/config.js";
-import { buildReport } from "../src/generator.js";
+import { BUILT_IN_QUALITY_PROFILES, loadConfig } from "../src/config.js";
+import { buildReport, renderPrComment } from "../src/generator.js";
 
 async function assertFullHtml(output: string) {
   const html = await readFile(path.join(output, "index.html"), "utf8");
@@ -59,27 +59,66 @@ describe("report generator", () => {
       configPath,
       inputPath: path.join(root, "examples/minimal/quality-artifacts"),
       outputPath: output,
-      zip: true
+      zip: true,
+      qualityProfile: "relaxed",
+      publishMode: "artifact",
+      prCommentMode: "minimal",
+      prCommentMarker: "<!-- custom-quality-report -->"
     });
     expect(report.tests.length).toBeGreaterThan(0);
     expect(report.summary.tests.byLayer.backend).toBeGreaterThan(0);
     expect(report.downloads.length).toBeGreaterThan(0);
     const serialized = JSON.stringify(report);
     expect(serialized).not.toContain(root.replace(/\\/g, "\\\\"));
-    expect(report.downloads.every((download) => !download.sourcePath || !path.isAbsolute(download.sourcePath))).toBe(
-      true
-    );
-    expect(report.downloads.some((download) => download.category === "report" && download.path.endsWith(".zip"))).toBe(
-      true
-    );
+    expect(
+      report.downloads.every(
+        (download) => !download.sourcePath || !path.isAbsolute(download.sourcePath)
+      )
+    ).toBe(true);
+    expect(
+      report.downloads.some(
+        (download) => download.category === "report" && download.path.endsWith(".zip")
+      )
+    ).toBe(true);
     expect(report.warnings.some((warning) => warning.code === "artifact.parse-failed")).toBe(true);
     expect(report.requirements.testsByRequirement["JIRA-101"]?.length).toBeGreaterThan(0);
     expect(report.security.some((finding) => finding.helpUri || finding.evidence)).toBe(true);
+    expect(report.metadata.qualityProfile).toBe("relaxed");
+    expect(report.metadata.publishMode).toBe("artifact");
+    expect(report.metadata.prCommentMode).toBe("minimal");
     await assertFullHtml(output);
     await assertManifestReferencesExist(output);
+    const manifest = JSON.parse(
+      await readFile(path.join(output, "data/manifest.json"), "utf8")
+    ) as {
+      metadata: { qualityProfile?: string; publishMode?: string; prCommentMode?: string };
+    };
+    expect(manifest.metadata).toMatchObject({
+      qualityProfile: "relaxed",
+      publishMode: "artifact",
+      prCommentMode: "minimal"
+    });
+    await expect(readFile(path.join(output, "pr-comment.md"), "utf8")).resolves.toContain(
+      "<!-- custom-quality-report -->"
+    );
     await expect(stat(path.join(output, "assets", "stale.js"))).rejects.toThrow();
-    const reportZips = (await readdir(output)).filter((file) => /^quality-report.*\.zip$/i.test(file));
+    const reportZips = (await readdir(output)).filter((file) =>
+      /^quality-report.*\.zip$/i.test(file)
+    );
     expect(reportZips).toHaveLength(1);
+  });
+
+  it("keeps built-in profiles and PR comment options typed", async () => {
+    expect(BUILT_IN_QUALITY_PROFILES.strict.requirements?.failOnExtra).toBe(true);
+    expect(BUILT_IN_QUALITY_PROFILES.relaxed.security?.maxMedium).toBeNull();
+    const root = path.resolve(import.meta.dirname, "../../..");
+    const configPath = path.join(root, "examples/minimal/quality-report.yml");
+    const config = await loadConfig(configPath, {
+      qualityGatesPath: path.join(root, "examples/minimal/quality-gates.yml"),
+      qualityProfile: "relaxed"
+    });
+    expect(config.qualityGates.requirements.failOnExtra).toBe(false);
+    expect(config.qualityGates.security.maxMedium).toBeNull();
   });
 
   it("generates passing and failing reports with the same UI bundle and downloadable ZIPs", async () => {
@@ -137,9 +176,16 @@ describe("report generator", () => {
     expect(combined).not.toContain("/home/");
     expect(report.downloads.some((download) => download.category === "report")).toBe(true);
 
+    expect(
+      renderPrComment(report, { prCommentMarker: "<!-- marker -->", prCommentMode: "minimal" })
+    ).toContain("<!-- marker -->");
+    expect(renderPrComment(report, "<!-- legacy-marker -->")).toContain("<!-- legacy-marker -->");
+
     const zipBuffer = await readFile(path.join(output, zipFiles[0]!));
     const entriesInZip = zipEntries(zipBuffer);
-    expect(entriesInZip.some((entry) => /^quality-report.*\.zip$/i.test(path.basename(entry)))).toBe(false);
+    expect(
+      entriesInZip.some((entry) => /^quality-report.*\.zip$/i.test(path.basename(entry)))
+    ).toBe(false);
     expect(entriesInZip).toContain("index.html");
     expect(entriesInZip).toContain("404.html");
   });

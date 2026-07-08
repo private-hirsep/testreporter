@@ -9,7 +9,10 @@ import { buildReport } from "./generator.js";
 
 const program = new Command();
 
-program.name("quality-report").description("Generate static quality reports from CI artifacts").version("0.1.0");
+program
+  .name("quality-report")
+  .description("Generate static quality reports from CI artifacts")
+  .version("0.1.0");
 
 function handleError(error: unknown): never {
   if (error instanceof ZodError) {
@@ -71,27 +74,52 @@ program
 program
   .command("generate")
   .requiredOption("--config <path>", "Path to quality-report.yml")
+  .option("--quality-gates <path>", "Path to quality-gates.yml")
+  .option("--quality-profile <name>", "Built-in quality gate profile")
+  .option("--publish-mode <mode>", "Publish mode metadata value")
+  .option("--pr-comment-mode <mode>", "PR comment rendering mode")
+  .option("--pr-comment-marker <marker>", "Marker used to update an existing PR comment")
   .requiredOption("--input <path>", "Artifact input directory")
   .requiredOption("--output <path>", "Static report output directory")
   .option("--zip", "Create quality-report.zip in the output directory", false)
-  .action(async (options: { config: string; input: string; output: string; zip?: boolean }) => {
-    try {
-      const config = await loadConfig(options.config);
-      await mkdir(options.output, { recursive: true });
-      const report = await buildReport({
-        config,
-        configPath: options.config,
-        inputPath: options.input,
-        outputPath: options.output,
-        zip: options.zip
-      });
-      console.log(`Generated report for ${report.metadata.projectName}: ${options.output}`);
-      console.log(`Quality gate: ${report.qualityGate.status.toUpperCase()}`);
-      if (report.warnings.length > 0) console.warn(`Completed with ${report.warnings.length} warning(s).`);
-      process.exit(report.qualityGate.status === "failed" ? 1 : 0);
-    } catch (error) {
-      handleError(error);
+  .action(
+    async (options: {
+      config: string;
+      qualityGates?: string;
+      qualityProfile?: string;
+      publishMode?: string;
+      prCommentMode?: string;
+      prCommentMarker?: string;
+      input: string;
+      output: string;
+      zip?: boolean;
+    }) => {
+      try {
+        const config = await loadConfig(options.config, {
+          ...(options.qualityGates ? { qualityGatesPath: options.qualityGates } : {}),
+          ...(options.qualityProfile ? { qualityProfile: options.qualityProfile } : {})
+        });
+        await mkdir(options.output, { recursive: true });
+        const report = await buildReport({
+          config,
+          configPath: options.config,
+          inputPath: options.input,
+          outputPath: options.output,
+          zip: options.zip,
+          ...(options.qualityProfile ? { qualityProfile: options.qualityProfile } : {}),
+          ...(options.publishMode ? { publishMode: options.publishMode } : {}),
+          ...(options.prCommentMode ? { prCommentMode: options.prCommentMode } : {}),
+          ...(options.prCommentMarker ? { prCommentMarker: options.prCommentMarker } : {})
+        });
+        console.log(`Generated report for ${report.metadata.projectName}: ${options.output}`);
+        console.log(`Quality gate: ${report.qualityGate.status.toUpperCase()}`);
+        if (report.warnings.length > 0)
+          console.warn(`Completed with ${report.warnings.length} warning(s).`);
+        process.exit(report.qualityGate.status === "failed" ? 1 : 0);
+      } catch (error) {
+        handleError(error);
+      }
     }
-  });
+  );
 
 program.parseAsync().catch(handleError);
