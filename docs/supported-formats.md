@@ -1,16 +1,16 @@
 # Supported Formats
 
-Milestone one supports:
+The generator consumes files selected by `quality-report.yml`. It does not care which tool produced them.
 
-- Generic JUnit XML, Pytest JUnit XML, Maven Surefire/Failsafe XML
-- Vitest JSON and JUnit XML
-- Playwright JSON and JUnit XML
-- JaCoCo XML and CSV
-- Istanbul `coverage-summary.json`
-- LCOV
-- Cobertura XML
-- CodeQL/SARIF
-- OWASP ZAP JSON
+| Area              | Config keys                                                             | Formats                                                                           |
+| ----------------- | ----------------------------------------------------------------------- | --------------------------------------------------------------------------------- |
+| Backend tests     | `artifacts.tests.backend.junit`, `pytestJunit`                          | JUnit XML, including Pytest and Maven Surefire/Failsafe output                    |
+| Frontend tests    | `artifacts.tests.frontend.junit`, `vitestJson`                          | JUnit XML, Vitest JSON                                                            |
+| E2E tests         | `artifacts.tests.e2e.junit`, `playwrightJson`                           | JUnit XML, Playwright JSON                                                        |
+| Backend coverage  | `jacocoXml`, `jacocoCsv`, `coberturaXml`, `lcov`, `summaryJson`, `html` | JaCoCo XML/CSV, Cobertura XML, LCOV, Istanbul summary JSON, static HTML downloads |
+| Frontend coverage | `jacocoXml`, `coberturaXml`, `lcov`, `summaryJson`, `html`              | JaCoCo XML, Cobertura XML, LCOV, Istanbul summary JSON, static HTML downloads     |
+| Requirements      | `expectedKeys`, `mapping`                                               | Expected requirement CSV, mapping JSON                                            |
+| Security          | `codeqlSarif`, `zapJson`                                                | SARIF, OWASP ZAP JSON                                                             |
+| Raw downloads     | `raw`                                                                   | Any files or directories copied as downloadable evidence                          |
 
-Unsupported or malformed files are skipped with controlled warnings. The parser
-size limit is 50 MiB per structured artifact.
+Unsupported, malformed, or oversized structured files are skipped with controlled parser warnings. The structured parser size limit is 50 MiB per artifact.

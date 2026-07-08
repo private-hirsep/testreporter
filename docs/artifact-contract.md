@@ -1,32 +1,46 @@
 # Artifact Contract
 
+The portal consumes artifacts. It does not prescribe how projects build, test, scan, or package their code.
+
 Recommended layout:
 
 ```text
 quality-artifacts/
-  tests/backend/junit/
-  tests/frontend/junit/
-  tests/frontend/vitest/
-  tests/e2e/junit/
-  tests/e2e/playwright/
-  coverage/backend/jacoco.xml
-  coverage/backend/html/
-  coverage/frontend/lcov.info
-  coverage/frontend/coverage-summary.json
-  coverage/frontend/html/
-  requirements/expected.csv
-  requirements/mapping.json
-  security/codeql/
-  security/zap/
-  meta/manifest.yml
+├─ tests/
+│  ├─ backend/
+│  │  ├─ junit/
+│  │  └─ raw/
+│  ├─ frontend/
+│  │  ├─ junit/
+│  │  ├─ vitest/
+│  │  └─ raw/
+│  └─ e2e/
+│     ├─ junit/
+│     ├─ playwright/
+│     └─ raw/
+├─ coverage/
+│  ├─ backend/
+│  │  ├─ jacoco.xml
+│  │  ├─ jacoco.csv
+│  │  └─ html/
+│  └─ frontend/
+│     ├─ lcov.info
+│     ├─ coverage-summary.json
+│     └─ html/
+├─ requirements/
+│  ├─ expected.csv
+│  └─ mapping.json
+├─ security/
+│  ├─ codeql/
+│  └─ zap/
+└─ meta/
+   └─ manifest.yml
 ```
 
-This layout is recommended, not required. Any project may use different artifact
-names or paths if `quality-report.yml` maps them explicitly.
+This layout is recommended, not required. Any project may use different artifact names or paths if `quality-report.yml` maps them explicitly.
 
-Raw third-party HTML reports can be copied and linked as static downloads. The
-main SPA does not embed arbitrary HTML.
+Globs are resolved relative to the downloaded artifact directory: `--input` for local CLI runs and `artifact-path` for the reusable workflow.
 
-Generated report JSON stores safe relative source labels and generated raw asset
-links. It must not expose absolute local filesystem paths from the machine that
-ran the generator.
+Raw third-party HTML reports can be copied and linked as static downloads. The main SPA does not embed arbitrary HTML.
+
+Generated report JSON stores safe relative source labels and generated raw asset links. It should not expose absolute local filesystem paths from the machine that ran the generator.

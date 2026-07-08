@@ -1,38 +1,69 @@
 # Configuration
 
-`quality-report.yml` defines project metadata, artifact globs, requirement
-matching, and quality gates.
+`quality-report.yml` defines project metadata, artifact globs, requirement matching, quality gates, and optional custom profiles.
+
+Globs are resolved relative to `--input` or the reusable workflow's `artifact-path`.
 
 ```yaml
 project:
-  name: JIRA Tool
-  repository: acds-at/JIRA-tool
+  name: Example Service
+  repository: your-org/example-service
 
 artifacts:
   tests:
     backend:
-      junit: "quality-artifacts/tests/backend/junit/**/*.xml"
+      junit: "tests/backend/junit/**/*.xml"
+      pytestJunit: "tests/backend/pytest/**/*.xml"
     frontend:
-      junit: "quality-artifacts/tests/frontend/junit/**/*.xml"
-      vitestJson: "quality-artifacts/tests/frontend/vitest/**/*.json"
+      junit: "tests/frontend/junit/**/*.xml"
+      vitestJson: "tests/frontend/vitest/**/*.json"
     e2e:
-      playwrightJson: "quality-artifacts/tests/e2e/playwright/**/*.json"
+      junit: "tests/e2e/junit/**/*.xml"
+      playwrightJson: "tests/e2e/playwright/**/*.json"
   coverage:
     backend:
-      jacocoXml: "quality-artifacts/coverage/backend/jacoco.xml"
+      jacocoXml: "coverage/backend/jacoco.xml"
+      jacocoCsv: "coverage/backend/jacoco.csv"
+      coberturaXml: "coverage/backend/cobertura.xml"
+      lcov: "coverage/backend/lcov.info"
+      summaryJson: "coverage/backend/coverage-summary.json"
+      html: "coverage/backend/html"
     frontend:
-      lcov: "quality-artifacts/coverage/frontend/lcov.info"
-      summaryJson: "quality-artifacts/coverage/frontend/coverage-summary.json"
+      jacocoXml: "coverage/frontend/jacoco.xml"
+      coberturaXml: "coverage/frontend/cobertura.xml"
+      lcov: "coverage/frontend/lcov.info"
+      summaryJson: "coverage/frontend/coverage-summary.json"
+      html: "coverage/frontend/html"
   requirements:
-    expectedKeys: "quality-artifacts/requirements/expected.csv"
-    mapping: "quality-artifacts/requirements/mapping.json"
+    expectedKeys: "requirements/expected.csv"
+    mapping: "requirements/mapping.json"
   security:
-    codeqlSarif: "quality-artifacts/security/codeql/**/*.sarif"
-    zapJson: "quality-artifacts/security/zap/**/*.json"
+    codeqlSarif: "security/codeql/**/*.sarif"
+    zapJson: "security/zap/**/*.json"
+  raw:
+    - "tests/**/raw/**"
 
 requirements:
   keyPattern: "[A-Z]+-[0-9]+"
+
+qualityGates:
+  tests:
+    allowFailed: 0
+    allowBroken: 0
+  coverage:
+    totalMinimum: 70
+  requirements:
+    minimum: 75
+    failOnMissing: false
+    failOnExtra: false
+  security:
+    maxCritical: 0
+    maxHigh: 0
+    maxMedium: 3
+  warnings:
+    maxWarnings: 10
 ```
 
-Globs are resolved relative to `--input`. Config validation fails for malformed
-YAML or invalid schema values.
+`quality-gates.yml` may contain `qualityGates` and `qualityGateProfiles`. Passing `--quality-profile <name>` replaces `qualityGates` with the selected built-in or custom profile. Passing `--quality-gates <path>` loads an external gates file before selecting the profile.
+
+Current CLI custom profiles are direct profile objects; `extends` is not implemented in the canonical workflow path.
