@@ -12,12 +12,12 @@ import {
 function test(overrides: Partial<NormalizedTestCase>): NormalizedTestCase {
   return {
     id: overrides.id ?? "id",
-    name: overrides.name ?? "test RFL-1",
+    name: overrides.name ?? "test JIRA-1",
     framework: "junit",
     layer: "backend",
     status: "passed",
     retries: 0,
-    requirements: ["RFL-1"],
+    requirements: ["JIRA-1"],
     labels: {},
     attachments: [],
     ...overrides
@@ -33,13 +33,13 @@ describe("core normalization and gates", () => {
   });
 
   it("calculates requirement coverage", () => {
-    const result = calculateRequirementCoverage(["RFL-1", "RFL-2"], [test({})]);
+    const result = calculateRequirementCoverage(["JIRA-1", "JIRA-2"], [test({})]);
     expect(result.percentage).toBe(50);
-    expect(result.missing).toEqual(["RFL-2"]);
+    expect(result.missing).toEqual(["JIRA-2"]);
   });
 
   it("evaluates quality gates", () => {
-    const requirements = calculateRequirementCoverage(["RFL-1"], [test({})]);
+    const requirements = calculateRequirementCoverage(["JIRA-1"], [test({})]);
     const summary = buildSummary([test({ status: "failed" })], [], requirements, []);
     const config = {
       project: { name: "x" },
@@ -64,7 +64,7 @@ describe("core normalization and gates", () => {
   });
 
   it("allows configured relaxed quality gates", () => {
-    const requirements = calculateRequirementCoverage(["RFL-1"], [test({})]);
+    const requirements = calculateRequirementCoverage(["JIRA-1"], [test({})]);
     const summary = buildSummary([test({ status: "failed" })], [], requirements, []);
     const config = QualityReportConfigSchema.parse({
       project: { name: "x" },

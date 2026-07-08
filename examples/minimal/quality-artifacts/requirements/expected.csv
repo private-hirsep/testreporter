@@ -1,15 +1,15 @@
 key,title
-RFL-101,User onboarding and account state
-RFL-102,Duplicate email validation
-RFL-104,User profile update
-RFL-201,Login validation
-RFL-202,Profile avatar handling
-RFL-203,Session refresh and token expiry
-RFL-301,Checkout order creation
-RFL-302,Printable receipt
-RFL-401,Security audit and warnings
-RFL-501,Payment and inventory recovery
-RFL-601,Audit export and receipt archive
-RFL-602,Invoice event timeline
-RFL-701,Feature flag matrix
-RFL-999,Future history trend import
+JIRA-101,User onboarding and account state
+JIRA-102,Duplicate email validation
+JIRA-104,User profile update
+JIRA-201,Login validation
+JIRA-202,Profile avatar handling
+JIRA-203,Session refresh and token expiry
+JIRA-301,Checkout order creation
+JIRA-302,Printable receipt
+JIRA-401,Security audit and warnings
+JIRA-501,Payment and inventory recovery
+JIRA-601,Audit export and receipt archive
+JIRA-602,Invoice event timeline
+JIRA-701,Feature flag matrix
+JIRA-999,Future history trend import

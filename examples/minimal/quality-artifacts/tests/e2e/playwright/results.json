@@ -4,22 +4,22 @@
       "title": "checkout.spec.ts",
       "tests": [
         {
-          "title": "buyer can complete checkout RFL-301 RFL-501",
+          "title": "buyer can complete checkout JIRA-301 JIRA-501",
           "projectName": "chromium-desktop",
           "browserName": "chromium",
           "location": { "file": "tests/e2e/checkout.spec.ts", "line": 12 },
-          "annotations": [{ "type": "requirement", "description": "RFL-301" }],
+          "annotations": [{ "type": "requirement", "description": "JIRA-301" }],
           "results": [{ "status": "passed", "duration": 1510, "retry": 0 }]
         },
         {
-          "title": "receipt is printable RFL-302",
+          "title": "receipt is printable JIRA-302",
           "projectName": "chromium-desktop",
           "browserName": "chromium",
           "location": { "file": "tests/e2e/checkout.spec.ts", "line": 45 },
           "results": [{ "status": "passed", "duration": 740, "retry": 0 }]
         },
         {
-          "title": "payment decline shows recovery path RFL-501",
+          "title": "payment decline shows recovery path JIRA-501",
           "projectName": "firefox-desktop",
           "browserName": "firefox",
           "location": { "file": "tests/e2e/checkout.spec.ts", "line": 88 },
@@ -44,7 +44,7 @@
           ]
         },
         {
-          "title": "mobile checkout preserves cart RFL-301",
+          "title": "mobile checkout preserves cart JIRA-301",
           "projectName": "webkit-mobile",
           "browserName": "webkit",
           "location": { "file": "tests/e2e/checkout.spec.ts", "line": 131 },
@@ -56,28 +56,28 @@
       "title": "identity.spec.ts",
       "tests": [
         {
-          "title": "new user onboarding reaches dashboard RFL-101 RFL-201",
+          "title": "new user onboarding reaches dashboard JIRA-101 JIRA-201",
           "projectName": "chromium-desktop",
           "browserName": "chromium",
           "location": { "file": "tests/e2e/identity.spec.ts", "line": 21 },
           "results": [{ "status": "passed", "duration": 1320, "retry": 0 }]
         },
         {
-          "title": "locked account warning appears RFL-401",
+          "title": "locked account warning appears JIRA-401",
           "projectName": "chromium-desktop",
           "browserName": "chromium",
           "location": { "file": "tests/e2e/identity.spec.ts", "line": 58 },
           "results": [{ "status": "passed", "duration": 980, "retry": 0 }]
         },
         {
-          "title": "profile avatar upload works RFL-202",
+          "title": "profile avatar upload works JIRA-202",
           "projectName": "webkit-mobile",
           "browserName": "webkit",
           "location": { "file": "tests/e2e/identity.spec.ts", "line": 93 },
           "results": [{ "status": "skipped", "duration": 0, "retry": 0 }]
         },
         {
-          "title": "session survives refresh RFL-203",
+          "title": "session survives refresh JIRA-203",
           "projectName": "firefox-desktop",
           "browserName": "firefox",
           "location": { "file": "tests/e2e/identity.spec.ts", "line": 126 },
@@ -89,28 +89,28 @@
       "title": "reports.spec.ts",
       "tests": [
         {
-          "title": "audit export downloads RFL-601",
+          "title": "audit export downloads JIRA-601",
           "projectName": "chromium-desktop",
           "browserName": "chromium",
           "location": { "file": "tests/e2e/reports.spec.ts", "line": 19 },
           "results": [{ "status": "passed", "duration": 3310, "retry": 0 }]
         },
         {
-          "title": "invoice event appears in timeline RFL-602",
+          "title": "invoice event appears in timeline JIRA-602",
           "projectName": "chromium-desktop",
           "browserName": "chromium",
           "location": { "file": "tests/e2e/reports.spec.ts", "line": 52 },
           "results": [{ "status": "passed", "duration": 890, "retry": 0 }]
         },
         {
-          "title": "search index status updates RFL-777",
+          "title": "search index status updates JIRA-777",
           "projectName": "firefox-desktop",
           "browserName": "firefox",
           "location": { "file": "tests/e2e/reports.spec.ts", "line": 81 },
           "results": [{ "status": "passed", "duration": 4210, "retry": 0 }]
         },
         {
-          "title": "feature flag matrix is visible RFL-701",
+          "title": "feature flag matrix is visible JIRA-701",
           "projectName": "webkit-mobile",
           "browserName": "webkit",
           "location": { "file": "tests/e2e/reports.spec.ts", "line": 117 },

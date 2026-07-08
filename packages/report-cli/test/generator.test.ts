@@ -73,7 +73,7 @@ describe("report generator", () => {
       true
     );
     expect(report.warnings.some((warning) => warning.code === "artifact.parse-failed")).toBe(true);
-    expect(report.requirements.testsByRequirement["RFL-101"]?.length).toBeGreaterThan(0);
+    expect(report.requirements.testsByRequirement["JIRA-101"]?.length).toBeGreaterThan(0);
     expect(report.security.some((finding) => finding.helpUri || finding.evidence)).toBe(true);
     await assertFullHtml(output);
     await assertManifestReferencesExist(output);

@@ -5,8 +5,8 @@ matching, and quality gates.
 
 ```yaml
 project:
-  name: RFL Tool
-  repository: acds-at/rfl-tool
+  name: JIRA Tool
+  repository: acds-at/JIRA-tool
 
 artifacts:
   tests:

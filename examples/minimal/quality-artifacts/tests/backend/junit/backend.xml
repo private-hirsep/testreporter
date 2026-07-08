@@ -1,36 +1,36 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <testsuite name="backend.services" tests="18" failures="2" errors="1" skipped="2">
-  <testcase classname="backend.user.UserServiceTest" name="creates user account RFL-101" file="src/test/java/backend/user/UserServiceTest.java" line="42" time="0.12">
-    <properties><property name="component" value="users"/><property name="requirement" value="RFL-101"/></properties>
+  <testcase classname="backend.user.UserServiceTest" name="creates user account JIRA-101" file="src/test/java/backend/user/UserServiceTest.java" line="42" time="0.12">
+    <properties><property name="component" value="users"/><property name="requirement" value="JIRA-101"/></properties>
   </testcase>
-  <testcase classname="backend.user.UserServiceTest" name="rejects duplicate email RFL-102" file="src/test/java/backend/user/UserServiceTest.java" line="67" time="0.09">
+  <testcase classname="backend.user.UserServiceTest" name="rejects duplicate email JIRA-102" file="src/test/java/backend/user/UserServiceTest.java" line="67" time="0.09">
     <failure message="Expected duplicate email validation error">java.lang.AssertionError: Expected duplicate email validation error
   at backend.user.UserServiceTest.rejectsDuplicateEmail(UserServiceTest.java:67)
   at backend.user.UserService.create(UserService.java:118)</failure>
   </testcase>
-  <testcase classname="backend.user.UserServiceTest" name="locks account after suspicious signup RFL-101 RFL-401" file="src/test/java/backend/user/UserServiceTest.java" line="91" time="0.31"/>
-  <testcase classname="backend.user.ProfileServiceTest" name="updates user profile RFL-104" file="src/test/java/backend/user/ProfileServiceTest.java" line="38" time="0.18"/>
-  <testcase classname="backend.user.ProfileServiceTest" name="rejects unsafe avatar upload RFL-202 RFL-401" file="src/test/java/backend/user/ProfileServiceTest.java" line="73" time="0.26"/>
-  <testcase classname="backend.auth.AuthServiceTest" name="issues login token RFL-201" file="src/test/java/backend/auth/AuthServiceTest.java" line="51" time="0.22"/>
-  <testcase classname="backend.auth.AuthServiceTest" name="expires refresh token RFL-203" file="src/test/java/backend/auth/AuthServiceTest.java" line="84" time="0.16"/>
-  <testcase classname="backend.auth.AuthServiceTest" name="records failed login audit RFL-401" file="src/test/java/backend/auth/AuthServiceTest.java" line="111" time="0.19"/>
-  <testcase classname="backend.orders.OrderServiceTest" name="creates checkout order RFL-301" file="src/test/java/backend/orders/OrderServiceTest.java" line="45" time="0.44"/>
-  <testcase classname="backend.orders.OrderServiceTest" name="reserves inventory for checkout RFL-301 RFL-501" file="src/test/java/backend/orders/OrderServiceTest.java" line="79" time="0.58"/>
-  <testcase classname="backend.orders.OrderServiceTest" name="rolls back payment reservation RFL-501" file="src/test/java/backend/orders/OrderServiceTest.java" line="122" time="0.36"/>
-  <testcase classname="backend.receipts.ReceiptServiceTest" name="prints receipt RFL-302" file="src/test/java/backend/receipts/ReceiptServiceTest.java" line="54" time="0.21"/>
-  <testcase classname="backend.receipts.ReceiptServiceTest" name="stores receipt archive RFL-302 RFL-601" file="src/test/java/backend/receipts/ReceiptServiceTest.java" line="88" time="0.29"/>
+  <testcase classname="backend.user.UserServiceTest" name="locks account after suspicious signup JIRA-101 JIRA-401" file="src/test/java/backend/user/UserServiceTest.java" line="91" time="0.31"/>
+  <testcase classname="backend.user.ProfileServiceTest" name="updates user profile JIRA-104" file="src/test/java/backend/user/ProfileServiceTest.java" line="38" time="0.18"/>
+  <testcase classname="backend.user.ProfileServiceTest" name="rejects unsafe avatar upload JIRA-202 JIRA-401" file="src/test/java/backend/user/ProfileServiceTest.java" line="73" time="0.26"/>
+  <testcase classname="backend.auth.AuthServiceTest" name="issues login token JIRA-201" file="src/test/java/backend/auth/AuthServiceTest.java" line="51" time="0.22"/>
+  <testcase classname="backend.auth.AuthServiceTest" name="expires refresh token JIRA-203" file="src/test/java/backend/auth/AuthServiceTest.java" line="84" time="0.16"/>
+  <testcase classname="backend.auth.AuthServiceTest" name="records failed login audit JIRA-401" file="src/test/java/backend/auth/AuthServiceTest.java" line="111" time="0.19"/>
+  <testcase classname="backend.orders.OrderServiceTest" name="creates checkout order JIRA-301" file="src/test/java/backend/orders/OrderServiceTest.java" line="45" time="0.44"/>
+  <testcase classname="backend.orders.OrderServiceTest" name="reserves inventory for checkout JIRA-301 JIRA-501" file="src/test/java/backend/orders/OrderServiceTest.java" line="79" time="0.58"/>
+  <testcase classname="backend.orders.OrderServiceTest" name="rolls back payment reservation JIRA-501" file="src/test/java/backend/orders/OrderServiceTest.java" line="122" time="0.36"/>
+  <testcase classname="backend.receipts.ReceiptServiceTest" name="prints receipt JIRA-302" file="src/test/java/backend/receipts/ReceiptServiceTest.java" line="54" time="0.21"/>
+  <testcase classname="backend.receipts.ReceiptServiceTest" name="stores receipt archive JIRA-302 JIRA-601" file="src/test/java/backend/receipts/ReceiptServiceTest.java" line="88" time="0.29"/>
   <testcase classname="backend.reporting.ReportExportTest" name="exports daily quality metrics" file="src/test/java/backend/reporting/ReportExportTest.java" line="35" time="1.42"/>
-  <testcase classname="backend.reporting.ReportExportTest" name="generates audit export RFL-601" file="src/test/java/backend/reporting/ReportExportTest.java" line="69" time="2.31"/>
-  <testcase classname="backend.security.SecurityHeadersTest" name="rejects insecure webhook RFL-401" file="src/test/java/backend/security/SecurityHeadersTest.java" line="58" time="0.14">
+  <testcase classname="backend.reporting.ReportExportTest" name="generates audit export JIRA-601" file="src/test/java/backend/reporting/ReportExportTest.java" line="69" time="2.31"/>
+  <testcase classname="backend.security.SecurityHeadersTest" name="rejects insecure webhook JIRA-401" file="src/test/java/backend/security/SecurityHeadersTest.java" line="58" time="0.14">
     <error message="Webhook secret provider unavailable">java.lang.IllegalStateException: Webhook secret provider unavailable
   at backend.security.SecurityHeadersTest.rejectsInsecureWebhook(SecurityHeadersTest.java:58)
   at backend.security.WebhookVerifier.verify(WebhookVerifier.java:44)</error>
   </testcase>
-  <testcase classname="backend.search.SearchIndexTest" name="rebuilds search index RFL-777" file="src/test/java/backend/search/SearchIndexTest.java" line="105" time="3.84">
+  <testcase classname="backend.search.SearchIndexTest" name="rebuilds search index JIRA-777" file="src/test/java/backend/search/SearchIndexTest.java" line="105" time="3.84">
     <failure message="Index refresh exceeded timeout">org.opentest4j.AssertionFailedError: Index refresh exceeded timeout
   at backend.search.SearchIndexTest.rebuildsSearchIndex(SearchIndexTest.java:105)</failure>
   </testcase>
-  <testcase classname="backend.billing.InvoiceServiceTest" name="emits invoice event RFL-602" file="src/test/java/backend/billing/InvoiceServiceTest.java" line="44" time="0.01">
+  <testcase classname="backend.billing.InvoiceServiceTest" name="emits invoice event JIRA-602" file="src/test/java/backend/billing/InvoiceServiceTest.java" line="44" time="0.01">
     <skipped message="billing event contract pending"/>
   </testcase>
 </testsuite>

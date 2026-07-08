@@ -18,17 +18,17 @@ const context = {
 describe("adapters", () => {
   it("parses JUnit XML into normalized tests", () => {
     const result = parseJUnitXml(
-      '<testsuite><testcase classname="A" name="does thing RFL-1" time="0.1"><failure message="bad">trace</failure></testcase></testsuite>',
+      '<testsuite><testcase classname="A" name="does thing JIRA-1" time="0.1"><failure message="bad">trace</failure></testcase></testsuite>',
       context
     );
     expect(result.items).toHaveLength(1);
     expect(result.items[0]?.status).toBe("failed");
-    expect(result.items[0]?.requirements).toEqual(["RFL-1"]);
+    expect(result.items[0]?.requirements).toEqual(["JIRA-1"]);
   });
 
   it("parses Playwright JSON", () => {
     const result = parsePlaywrightJson(
-      JSON.stringify({ suites: [{ title: "s", tests: [{ title: "t RFL-2", results: [{ status: "passed" }] }] }] }),
+      JSON.stringify({ suites: [{ title: "s", tests: [{ title: "t JIRA-2", results: [{ status: "passed" }] }] }] }),
       { ...context, layer: "e2e" }
     );
     expect(result.items[0]?.framework).toBe("playwright");
