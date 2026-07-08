@@ -123,6 +123,7 @@ export const RunMetadataSchema = z.object({
   commitSha: z.string().optional(),
   runId: z.string().optional(),
   actor: z.string().optional(),
+  qualityProfile: z.string().optional(),
   publishMode: z.string().optional(),
   prCommentMode: z.string().optional()
 });

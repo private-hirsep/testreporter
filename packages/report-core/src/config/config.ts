@@ -19,15 +19,22 @@ const QualityGateSchema = z
     requirements: z
       .object({
         minimum: z.number().min(0).max(100).optional(),
-        failOnMissing: z.boolean().default(false)
+        failOnMissing: z.boolean().default(false),
+        failOnExtra: z.boolean().default(false)
       })
-      .default({ failOnMissing: false }),
+      .default({ failOnMissing: false, failOnExtra: false }),
     security: z
       .object({
         maxCritical: z.number().int().nonnegative().default(0),
-        maxHigh: z.number().int().nonnegative().default(0)
+        maxHigh: z.number().int().nonnegative().default(0),
+        maxMedium: z.number().int().nonnegative().default(3)
       })
-      .default({ maxCritical: 0, maxHigh: 0 })
+      .default({ maxCritical: 0, maxHigh: 0, maxMedium: 3 }),
+    warnings: z
+      .object({
+        maxWarnings: z.number().int().nonnegative().default(10)
+      })
+      .default({ maxWarnings: 10 })
   })
   .default({});
 

@@ -96,7 +96,7 @@ describe("report generator", () => {
         (download) => download.category === "report" && download.path.endsWith(".zip")
       )
     ).toBe(true);
-    expect(report.warnings.some((warning) => warning.code === "artifact.parse-failed")).toBe(true);
+    expect(report.warnings.some((warning) => warning.code === "sarif.malformed")).toBe(true);
     expect(report.requirements.testsByRequirement["JIRA-101"]?.length).toBeGreaterThan(0);
     expect(report.security.some((finding) => finding.helpUri || finding.evidence)).toBe(true);
     await assertFullHtml(output);
