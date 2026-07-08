@@ -1,0 +1,59 @@
+name: Publish Quality Report
+
+on:
+  workflow_call:
+    inputs:
+      report-title:
+        type: string
+        required: false
+      artifact-pattern:
+        type: string
+        required: false
+        default: quality-*
+      input-path:
+        type: string
+        required: false
+        default: quality-artifacts
+      config-path:
+        type: string
+        required: false
+        default: .github/quality-report.yml
+      deploy-pages:
+        type: boolean
+        required: false
+        default: true
+
+permissions:
+  actions: read
+  contents: read
+  pages: write
+  id-token: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        if: inputs.artifact-pattern != ''
+        with:
+          pattern: ${{ inputs.artifact-pattern }}
+          path: ${{ inputs.input-path }}
+          merge-multiple: true
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run build
+      - run: npm run quality-report -- generate --config "${{ inputs.config-path }}" --input "${{ inputs.input-path }}" --output dist/report --zip
+      - uses: actions/upload-artifact@v4
+        with:
+          name: quality-report-zip
+          path: dist/report/quality-report.zip
+      - uses: actions/upload-pages-artifact@v3
+        if: inputs.deploy-pages
+        with:
+          path: dist/report
+      - uses: actions/deploy-pages@v4
+        if: inputs.deploy-pages

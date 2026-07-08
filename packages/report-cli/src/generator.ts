@@ -321,7 +321,7 @@ export async function buildReport(options: GenerateOptions): Promise<NormalizedR
   await copyUi(options.outputPath);
   await writeData(options.outputPath, report);
   if (options.zip) {
-    const zipFile = `quality-report-${Date.now()}.zip`;
+    const zipFile = "quality-report.zip";
     const zipPath = path.join(options.outputPath, zipFile);
     const tmpZip = path.join(path.dirname(options.outputPath), `quality-report-${Date.now()}.zip`);
     await zipDirectory(options.outputPath, tmpZip);

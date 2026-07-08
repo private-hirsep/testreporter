@@ -15,7 +15,7 @@ Optional reusable workflow:
 ```yaml
 jobs:
   quality-report:
-    uses: your-org/quality-report-platform/.github/workflows/reusable-publish-quality-report.yml@v1
+    uses: your-org/quality-report-platform/.github/workflows/publish-quality-report.yml@v1
     with:
       artifact-pattern: quality-*
       config-path: .github/quality-report.yml

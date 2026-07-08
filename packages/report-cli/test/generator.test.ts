@@ -79,7 +79,7 @@ describe("report generator", () => {
     await assertManifestReferencesExist(output);
     await expect(stat(path.join(output, "assets", "stale.js"))).rejects.toThrow();
     const reportZips = (await readdir(output)).filter((file) => /^quality-report.*\.zip$/i.test(file));
-    expect(reportZips).toHaveLength(1);
+    expect(reportZips).toEqual(["quality-report.zip"]);
   });
 
   it("generates passing and failing reports with the same UI bundle and downloadable ZIPs", async () => {
@@ -130,7 +130,7 @@ describe("report generator", () => {
     const manifest = await readFile(path.join(output, "data/manifest.json"), "utf8");
     const tests = await readFile(path.join(output, "data/tests-0.json"), "utf8");
     const combined = `${manifest}\n${tests}`;
-    expect(zipFiles).toHaveLength(1);
+    expect(zipFiles).toEqual(["quality-report.zip"]);
     expect(zipFiles[0]).not.toBe("quality-report-stale.zip");
     expect(combined).not.toMatch(/[A-Za-z]:[\\/](?![\\/])/);
     expect(combined).not.toContain("file://");

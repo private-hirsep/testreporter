@@ -7,8 +7,13 @@
     "packages/*"
   ],
   "scripts": {
-    "build": "npm run build --workspaces",
-    "clean": "node -e \"require('fs').rmSync('dist',{recursive:true,force:true}); for (const p of ['packages/report-core','packages/adapters','packages/report-cli','packages/report-ui']) require('fs').rmSync(p + '/dist',{recursive:true,force:true})\"",
+    "build": "npm run build:packages && npm run build:ui",
+    "build:packages": "tsc -b packages/report-core packages/adapters packages/report-cli",
+    "build:core": "npm --workspace @quality-report/report-core run build",
+    "build:adapters": "npm --workspace @quality-report/adapters run build",
+    "build:cli": "npm --workspace @quality-report/report-cli run build",
+    "build:ui": "npm --workspace @quality-report/report-ui run build",
+    "clean": "node scripts/clean.mjs",
     "dev:ui": "npm --workspace @quality-report/report-ui run dev",
     "lint": "eslint .",
     "format": "prettier --write .",

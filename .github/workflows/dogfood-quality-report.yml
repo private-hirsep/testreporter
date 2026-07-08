@@ -1,0 +1,18 @@
+name: Dogfood Quality Report
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+jobs:
+  publish:
+    uses: ./.github/workflows/publish-quality-report.yml
+    with:
+      artifact-pattern: ""
+      config-path: examples/minimal/quality-report.yml
+      input-path: examples/minimal/quality-artifacts
+      deploy-pages: true

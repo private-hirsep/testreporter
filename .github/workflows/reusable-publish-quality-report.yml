@@ -1,4 +1,4 @@
-name: Publish Quality Report
+name: Deprecated Publish Quality Report Wrapper
 
 on:
   workflow_call:
@@ -10,6 +10,10 @@ on:
         type: string
         required: false
         default: quality-*
+      input-path:
+        type: string
+        required: false
+        default: quality-artifacts
       config-path:
         type: string
         required: false
@@ -27,28 +31,10 @@ permissions:
 
 jobs:
   publish:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/download-artifact@v4
-        with:
-          pattern: ${{ inputs.artifact-pattern }}
-          path: quality-artifacts
-          merge-multiple: true
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22
-          cache: npm
-      - run: npm ci
-      - run: npm run build
-      - run: npm run quality-report -- generate --config "${{ inputs.config-path }}" --input quality-artifacts --output dist/report --zip
-      - uses: actions/upload-artifact@v4
-        with:
-          name: quality-report-zip
-          path: dist/report/quality-report.zip
-      - uses: actions/upload-pages-artifact@v3
-        if: inputs.deploy-pages
-        with:
-          path: dist/report
-      - uses: actions/deploy-pages@v4
-        if: inputs.deploy-pages
+    uses: ./.github/workflows/publish-quality-report.yml
+    with:
+      report-title: ${{ inputs.report-title }}
+      artifact-pattern: ${{ inputs.artifact-pattern }}
+      input-path: ${{ inputs.input-path }}
+      config-path: ${{ inputs.config-path }}
+      deploy-pages: ${{ inputs.deploy-pages }}
