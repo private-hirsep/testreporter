@@ -109,7 +109,7 @@ jobs:
       minimal-comment-path: ${{ steps.paths.outputs.minimal-comment-path }}
       full-comment-path: ${{ steps.paths.outputs.full-comment-path }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - id: resolve
         name: Resolve delivery modes
