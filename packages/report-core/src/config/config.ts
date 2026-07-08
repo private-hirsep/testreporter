@@ -1,7 +1,6 @@
-import { z } from "zod";
+﻿import { z } from "zod";
 
 const MaybeGlobSchema = z.union([z.string(), z.array(z.string())]).optional();
-
 export const QualityGateConfigSchema = z
   .object({
     enabled: z.boolean().default(true),
@@ -30,15 +29,15 @@ export const QualityGateConfigSchema = z
       .object({
         maxCritical: z.number().int().nonnegative().default(0),
         maxHigh: z.number().int().nonnegative().default(0),
-        maxMedium: z.number().int().nonnegative().nullable().optional(),
+        maxMedium: z.number().int().nonnegative().nullable().default(3),
         maxLow: z.number().int().nonnegative().nullable().optional()
       })
-      .default({ maxCritical: 0, maxHigh: 0 }),
+      .default({ maxCritical: 0, maxHigh: 0, maxMedium: 3 }),
     warnings: z
       .object({
-        maxWarnings: z.number().int().nonnegative().nullable().optional()
+        maxWarnings: z.number().int().nonnegative().nullable().default(10)
       })
-      .default({})
+      .default({ maxWarnings: 10 })
   })
   .default({});
 
@@ -111,10 +110,24 @@ export const QualityReportConfigSchema = z.object({
     .default({}),
   requirements: z
     .object({
-      keyPattern: z.string().default("[A-Z]+-[0-9]+")
+      keyPattern: z
+        .string()
+        .refine(
+          (pattern) => {
+            try {
+              new RegExp(pattern, "g");
+              return true;
+            } catch {
+              return false;
+            }
+          },
+          { message: "requirements.keyPattern must be a valid regular expression" }
+        )
+        .default("[A-Z]+-[0-9]+")
     })
     .default({ keyPattern: "[A-Z]+-[0-9]+" }),
-  qualityGates: QualityGateConfigSchema
+  qualityGates: QualityGateConfigSchema,
+  qualityGateProfiles: z.record(QualityGateConfigSchema).default({})
 });
 
 export type QualityReportConfig = z.infer<typeof QualityReportConfigSchema>;

@@ -1,0 +1,111 @@
+name: Dogfood Quality Report
+
+on:
+  workflow_dispatch:
+    inputs:
+      quality-profile:
+        description: Quality profile to use.
+        required: false
+        default: relaxed
+        type: choice
+        options:
+          - off
+          - relaxed
+          - standard
+          - strict
+          - release
+      publish-mode:
+        description: Delivery mode.
+        required: false
+        default: artifact
+        type: choice
+        options:
+          - auto
+          - none
+          - artifact
+          - pages
+          - pages-and-artifact
+      pr-comment-mode:
+        description: PR comment mode.
+        required: false
+        default: off
+        type: choice
+        options:
+          - auto
+          - off
+          - minimal
+          - full
+      fail-on-quality-gate:
+        description: Fail at the end when the selected quality gate fails.
+        required: false
+        default: false
+        type: boolean
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+  actions: read
+  issues: write
+  pull-requests: read
+  pages: write
+  id-token: write
+
+jobs:
+  resolve-dogfood-inputs:
+    runs-on: ubuntu-latest
+    outputs:
+      quality-profile: ${{ steps.resolve.outputs.quality-profile }}
+      publish-mode: ${{ steps.resolve.outputs.publish-mode }}
+      pr-comment-mode: ${{ steps.resolve.outputs.pr-comment-mode }}
+      fail-on-quality-gate: ${{ steps.resolve.outputs.fail-on-quality-gate }}
+    steps:
+      - id: resolve
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+            echo "quality-profile=${{ inputs.quality-profile }}" >> "$GITHUB_OUTPUT"
+            echo "publish-mode=${{ inputs.publish-mode }}" >> "$GITHUB_OUTPUT"
+            echo "pr-comment-mode=${{ inputs.pr-comment-mode }}" >> "$GITHUB_OUTPUT"
+            echo "fail-on-quality-gate=${{ inputs.fail-on-quality-gate }}" >> "$GITHUB_OUTPUT"
+          elif [[ "${{ github.event_name }}" == "pull_request" ]]; then
+            echo "quality-profile=relaxed" >> "$GITHUB_OUTPUT"
+            echo "publish-mode=artifact" >> "$GITHUB_OUTPUT"
+            echo "pr-comment-mode=minimal" >> "$GITHUB_OUTPUT"
+            echo "fail-on-quality-gate=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "quality-profile=relaxed" >> "$GITHUB_OUTPUT"
+            echo "publish-mode=artifact" >> "$GITHUB_OUTPUT"
+            echo "pr-comment-mode=off" >> "$GITHUB_OUTPUT"
+            echo "fail-on-quality-gate=false" >> "$GITHUB_OUTPUT"
+          fi
+
+  prepare-dogfood-artifacts:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Upload dogfood quality artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: quality-dogfood-artifacts
+          path: examples/minimal/quality-artifacts
+          if-no-files-found: error
+
+  dogfood-report:
+    needs:
+      - resolve-dogfood-inputs
+      - prepare-dogfood-artifacts
+    uses: ./.github/workflows/publish-quality-report.yml
+    with:
+      artifact-pattern: quality-dogfood-artifacts
+      artifact-path: quality-artifacts
+      config-path: examples/minimal/quality-report.yml
+      quality-gates-path: examples/minimal/quality-gates.yml
+      quality-profile: ${{ needs.resolve-dogfood-inputs.outputs.quality-profile }}
+      publish-mode: ${{ needs.resolve-dogfood-inputs.outputs.publish-mode }}
+      pr-comment-mode: ${{ needs.resolve-dogfood-inputs.outputs.pr-comment-mode }}
+      update-pr-comment: true
+      fail-on-quality-gate: ${{ needs.resolve-dogfood-inputs.outputs.fail-on-quality-gate == 'true' }}

@@ -6,7 +6,7 @@
         <div>
           <h1 class="gate-title">Quality Gate {{ manifest.qualityGate.status.toUpperCase() }}</h1>
           <div class="gate-subtitle">
-            {{ manifest.metadata.repository ?? manifest.metadata.projectName }} · generated {{ generatedAt }}
+            {{ manifest.metadata.repository ?? manifest.metadata.projectName }} - profile {{ manifest.qualityGate.profile ?? manifest.metadata.qualityProfile ?? "standard" }} - generated {{ generatedAt }}
           </div>
         </div>
         <v-btn
@@ -117,7 +117,7 @@ const gateIcon = computed(() => {
   const status = props.manifest?.qualityGate.status;
   if (status === "passed") return "mdi-check-decagram";
   if (status === "failed") return "mdi-close-octagon";
-  if (status === "warning") return "mdi-alert";
+  if (status === "skipped") return "mdi-debug-step-over";
   return "mdi-help-circle-outline";
 });
 const coverageBreakdown = computed(() => [
@@ -144,12 +144,14 @@ function percentFor(value: number) {
 function checkIcon(status: string) {
   if (status === "passed") return "mdi-check-circle";
   if (status === "failed") return "mdi-close-circle";
+  if (status === "skipped") return "mdi-debug-step-over";
   return "mdi-alert-circle";
 }
 
 function checkColor(status: string) {
   if (status === "passed") return "success";
   if (status === "failed") return "error";
+  if (status === "skipped") return "info";
   return "warning";
 }
 

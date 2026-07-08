@@ -1,13 +1,30 @@
-import type { QualityReportConfig } from "../config/config.js";
-import type { QualityGateResult, ReportSummary } from "../schema/report.js";
+﻿import type { QualityReportConfig } from "../config/config.js";
+import type { ParserWarning, QualityGateResult, ReportSummary } from "../schema/report.js";
 
 export function evaluateQualityGate(
   config: QualityReportConfig,
   summary: ReportSummary,
-  warningCount = 0
+  warnings: ParserWarning[] = [],
+  options: { profile?: string; enabled?: boolean } = {}
 ): QualityGateResult {
+  if (options.enabled === false || config.qualityGates.enabled === false) {
+    return {
+      status: "skipped",
+      profile: options.profile,
+      enabled: false,
+      checks: [
+        {
+          id: "quality-gate.off",
+          label: "Quality gate",
+          actual: "report-only",
+          expected: "profile enabled",
+          status: "skipped",
+          message: "Quality gate profile disables failing checks."
+        }
+      ]
+    };
+  }
   const checks: QualityGateResult["checks"] = [];
-  if (!config.qualityGates.enabled) return { status: "passed", checks };
   const add = (
     id: string,
     label: string,
@@ -160,14 +177,16 @@ export function evaluateQualityGate(
     add(
       "warnings.maxWarnings",
       "Parser warnings",
-      warningCount,
+      warnings.length,
       `<= ${config.qualityGates.warnings.maxWarnings}`,
-      warningCount <= config.qualityGates.warnings.maxWarnings
+      warnings.length <= config.qualityGates.warnings.maxWarnings
     );
   }
 
   return {
     status: checks.some((check) => check.status === "failed") ? "failed" : "passed",
+    profile: options.profile,
+    enabled: true,
     checks
   };
 }

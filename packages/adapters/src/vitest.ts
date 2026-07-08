@@ -1,12 +1,21 @@
-import { buildTestCase, numberOrUndefined, toArray } from "./helpers.js";
+import { buildTestCase, numberOrUndefined, parserWarning, toArray } from "./helpers.js";
 import type { ParseContext, TestParseResult } from "./types.js";
 import type { NormalizedTestCase } from "@quality-report/report-core";
 
 type JsonRecord = Record<string, unknown>;
 
-function visit(task: JsonRecord, context: ParseContext, suite: string[] = []): NormalizedTestCase[] {
+function visit(
+  task: JsonRecord,
+  context: ParseContext,
+  suite: string[] = []
+): NormalizedTestCase[] {
   const type = String(task.type ?? "");
-  const name = typeof task.name === "string" ? task.name : typeof task.filepath === "string" ? task.filepath : "";
+  const name =
+    typeof task.name === "string"
+      ? task.name
+      : typeof task.filepath === "string"
+        ? task.filepath
+        : "";
   if (type === "suite" || task.tasks) {
     return toArray(task.tasks as JsonRecord[] | JsonRecord | undefined).flatMap((child) =>
       visit(child, context, name ? [...suite, name] : suite)
@@ -30,8 +39,14 @@ function visit(task: JsonRecord, context: ParseContext, suite: string[] = []): N
               ? "skipped"
               : "unknown",
       durationMs: numberOrUndefined(result?.duration),
-      message: typeof result?.error === "object" ? String((result.error as JsonRecord).message ?? "") : undefined,
-      trace: typeof result?.error === "object" ? String((result.error as JsonRecord).stack ?? "") : undefined,
+      message:
+        typeof result?.error === "object"
+          ? String((result.error as JsonRecord).message ?? "")
+          : undefined,
+      trace:
+        typeof result?.error === "object"
+          ? String((result.error as JsonRecord).stack ?? "")
+          : undefined,
       labels: {},
       requirementPattern: context.requirementPattern,
       sourcePath: context.sourcePath
@@ -40,8 +55,36 @@ function visit(task: JsonRecord, context: ParseContext, suite: string[] = []): N
 }
 
 export function parseVitestJson(content: string, context: ParseContext): TestParseResult {
-  const json = JSON.parse(content) as JsonRecord;
-  const roots = toArray((json.testResults ?? json.files ?? json.tasks) as JsonRecord[] | JsonRecord | undefined);
+  let json: JsonRecord;
+  try {
+    json = JSON.parse(content) as JsonRecord;
+  } catch (error) {
+    return {
+      items: [],
+      warnings: [
+        parserWarning(
+          context.sourcePath,
+          "vitest.malformed",
+          error instanceof Error ? error.message : "Malformed Vitest JSON file."
+        )
+      ]
+    };
+  }
+  const roots = toArray(
+    (json.testResults ?? json.files ?? json.tasks) as JsonRecord[] | JsonRecord | undefined
+  );
   const items = roots.flatMap((root) => visit(root, context));
-  return { items, warnings: [] };
+  return {
+    items,
+    warnings:
+      items.length === 0
+        ? [
+            parserWarning(
+              context.sourcePath,
+              "vitest.unexpected-shape",
+              "No test cases found in Vitest JSON file."
+            )
+          ]
+        : []
+  };
 }

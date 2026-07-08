@@ -1,54 +1,94 @@
-name: Publish Quality Report
+# Deprecated compatibility wrapper. New projects should use
+# .github/workflows/publish-quality-report.yml directly.
+name: Reusable Publish Quality Report Deprecated Wrapper
 
 on:
   workflow_call:
     inputs:
-      report-title:
-        type: string
-        required: false
       artifact-pattern:
         type: string
         required: false
         default: quality-*
+      artifact-path:
+        type: string
+        required: false
+        default: quality-artifacts
       config-path:
         type: string
         required: false
-        default: .github/quality-report.yml
-      deploy-pages:
+        default: quality-report.yml
+      quality-gates-path:
+        type: string
+        required: false
+        default: ""
+      quality-profile:
+        type: string
+        required: false
+        default: standard
+      publish-mode:
+        type: string
+        required: false
+        default: auto
+      pr-comment-mode:
+        type: string
+        required: false
+        default: auto
+      pr-comment-marker:
+        type: string
+        required: false
+        default: "<!-- quality-report-platform:summary -->"
+      update-pr-comment:
         type: boolean
         required: false
         default: true
+      fail-on-quality-gate:
+        type: boolean
+        required: false
+        default: true
+      report-title:
+        type: string
+        required: false
+        default: ""
+    outputs:
+      quality-gate-status:
+        value: ${{ jobs.forward.outputs.quality-gate-status }}
+      quality-profile:
+        value: ${{ jobs.forward.outputs.quality-profile }}
+      report-path:
+        value: ${{ jobs.forward.outputs.report-path }}
+      report-zip-path:
+        value: ${{ jobs.forward.outputs.report-zip-path }}
+      pages-url:
+        value: ${{ jobs.forward.outputs.pages-url }}
+      pr-comment-url:
+        value: ${{ jobs.forward.outputs.pr-comment-url }}
+      summary-json-path:
+        value: ${{ jobs.forward.outputs.summary-json-path }}
+      minimal-comment-path:
+        value: ${{ jobs.forward.outputs.minimal-comment-path }}
+      full-comment-path:
+        value: ${{ jobs.forward.outputs.full-comment-path }}
 
 permissions:
   actions: read
   contents: read
+  issues: write
+  pull-requests: read
   pages: write
   id-token: write
 
 jobs:
-  publish:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/download-artifact@v4
-        with:
-          pattern: ${{ inputs.artifact-pattern }}
-          path: quality-artifacts
-          merge-multiple: true
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22
-          cache: npm
-      - run: npm ci
-      - run: npm run build
-      - run: npm run quality-report -- generate --config "${{ inputs.config-path }}" --input quality-artifacts --output dist/report --zip
-      - uses: actions/upload-artifact@v4
-        with:
-          name: quality-report-zip
-          path: dist/report/quality-report.zip
-      - uses: actions/upload-pages-artifact@v3
-        if: inputs.deploy-pages
-        with:
-          path: dist/report
-      - uses: actions/deploy-pages@v4
-        if: inputs.deploy-pages
+  forward:
+    uses: ./.github/workflows/publish-quality-report.yml
+    with:
+      artifact-pattern: ${{ inputs.artifact-pattern }}
+      artifact-path: ${{ inputs.artifact-path }}
+      config-path: ${{ inputs.config-path }}
+      quality-gates-path: ${{ inputs.quality-gates-path }}
+      quality-profile: ${{ inputs.quality-profile }}
+      publish-mode: ${{ inputs.publish-mode }}
+      pr-comment-mode: ${{ inputs.pr-comment-mode }}
+      pr-comment-marker: ${{ inputs.pr-comment-marker }}
+      update-pr-comment: ${{ inputs.update-pr-comment }}
+      fail-on-quality-gate: ${{ inputs.fail-on-quality-gate }}
+      report-title: ${{ inputs.report-title }}

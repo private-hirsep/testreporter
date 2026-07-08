@@ -17,6 +17,7 @@
     "lint": "eslint .",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
+    "check:workflows-docs": "node scripts/check-workflows-docs.mjs",
     "test": "vitest run",
     "test:e2e": "playwright test",
     "typecheck": "tsc -b",
