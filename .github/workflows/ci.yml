@@ -38,9 +38,17 @@ jobs:
             dist/example-report-relaxed/data/manifest.json \
             dist/example-report-relaxed/meta/pr-comment-minimal.md \
             dist/example-report-relaxed/meta/pr-comment-full.md \
-            dist/example-report-relaxed/meta/quality-summary.json; do
+            dist/example-report-relaxed/meta/quality-summary.json \
+            dist/example-report-strict/index.html \
+            dist/example-report-strict/404.html \
+            dist/example-report-strict/data/manifest.json \
+            dist/example-report-strict/meta/pr-comment-minimal.md \
+            dist/example-report-strict/meta/pr-comment-full.md \
+            dist/example-report-strict/meta/quality-summary.json; do
             test -f "$file"
           done
+          strict_status="$(node -e "console.log(require('./dist/example-report-strict/meta/quality-summary.json').qualityGateStatus)")"
+          test "$strict_status" = "failed"
 
   codeql:
     runs-on: ubuntu-latest

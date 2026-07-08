@@ -125,8 +125,11 @@ if (
 if (!canonicalText.includes('default: "<!-- quality-report-platform:summary -->"')) {
   fail("workflow PR comment marker default must match generated comment marker");
 }
-if (!canonicalText.includes('contains(\\"$PR_COMMENT_MARKER\\")')) {
-  fail("workflow lookup must use the PR comment marker input");
+if (!canonicalText.includes('jq -r --arg marker "$PR_COMMENT_MARKER"')) {
+  fail("workflow lookup must pass the PR comment marker as a jq argument");
+}
+if (!canonicalText.includes('.user.login == "github-actions[bot]"')) {
+  fail("workflow lookup must only update comments created by github-actions[bot]");
 }
 if (!canonicalText.includes("path: ${{ steps.paths.outputs.report-zip-path }}")) {
   fail("artifact mode must upload the generated report ZIP");
@@ -146,6 +149,12 @@ if (!canonicalText.includes("github.event.pull_request.head.repo.full_name == gi
 if (!ciText.includes("--quality-profile strict --no-fail-on-quality-gate --zip")) {
   fail("strict CI generation must explicitly disable early quality-gate failure");
 }
+if (!ciText.includes("dist/example-report-strict/meta/quality-summary.json")) {
+  fail("CI must smoke check strict report metadata");
+}
+if (!ciText.includes('test "$strict_status" = "failed"')) {
+  fail("CI must assert strict summary status is failed");
+}
 
 const readme = await readText("README.md");
 if (readme.includes("reusable-publish-quality-report.yml")) {
@@ -158,7 +167,8 @@ for (const required of [
   "pull requests should usually use `pr-comment-mode: minimal`",
   "`pages-and-artifact`",
   "<!-- quality-report-platform:summary -->",
-  "Fork PRs are skipped by default"
+  "Fork PRs are skipped by default",
+  "Publish Example Pages Report"
 ]) {
   if (!readme.includes(required)) fail(`README is missing required guidance: ${required}`);
 }

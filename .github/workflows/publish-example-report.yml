@@ -1,5 +1,7 @@
 name: Publish Example Pages Report
 
+# Manual example Pages publisher only. Dogfood Quality Report is the workflow
+# used to validate reusable workflow consumption.
 on:
   workflow_dispatch:
 

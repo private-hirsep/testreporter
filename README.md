@@ -263,6 +263,8 @@ npm run check:workflows-docs
 
 PR dogfood uses `publish-mode: artifact`, `pr-comment-mode: minimal`, and `fail-on-quality-gate: false` to avoid noisy PR failures. Manual dogfood can test `pages-and-artifact`, `full` comments, strict profiles, and final gate failure.
 
+`Publish Example Pages Report` is kept only as a simple manual example Pages publisher. It does not replace dogfood coverage of the reusable workflow.
+
 ## More Documentation
 
 - [Artifact contract](docs/artifact-contract.md)

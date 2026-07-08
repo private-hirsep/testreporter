@@ -250,7 +250,10 @@ jobs:
           comment_file="dist/report/meta/pr-comment-${COMMENT_MODE}.md"
           existing=""
           if [[ "$UPDATE_COMMENT" == "true" ]]; then
-            existing="$(gh api "repos/$REPO/issues/$PR_NUMBER/comments" --paginate --jq ".[] | select(.body | contains(\"$PR_COMMENT_MARKER\")) | .id" | head -n 1 || true)"
+            existing="$(
+              gh api "repos/$REPO/issues/$PR_NUMBER/comments?per_page=100" --paginate --slurp |
+                jq -r --arg marker "$PR_COMMENT_MARKER" '[.[][] | select(.user.login == "github-actions[bot]" and (.body // "" | contains($marker)))][0].id // empty'
+            )"
           fi
 
           if [[ -n "$existing" ]]; then
