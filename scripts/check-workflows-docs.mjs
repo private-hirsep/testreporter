@@ -140,7 +140,7 @@ if (
 ) {
   fail("Pages mode must upload the extracted static report");
 }
-if (!canonicalText.includes("if-no-artifacts-found: error")) {
+if (!canonicalText.includes("No artifacts matched")) {
   fail("artifact download must fail clearly when no artifacts match");
 }
 if (!canonicalText.includes("github.event.pull_request.head.repo.full_name == github.repository")) {

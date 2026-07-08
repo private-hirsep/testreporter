@@ -157,7 +157,15 @@ jobs:
           pattern: ${{ inputs.artifact-pattern }}
           path: ${{ inputs.artifact-path }}
           merge-multiple: true
-          if-no-artifacts-found: error
+
+      - name: Verify downloaded artifacts
+        shell: bash
+        run: |
+          set -euo pipefail
+          if ! find "${{ inputs.artifact-path }}" -mindepth 1 -print -quit | grep -q .; then
+            echo "::error::No artifacts matched '${{ inputs.artifact-pattern }}'."
+            exit 1
+          fi
 
       - uses: actions/setup-node@v4
         with:
