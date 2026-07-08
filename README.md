@@ -50,187 +50,8 @@ npm run quality-report -- generate \
   --config examples/minimal/quality-report.yml \
   --input examples/minimal/quality-artifacts \
   --output dist/example-report \
+  --quality-profile standard \
   --zip
-```
-
-## Quick Start: GitHub Actions
-
-Test-running workflows remain project-specific. This tool consumes artifacts and
-does not force a specific runner.
-
-```yaml
-name: Quality Report
-
-on:
-  workflow_dispatch:
-  pull_request:
-  merge_group:
-    types: [checks_requested]
-
-permissions:
-  contents: read
-  actions: read
-  pages: write
-  id-token: write
-
-jobs:
-  publish-quality-report:
-    runs-on: ubuntu-latest
-    if: always()
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Download quality artifacts
-        uses: actions/download-artifact@v4
-        with:
-          pattern: quality-*
-          path: quality-artifacts
-          merge-multiple: true
-
-      - name: Generate quality report
-        uses: your-org/quality-report-platform/actions/generate-report@v1
-        with:
-          config-path: quality-report.yml
-          input-path: quality-artifacts
-          output-path: dist/report
-
-      - name: Upload Pages artifact
-        uses: actions/upload-pages-artifact@v3
-        with:
-          path: dist/report
-
-      - name: Deploy Pages
-        uses: actions/deploy-pages@v4
-```
-
-Required permissions are `contents: read`, `actions: read` when downloading
-artifacts, `pages: write` when deploying Pages, and `id-token: write` when
-deploying Pages.
-
-## Minimal `quality-report.yml`
-
-```yaml
-project:
-  name: Example Project
-  repository: example-org/example-repo
-
-artifacts:
-  tests:
-    backend:
-      junit: "quality-artifacts/tests/backend/junit/**/*.xml"
-    frontend:
-      junit: "quality-artifacts/tests/frontend/junit/**/*.xml"
-      vitestJson: "quality-artifacts/tests/frontend/vitest/**/*.json"
-    e2e:
-      junit: "quality-artifacts/tests/e2e/junit/**/*.xml"
-      playwrightJson: "quality-artifacts/tests/e2e/playwright/**/*.json"
-
-  coverage:
-    backend:
-      jacocoXml: "quality-artifacts/coverage/backend/jacoco.xml"
-      jacocoCsv: "quality-artifacts/coverage/backend/jacoco.csv"
-      html: "quality-artifacts/coverage/backend/html"
-    frontend:
-      lcov: "quality-artifacts/coverage/frontend/lcov.info"
-      summaryJson: "quality-artifacts/coverage/frontend/coverage-summary.json"
-      html: "quality-artifacts/coverage/frontend/html"
-
-  requirements:
-    expectedKeys: "quality-artifacts/requirements/expected.csv"
-    mapping: "quality-artifacts/requirements/mapping.json"
-
-  security:
-    codeqlSarif: "quality-artifacts/security/codeql/**/*.sarif"
-    zapJson: "quality-artifacts/security/zap/**/*.json"
-
-requirements:
-  keyPattern: "[A-Z]+-[0-9]+"
-
-qualityGates:
-  tests:
-    allowFailed: 0
-    allowBroken: 0
-  coverage:
-    totalMinimum: 80
-    backendMinimum: 80
-    frontendMinimum: 80
-  requirements:
-    minimum: 100
-    failOnMissing: true
-  security:
-    maxCritical: 0
-    maxHigh: 0
-```
-
-## Recommended Artifact Layout
-
-```text
-quality-artifacts/
-├─ tests/
-│  ├─ backend/
-│  │  ├─ junit/
-│  │  └─ raw/
-│  ├─ frontend/
-│  │  ├─ junit/
-│  │  ├─ vitest/
-│  │  └─ raw/
-│  └─ e2e/
-│     ├─ junit/
-│     ├─ playwright/
-│     └─ raw/
-├─ coverage/
-│  ├─ backend/
-│  │  ├─ jacoco.xml
-│  │  ├─ jacoco.csv
-│  │  └─ html/
-│  └─ frontend/
-│     ├─ lcov.info
-│     ├─ coverage-summary.json
-│     └─ html/
-├─ requirements/
-│  ├─ expected.csv
-│  └─ mapping.json
-├─ security/
-│  ├─ codeql/
-│  └─ zap/
-└─ meta/
-   └─ manifest.yml
-```
-
-## External Project Setup Flow
-
-1. Install or call the report generator.
-2. Produce standard artifacts: JUnit XML, Playwright JSON or JUnit XML, JaCoCo
-   XML/CSV, Istanbul/LCOV, SARIF, ZAP JSON, expected requirements CSV, and
-   optional requirement mapping JSON.
-3. Upload those artifacts in CI.
-4. Add `quality-report.yml`.
-5. Validate and generate locally:
-
-```bash
-quality-report validate --config quality-report.yml --input quality-artifacts
-quality-report generate --config quality-report.yml --input quality-artifacts --output dist/report
-```
-
-6. Publish `dist/report` to GitHub Pages using the action or a reusable
-   workflow.
-7. Configure quality gates to match your release policy.
-8. Add requirement coverage conventions to test names, tags, properties, or
-   mapping files.
-
-## Integration Examples
-
-Java backend with Maven Surefire/Failsafe and JaCoCo:
-
-```yaml
-artifacts:
-  tests:
-    backend:
-      junit: "quality-artifacts/tests/backend/junit/**/*.xml"
-  coverage:
-    backend:
-      jacocoXml: "quality-artifacts/coverage/backend/jacoco.xml"
-      jacocoCsv: "quality-artifacts/coverage/backend/jacoco.csv"
 ```
 
 Node/Vitest frontend:
@@ -269,121 +90,47 @@ artifacts:
 CodeQL/SARIF:
 
 ```yaml
-artifacts:
-  security:
-    codeqlSarif: "quality-artifacts/security/codeql/**/*.sarif"
+jobs:
+  quality-report:
+    uses: your-org/quality-report-platform/.github/workflows/publish-quality-report.yml@v1
+    permissions:
+      contents: read
+      actions: read
+      issues: write
+      pull-requests: read
+    with:
+      artifact-pattern: quality-*
+      quality-profile: standard
+      publish-mode: none
+      pr-comment-mode: minimal
+      fail-on-quality-gate: true
 ```
 
-OWASP ZAP JSON:
+Recommended modes:
 
-```yaml
-artifacts:
-  security:
-    zapJson: "quality-artifacts/security/zap/**/*.json"
-```
+- Pull requests: `publish-mode: none` or `artifact`, `pr-comment-mode: minimal`
+- Manual runs: `publish-mode: pages-and-artifact`, `pr-comment-mode: off`
+- Releases: `publish-mode: pages-and-artifact`, `pr-comment-mode: off`
+- Merge queue: `quality-profile: strict`, `publish-mode: artifact` or `none`
+- Early adoption: `quality-profile: relaxed` or `off`
 
-## Requirement Coverage
+## Documentation
 
-Requirement keys are extracted from test names, suites, files, JUnit properties,
-Playwright annotations, labels, and explicit mapping files. Configure the key
-pattern:
+- [Getting started](docs/getting-started.md)
+- [Artifact contract](docs/artifact-contract.md)
+- [Configuration](docs/configuration.md)
+- [Supported formats](docs/supported-formats.md)
+- [Requirement coverage](docs/requirement-coverage.md)
+- [Quality gates](docs/quality-gates.md)
+- [Adoption guide](docs/adoption-guide.md)
+- [Security model](docs/security.md)
+- [History model](docs/history.md)
+- [GitHub Actions integration](docs/github-actions.md)
+- [Local development](docs/local-development.md)
+- [Troubleshooting](docs/troubleshooting.md)
 
-```yaml
-requirements:
-  keyPattern: "[A-Z]+-[0-9]+"
-```
+## Package Manager
 
-Expected requirements CSV:
-
-```csv
-key,title
-RFL-101,Login succeeds
-RFL-102,Password reset works
-```
-
-Explicit mapping JSON:
-
-```json
-[
-  { "name": "auth login works", "requirement": "RFL-101" },
-  { "testId": "stable-test-id", "requirement": "RFL-102" }
-]
-```
-
-## Quality Gates
-
-Default strict gates allow no failed tests, no broken tests, no critical security
-findings, and no high security findings. Coverage and requirement thresholds are
-enabled when configured.
-
-```yaml
-qualityGates:
-  tests:
-    allowFailed: 0
-    allowBroken: 0
-  coverage:
-    totalMinimum: 80
-    backendMinimum: 80
-    frontendMinimum: 80
-  requirements:
-    minimum: 100
-    failOnMissing: true
-  security:
-    maxCritical: 0
-    maxHigh: 0
-```
-
-Failed gates return a non-zero CLI exit code, but the generator still writes a
-complete static report for diagnosis.
-
-## GitHub Pages Publishing
-
-The generated output contains `index.html`, `404.html`, `data/manifest.json`,
-test chunks such as `data/tests-0.json`, copied raw artifacts, and optionally one
-current `quality-report-*.zip`. It is compatible with GitHub Pages and static
-file hosting. The ZIP excludes itself to avoid recursive packaging.
-
-## Security Model
-
-Artifact contents are treated as untrusted. The generator normalizes data,
-redacts common secrets, avoids unsafe dynamic code execution, does not embed
-arbitrary third-party HTML into the main SPA, and does not send report data to
-third-party services. Generated JSON and static assets should not contain
-absolute runner paths such as `C:\`, `/home/`, `/mnt/`, `/Users/`, or `file://`.
-
-## Troubleshooting
-
-- `validate` discovers zero artifacts: check `--input` and glob paths relative
-  to that input directory.
-- Quality gates fail: open the generated report and inspect the gate reasons.
-- Coverage is missing: confirm the configured format exists and includes total
-  line, statement, or instruction metrics.
-- Requirement coverage is low: check the regex, expected CSV keys, and mapping
-  JSON.
-- Parser warnings appear: malformed or unsupported artifact content was skipped
-  without aborting report generation.
-- GitHub Pages routes 404: ensure `404.html` from the generated report is
-  published with `index.html`.
-
-## Migration Strategy
-
-Start by publishing existing JUnit and coverage artifacts without changing test
-runners. Add security artifacts next, then expected requirements and explicit
-mapping. Keep gates relaxed while teams baseline the data, then tighten gates by
-repository or branch once reports are stable.
-
-Developers may customize artifact paths, project metadata, requirement regexes,
-quality gate thresholds, raw downloadable artifacts, ZIP output, and GitHub
-Actions wiring. The generated report remains static and self-contained.
-
-## Repository Structure
-
-- `packages/report-core`: Zod schemas, config, normalization, requirement
-  coverage, quality gates, redaction, and utilities.
-- `packages/adapters`: parsers for test, coverage, requirement, and security
-  artifacts.
-- `packages/report-cli`: `quality-report generate`, `validate`, and `summarize`.
-- `packages/report-ui`: static Vue 3 + Vite report application.
-- `actions/generate-report`: GitHub Action wrapper around the CLI.
-- `docs`: detailed adoption, artifact contract, configuration, gates, security,
-  and troubleshooting documentation.
+This repository uses npm workspaces. npm is available with Node.js LTS, keeps
+consumer setup simple, and avoids adding another package manager requirement for
+the first milestone.

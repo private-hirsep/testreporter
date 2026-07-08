@@ -3,7 +3,7 @@ import path from "node:path";
 import { mkdir } from "node:fs/promises";
 import { Command } from "commander";
 import { ZodError } from "zod";
-import { loadConfig } from "./config.js";
+import { applyQualityProfile, loadConfig } from "./config.js";
 import { discoverArtifacts } from "./discovery.js";
 import { buildReport } from "./generator.js";
 
@@ -45,7 +45,8 @@ program
     try {
       const tmp = path.join(process.cwd(), ".quality-report-summary");
       await mkdir(tmp, { recursive: true });
-      const config = await loadConfig(options.config);
+      const loadedConfig = await loadConfig(options.config);
+      const { config } = await applyQualityProfile(loadedConfig, "standard");
       const report = await buildReport({
         config,
         configPath: options.config,
@@ -74,21 +75,56 @@ program
   .requiredOption("--input <path>", "Artifact input directory")
   .requiredOption("--output <path>", "Static report output directory")
   .option("--zip", "Create quality-report.zip in the output directory", false)
-  .action(async (options: { config: string; input: string; output: string; zip?: boolean }) => {
+  .option("--quality-profile <profile>", "Quality gate profile", "standard")
+  .option("--quality-gates <path>", "Custom quality gate profile YAML")
+  .option("--fail-on-quality-gate", "Exit with status 1 when the evaluated quality gate fails", false)
+  .option("--publish-mode <mode>", "Resolved or requested publish mode", "artifact")
+  .option("--pr-comment-mode <mode>", "Resolved or requested PR comment mode", "off")
+  .option("--pr-comment-marker <marker>", "Hidden PR comment marker", "<!-- quality-report-platform:summary -->")
+  .option("--pr-comment-max-items <count>", "Maximum detailed PR comment items per section", (value) => Number(value), 10)
+  .option("--full-report-url <url>", "Published full report URL")
+  .option("--artifact-name <name>", "Report artifact name for PR comments")
+  .action(async (options: {
+    config: string;
+    input: string;
+    output: string;
+    zip?: boolean;
+    qualityProfile: string;
+    qualityGates?: string;
+    failOnQualityGate?: boolean;
+    publishMode: string;
+    prCommentMode: string;
+    prCommentMarker: string;
+    prCommentMaxItems: number;
+    fullReportUrl?: string;
+    artifactName?: string;
+  }) => {
     try {
-      const config = await loadConfig(options.config);
+      const loadedConfig = await loadConfig(options.config);
+      const { config, enabled } = await applyQualityProfile(loadedConfig, options.qualityProfile, options.qualityGates);
       await mkdir(options.output, { recursive: true });
       const report = await buildReport({
         config,
         configPath: options.config,
         inputPath: options.input,
         outputPath: options.output,
-        zip: options.zip
+        zip: options.zip,
+        qualityProfile: options.qualityProfile,
+        qualityGateEnabled: enabled,
+        publishMode: options.publishMode,
+        prCommentMode: options.prCommentMode,
+        prCommentMarker: options.prCommentMarker,
+        prCommentMaxItems: options.prCommentMaxItems,
+        fullReportUrl: options.fullReportUrl,
+        artifactName: options.artifactName
       });
       console.log(`Generated report for ${report.metadata.projectName}: ${options.output}`);
       console.log(`Quality gate: ${report.qualityGate.status.toUpperCase()}`);
+      console.log(`Quality profile: ${report.qualityGate.profile ?? options.qualityProfile}`);
+      console.log(`Publish mode: ${options.publishMode}`);
+      console.log(`PR comment mode: ${options.prCommentMode}`);
       if (report.warnings.length > 0) console.warn(`Completed with ${report.warnings.length} warning(s).`);
-      process.exit(report.qualityGate.status === "failed" ? 1 : 0);
+      process.exit(options.failOnQualityGate && report.qualityGate.status === "failed" ? 1 : 0);
     } catch (error) {
       handleError(error);
     }

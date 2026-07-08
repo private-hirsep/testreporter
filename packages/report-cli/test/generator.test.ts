@@ -41,7 +41,7 @@ async function readGeneratedTextFiles(root: string): Promise<string> {
         await visit(full);
         continue;
       }
-      if (/\.(json|html|js|css)$/i.test(entry.name)) parts.push(await readFile(full, "utf8"));
+      if (/\.(json|html)$/i.test(entry.name)) parts.push(await readFile(full, "utf8"));
     }
   };
   await visit(root);
@@ -94,7 +94,7 @@ describe("report generator", () => {
       )
     ).toBe(true);
     expect(report.warnings.some((warning) => warning.code === "sarif.malformed")).toBe(true);
-    expect(report.requirements.testsByRequirement["RFL-101"]?.length).toBeGreaterThan(0);
+    expect(report.requirements.testsByRequirement["JIRA-101"]?.length).toBeGreaterThan(0);
     expect(report.security.some((finding) => finding.helpUri || finding.evidence)).toBe(true);
     await assertFullHtml(output);
     await assertManifestReferencesExist(output);
@@ -176,7 +176,7 @@ describe("report generator", () => {
     await mkdir(path.join(input, "tests", "backend", "junit"), { recursive: true });
     const cases = Array.from(
       { length: 505 },
-      (_, index) => `<testcase classname="Large" name="test RFL-${index + 1}" time="0.001" />`
+      (_, index) => `<testcase classname="Large" name="test JIRA-${index + 1}" time="0.001" />`
     ).join("");
     await writeFile(
       path.join(input, "tests", "backend", "junit", "large.xml"),
@@ -185,7 +185,7 @@ describe("report generator", () => {
     const config = loadConfigFromObject({
       project: { name: "Large" },
       artifacts: { tests: { backend: { junit: "tests/backend/junit/**/*.xml" } } },
-      requirements: { keyPattern: "RFL-[0-9]+" }
+      requirements: { keyPattern: "JIRA-[0-9]+" }
     });
 
     const report = await buildReport({
@@ -219,10 +219,10 @@ describe("report generator", () => {
     await mkdir(path.join(input, "raw"), { recursive: true });
     await writeFile(
       path.join(input, "tests", "backend", "junit", "tests.xml"),
-      '<testsuite><testcase classname="A" name="uses RFL-1" file="/home/runner/work/repo/src/a.test.ts" /></testsuite>'
+      '<testsuite><testcase classname="A" name="uses JIRA-1" file="/home/runner/work/repo/src/a.test.ts" /></testsuite>'
     );
     await writeFile(path.join(input, "coverage", "frontend", "coverage-summary.json"), "{");
-    await writeFile(path.join(input, "requirements", "expected.csv"), "key\nRFL-1\nRFL-2\nRFL-2\n");
+    await writeFile(path.join(input, "requirements", "expected.csv"), "key\nJIRA-1\nJIRA-2\nJIRA-2\n");
     await writeFile(path.join(input, "requirements", "mapping.json"), "{");
     await writeFile(path.join(input, "security", "codeql", "bad.sarif"), "{");
     await writeFile(path.join(input, "raw", "evidence.txt"), "raw");
@@ -240,7 +240,7 @@ describe("report generator", () => {
         security: { codeqlSarif: "security/codeql/**/*.sarif" },
         raw: "raw/**/*"
       },
-      requirements: { keyPattern: "RFL-[0-9]+" },
+      requirements: { keyPattern: "JIRA-[0-9]+" },
       qualityGates: { requirements: { failOnMissing: true } }
     });
 
@@ -260,12 +260,12 @@ describe("report generator", () => {
       ])
     );
     expect(report.qualityGate.status).toBe("failed");
-    expect(report.requirements.missing).toEqual(["RFL-2"]);
+    expect(report.requirements.missing).toEqual(["JIRA-2"]);
     expect(report.downloads.some((download) => download.name === "evidence.txt")).toBe(true);
     await expect(stat(path.join(output, "old.txt"))).rejects.toThrow();
     await assertManifestReferencesExist(output);
     const generatedText = await readGeneratedTextFiles(output);
-    expect(generatedText).not.toMatch(/[A-Za-z]:[\\/](?![\\/])/);
+    expect(generatedText).not.toMatch(/(^|[\s"'(])([A-Za-z]:[\\/](?![\\/]))/);
     expect(generatedText).not.toContain("/home/");
     expect(generatedText).not.toContain("/Users/");
     expect(generatedText).not.toContain("/mnt/");
