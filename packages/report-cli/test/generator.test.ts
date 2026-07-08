@@ -1,9 +1,35 @@
-import { mkdtemp, readFile, readdir, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, readdir, stat, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
 import { loadConfig } from "../src/config.js";
 import { buildReport } from "../src/generator.js";
+
+async function assertFullHtml(output: string) {
+  const html = await readFile(path.join(output, "index.html"), "utf8");
+  expect(html).toContain("<!doctype html>");
+  expect(html).toContain("<html");
+  expect(html).toContain("<head>");
+  expect(html).toContain('charset="UTF-8"');
+  expect(html).toContain('name="viewport"');
+  expect(html).toContain("<title>Quality Report</title>");
+  expect(html).toContain("<body>");
+  await expect(stat(path.join(output, "404.html"))).resolves.toBeTruthy();
+  return html;
+}
+
+async function assertManifestReferencesExist(output: string) {
+  const manifest = JSON.parse(await readFile(path.join(output, "data/manifest.json"), "utf8")) as {
+    chunks: { tests: string[] };
+    downloads: Array<{ path: string }>;
+  };
+  for (const chunk of manifest.chunks.tests) {
+    await expect(stat(path.join(output, "data", chunk))).resolves.toBeTruthy();
+  }
+  for (const download of manifest.downloads) {
+    await expect(stat(path.join(output, download.path))).resolves.toBeTruthy();
+  }
+}
 
 function zipEntries(buffer: Buffer) {
   const names: string[] = [];
@@ -112,6 +138,9 @@ describe("report generator", () => {
     expect(report.downloads.some((download) => download.category === "report")).toBe(true);
 
     const zipBuffer = await readFile(path.join(output, zipFiles[0]!));
-    expect(zipEntries(zipBuffer).some((entry) => /^quality-report.*\.zip$/i.test(path.basename(entry)))).toBe(false);
+    const entriesInZip = zipEntries(zipBuffer);
+    expect(entriesInZip.some((entry) => /^quality-report.*\.zip$/i.test(path.basename(entry)))).toBe(false);
+    expect(entriesInZip).toContain("index.html");
+    expect(entriesInZip).toContain("404.html");
   });
 });

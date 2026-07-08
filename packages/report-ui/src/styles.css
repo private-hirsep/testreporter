@@ -138,57 +138,6 @@ pre,
   margin-top: 5px;
 }
 
-.metrics {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-  gap: 14px;
-  margin-bottom: 18px;
-}
-
-.metrics.compact {
-  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
-}
-
-.metric-card {
-  padding: 16px;
-  min-height: 104px;
-  border-color: var(--qp-border) !important;
-  box-shadow: 0 1px 0 rgba(23, 32, 26, 0.03);
-}
-
-.metric-label,
-.metric-hint {
-  color: var(--qp-muted);
-  font-size: 0.82rem;
-}
-
-.metric-value {
-  font-size: 1.75rem;
-  font-weight: 800;
-  margin-top: 8px;
-  line-height: 1.05;
-}
-
-.metric-accent {
-  width: 36px;
-  height: 3px;
-  border-radius: 999px;
-  margin-top: 12px;
-  background: var(--qp-primary);
-}
-
-.metric-card[data-tone="pass"] .metric-accent {
-  background: var(--qp-pass);
-}
-
-.metric-card[data-tone="fail"] .metric-accent {
-  background: var(--qp-fail);
-}
-
-.metric-card[data-tone="warn"] .metric-accent {
-  background: var(--qp-medium);
-}
-
 .portal-card {
   border: 1px solid var(--qp-border) !important;
   border-radius: 8px !important;
@@ -463,6 +412,13 @@ pre,
 
 .list-table {
   width: 100%;
+}
+
+.tool-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 12px;
 }
 
 .wrap-anywhere {
