@@ -59,27 +59,55 @@ describe("report generator", () => {
       configPath,
       inputPath: path.join(root, "examples/minimal/quality-artifacts"),
       outputPath: output,
-      zip: true
+      zip: true,
+      publishMode: "artifact",
+      prCommentMode: "minimal",
+      prCommentMarker: "<!-- quality-report-platform:summary -->"
     });
     expect(report.tests.length).toBeGreaterThan(0);
     expect(report.summary.tests.byLayer.backend).toBeGreaterThan(0);
     expect(report.downloads.length).toBeGreaterThan(0);
     const serialized = JSON.stringify(report);
     expect(serialized).not.toContain(root.replace(/\\/g, "\\\\"));
-    expect(report.downloads.every((download) => !download.sourcePath || !path.isAbsolute(download.sourcePath))).toBe(
-      true
-    );
-    expect(report.downloads.some((download) => download.category === "report" && download.path.endsWith(".zip"))).toBe(
-      true
-    );
+    expect(
+      report.downloads.every(
+        (download) => !download.sourcePath || !path.isAbsolute(download.sourcePath)
+      )
+    ).toBe(true);
+    expect(
+      report.downloads.some(
+        (download) => download.category === "report" && download.path.endsWith(".zip")
+      )
+    ).toBe(true);
     expect(report.warnings.some((warning) => warning.code === "artifact.parse-failed")).toBe(true);
     expect(report.requirements.testsByRequirement["JIRA-101"]?.length).toBeGreaterThan(0);
     expect(report.security.some((finding) => finding.helpUri || finding.evidence)).toBe(true);
     await assertFullHtml(output);
     await assertManifestReferencesExist(output);
     await expect(stat(path.join(output, "assets", "stale.js"))).rejects.toThrow();
-    const reportZips = (await readdir(output)).filter((file) => /^quality-report.*\.zip$/i.test(file));
+    const reportZips = (await readdir(output)).filter((file) =>
+      /^quality-report.*\.zip$/i.test(file)
+    );
     expect(reportZips).toHaveLength(1);
+    const manifest = JSON.parse(
+      await readFile(path.join(output, "data/manifest.json"), "utf8")
+    ) as {
+      metadata: { publishMode?: string; prCommentMode?: string };
+    };
+    const summary = JSON.parse(
+      await readFile(path.join(output, "meta/quality-summary.json"), "utf8")
+    ) as {
+      publishMode?: string;
+      prCommentMode?: string;
+    };
+    const minimalComment = await readFile(path.join(output, "meta/pr-comment-minimal.md"), "utf8");
+    const fullComment = await readFile(path.join(output, "meta/pr-comment-full.md"), "utf8");
+    expect(manifest.metadata.publishMode).toBe("artifact");
+    expect(manifest.metadata.prCommentMode).toBe("minimal");
+    expect(summary.publishMode).toBe("artifact");
+    expect(summary.prCommentMode).toBe("minimal");
+    expect(minimalComment.startsWith("<!-- quality-report-platform:summary -->")).toBe(true);
+    expect(fullComment.startsWith("<!-- quality-report-platform:summary -->")).toBe(true);
   });
 
   it("generates passing and failing reports with the same UI bundle and downloadable ZIPs", async () => {
@@ -139,7 +167,9 @@ describe("report generator", () => {
 
     const zipBuffer = await readFile(path.join(output, zipFiles[0]!));
     const entriesInZip = zipEntries(zipBuffer);
-    expect(entriesInZip.some((entry) => /^quality-report.*\.zip$/i.test(path.basename(entry)))).toBe(false);
+    expect(
+      entriesInZip.some((entry) => /^quality-report.*\.zip$/i.test(path.basename(entry)))
+    ).toBe(false);
     expect(entriesInZip).toContain("index.html");
     expect(entriesInZip).toContain("404.html");
   });

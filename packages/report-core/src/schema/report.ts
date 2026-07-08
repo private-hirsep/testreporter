@@ -2,13 +2,7 @@ import { z } from "zod";
 
 export const TestStatusSchema = z.enum(["passed", "failed", "broken", "skipped", "unknown"]);
 export const TestLayerSchema = z.enum(["backend", "frontend", "e2e", "unknown"]);
-export const TestFrameworkSchema = z.enum([
-  "junit",
-  "pytest",
-  "vitest",
-  "playwright",
-  "unknown"
-]);
+export const TestFrameworkSchema = z.enum(["junit", "pytest", "vitest", "playwright", "unknown"]);
 export const SeveritySchema = z.enum(["critical", "high", "medium", "low", "info", "unknown"]);
 export const GateStatusSchema = z.enum(["passed", "failed", "warning", "unknown"]);
 
@@ -128,7 +122,9 @@ export const RunMetadataSchema = z.object({
   branch: z.string().optional(),
   commitSha: z.string().optional(),
   runId: z.string().optional(),
-  actor: z.string().optional()
+  actor: z.string().optional(),
+  publishMode: z.string().optional(),
+  prCommentMode: z.string().optional()
 });
 
 export const QualityGateResultSchema = z.object({

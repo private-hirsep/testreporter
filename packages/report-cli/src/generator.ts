@@ -40,9 +40,13 @@ export type GenerateOptions = {
   inputPath: string;
   outputPath: string;
   zip?: boolean | undefined;
+  publishMode?: string | undefined;
+  prCommentMode?: string | undefined;
+  prCommentMarker?: string | undefined;
 };
 
 const MAX_PARSE_BYTES = 50 * 1024 * 1024;
+const DEFAULT_PR_COMMENT_MARKER = "<!-- quality-report-platform:summary -->";
 
 function safeRelativePath(file: string, root: string): string {
   if (!path.isAbsolute(file)) return (redactSecrets(file) ?? file).replace(/\\/g, "/");
@@ -78,7 +82,7 @@ async function safeRead(
   return readFile(file, "utf8");
 }
 
-function metadata(config: QualityReportConfig) {
+function metadata(config: QualityReportConfig, options: GenerateOptions) {
   return {
     projectName: config.project.name,
     ...(config.project.repository ? { repository: config.project.repository } : {}),
@@ -86,7 +90,9 @@ function metadata(config: QualityReportConfig) {
     branch: redactSecrets(process.env.GITHUB_REF_NAME),
     commitSha: redactSecrets(process.env.GITHUB_SHA),
     runId: redactSecrets(process.env.GITHUB_RUN_ID),
-    actor: redactSecrets(process.env.GITHUB_ACTOR)
+    actor: redactSecrets(process.env.GITHUB_ACTOR),
+    ...(options.publishMode ? { publishMode: options.publishMode } : {}),
+    ...(options.prCommentMode ? { prCommentMode: options.prCommentMode } : {})
   };
 }
 
@@ -256,6 +262,8 @@ function qualitySummary(report: NormalizedReport) {
     qualityGateStatus: report.qualityGate.status,
     projectName: report.metadata.projectName,
     generatedAt: report.metadata.generatedAt,
+    publishMode: report.metadata.publishMode,
+    prCommentMode: report.metadata.prCommentMode,
     tests: report.summary.tests,
     coverage: report.summary.coverage,
     requirements: {
@@ -270,7 +278,7 @@ function qualitySummary(report: NormalizedReport) {
   };
 }
 
-async function writeMeta(outputPath: string, report: NormalizedReport) {
+async function writeMeta(outputPath: string, report: NormalizedReport, prCommentMarker: string) {
   const metaDir = path.join(outputPath, "meta");
   await mkdir(metaDir, { recursive: true });
   const summary = qualitySummary(report);
@@ -278,7 +286,7 @@ async function writeMeta(outputPath: string, report: NormalizedReport) {
 
   const gateIcon = report.qualityGate.status === "passed" ? "PASS" : "FAIL";
   const minimal = [
-    "<!-- quality-report:pr-comment -->",
+    prCommentMarker,
     `## Quality Report: ${gateIcon}`,
     "",
     `Project: **${markdownEscape(report.metadata.projectName)}**`,
@@ -392,7 +400,7 @@ export async function buildReport(options: GenerateOptions): Promise<NormalizedR
   const downloads = await copyRawArtifacts(artifacts, options.outputPath, inputRoot);
   const summary = buildSummary(dedupedTests, mergedCoverage, requirements, security);
   const qualityGate = evaluateQualityGate(options.config, summary);
-  const meta = metadata(options.config);
+  const meta = metadata(options.config, options);
   const report = NormalizedReportSchema.parse({
     schemaVersion: "1.0",
     metadata: meta,
@@ -423,7 +431,8 @@ export async function buildReport(options: GenerateOptions): Promise<NormalizedR
 
   await copyUi(options.outputPath);
   await writeData(options.outputPath, report);
-  await writeMeta(options.outputPath, report);
+  const prCommentMarker = options.prCommentMarker ?? DEFAULT_PR_COMMENT_MARKER;
+  await writeMeta(options.outputPath, report, prCommentMarker);
   if (options.zip) {
     const zipFile = `quality-report-${Date.now()}.zip`;
     const zipPath = path.join(options.outputPath, zipFile);
@@ -438,7 +447,7 @@ export async function buildReport(options: GenerateOptions): Promise<NormalizedR
       sizeBytes: (await stat(zipPath)).size
     });
     await writeData(options.outputPath, report);
-    await writeMeta(options.outputPath, report);
+    await writeMeta(options.outputPath, report, prCommentMarker);
   }
   return report;
 }

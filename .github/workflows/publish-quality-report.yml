@@ -38,6 +38,11 @@ on:
         type: string
         required: false
         default: auto
+      pr-comment-marker:
+        description: Hidden marker used to update PR comments in place.
+        type: string
+        required: false
+        default: "<!-- quality-report-platform:summary -->"
       update-pr-comment:
         description: Update an existing marked PR comment instead of creating a new one.
         type: boolean
@@ -152,6 +157,7 @@ jobs:
           pattern: ${{ inputs.artifact-pattern }}
           path: ${{ inputs.artifact-path }}
           merge-multiple: true
+          if-no-artifacts-found: error
 
       - uses: actions/setup-node@v4
         with:
@@ -176,7 +182,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          args=(--config "${{ inputs.config-path }}" --input "${{ inputs.artifact-path }}" --output dist/report --quality-profile "${{ inputs.quality-profile }}" --zip)
+          args=(--config "${{ inputs.config-path }}" --input "${{ inputs.artifact-path }}" --output dist/report --quality-profile "${{ inputs.quality-profile }}" --publish-mode "${{ steps.resolve.outputs.publish-mode }}" --pr-comment-mode "${{ steps.resolve.outputs.pr-comment-mode }}" --pr-comment-marker "${{ inputs.pr-comment-marker }}" --zip)
           if [[ -n "${{ inputs.quality-gates-path }}" ]]; then
             args+=(--quality-gates "${{ inputs.quality-gates-path }}")
           fi
@@ -212,9 +218,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: quality-report
-          path: |
-            dist/report
-            !dist/report/raw/**
+          path: ${{ steps.paths.outputs.report-zip-path }}
 
       - name: Upload Pages artifact
         if: steps.resolve.outputs.publish-mode == 'pages' || steps.resolve.outputs.publish-mode == 'pages-and-artifact'
@@ -229,21 +233,24 @@ jobs:
 
       - id: pr-comment
         name: Post or update PR comment
-        if: steps.resolve.outputs.pr-comment-mode != 'off' && github.event_name == 'pull_request'
+        if: >
+          steps.resolve.outputs.pr-comment-mode != 'off' &&
+          github.event_name == 'pull_request' &&
+          github.event.pull_request.head.repo.full_name == github.repository
         env:
           GH_TOKEN: ${{ github.token }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
           COMMENT_MODE: ${{ steps.resolve.outputs.pr-comment-mode }}
           UPDATE_COMMENT: ${{ inputs.update-pr-comment }}
+          PR_COMMENT_MARKER: ${{ inputs.pr-comment-marker }}
           REPO: ${{ github.repository }}
         shell: bash
         run: |
           set -euo pipefail
           comment_file="dist/report/meta/pr-comment-${COMMENT_MODE}.md"
-          marker="<!-- quality-report:pr-comment -->"
           existing=""
           if [[ "$UPDATE_COMMENT" == "true" ]]; then
-            existing="$(gh api "repos/$REPO/issues/$PR_NUMBER/comments" --paginate --jq ".[] | select(.body | contains(\"$marker\")) | .id" | head -n 1 || true)"
+            existing="$(gh api "repos/$REPO/issues/$PR_NUMBER/comments" --paginate --jq ".[] | select(.body | contains(\"$PR_COMMENT_MARKER\")) | .id" | head -n 1 || true)"
           fi
 
           if [[ -n "$existing" ]]; then
@@ -257,6 +264,13 @@ jobs:
       - name: Skip PR comment outside pull requests
         if: steps.resolve.outputs.pr-comment-mode != 'off' && github.event_name != 'pull_request'
         run: echo "PR comment mode is ${{ steps.resolve.outputs.pr-comment-mode }}, but this is not a pull_request event; skipping comment."
+
+      - name: Skip PR comment for fork pull requests
+        if: >
+          steps.resolve.outputs.pr-comment-mode != 'off' &&
+          github.event_name == 'pull_request' &&
+          github.event.pull_request.head.repo.full_name != github.repository
+        run: echo "PR comments are skipped for fork pull requests. Use pull_request_target only after a security review."
 
       - name: Fail on quality gate
         if: inputs.fail-on-quality-gate && steps.summary.outputs.quality-gate-status == 'failed'

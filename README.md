@@ -10,7 +10,7 @@ Your project runs tests however it wants. Your project uploads standard artifact
 - Produces a GitHub Pages-compatible static report with `data/manifest.json`, downloadable raw artifacts, PR comment markdown, and `meta/quality-summary.json`.
 - Applies quality profiles: `off`, `relaxed`, `standard`, `strict`, `release`, or custom profiles from `quality-gates.yml`.
 - Supports publish modes: `auto`, `none`, `artifact`, `pages`, and `pages-and-artifact`.
-- Supports PR comment modes: `auto`, `off`, `minimal`, and `full`; PR comments update in place by default using a hidden marker.
+- Supports PR comment modes: `auto`, `off`, `minimal`, and `full`; PR comments update in place by default using `<!-- quality-report-platform:summary -->`.
 
 ## What It Does Not Do
 
@@ -148,6 +148,7 @@ jobs:
       quality-profile: standard
       publish-mode: none
       pr-comment-mode: minimal
+      pr-comment-marker: "<!-- quality-report-platform:summary -->"
       update-pr-comment: true
       fail-on-quality-gate: true
 ```
@@ -226,7 +227,7 @@ permissions:
   id-token: write
 ```
 
-`issues: write` is required for PR comments because GitHub stores PR comments as issue comments. `pages: write` and `id-token: write` are required for `pages` and `pages-and-artifact`. If PR comments are configured outside a PR, the workflow skips them cleanly. If Pages or comments are explicitly requested without sufficient permission, GitHub will fail the responsible step with a permission error.
+`issues: write` is required for PR comments because GitHub stores PR comments as issue comments. `pages: write` and `id-token: write` are required for `pages` and `pages-and-artifact`. If PR comments are configured outside a PR, the workflow skips them cleanly. Fork PRs are skipped by default; do not switch to `pull_request_target` without a security review. If Pages or comments are explicitly requested without sufficient permission, GitHub will fail the responsible step with a permission error.
 
 ## Requirement Coverage Setup
 

@@ -14,6 +14,7 @@ const expectedInputs = [
   "quality-profile",
   "publish-mode",
   "pr-comment-mode",
+  "pr-comment-marker",
   "update-pr-comment",
   "fail-on-quality-gate",
   "report-title"
@@ -89,6 +90,10 @@ if (
 }
 
 const dogfoodText = await readText(".github/workflows/dogfood-quality-report.yml");
+const canonicalText = await readText(canonical);
+const ciText = await readText(".github/workflows/ci.yml");
+const generatorText = await readText("packages/report-cli/src/generator.ts");
+const schemaText = await readText("packages/report-core/src/schema/report.ts");
 if (!dogfoodText.includes("uses: ./.github/workflows/publish-quality-report.yml")) {
   fail("dogfood workflow must call the canonical reusable workflow");
 }
@@ -100,6 +105,47 @@ if (
 }
 if (dogfoodText.includes("pull_request_target"))
   fail("dogfood workflow must not use pull_request_target");
+if (!canonicalText.includes('--publish-mode "${{ steps.resolve.outputs.publish-mode }}"')) {
+  fail("canonical workflow must pass resolved publish mode to the CLI");
+}
+if (!canonicalText.includes('--pr-comment-mode "${{ steps.resolve.outputs.pr-comment-mode }}"')) {
+  fail("canonical workflow must pass resolved PR comment mode to the CLI");
+}
+if (!schemaText.includes("publishMode: z.string().optional()")) {
+  fail("generated manifest metadata must include publishMode");
+}
+if (!schemaText.includes("prCommentMode: z.string().optional()")) {
+  fail("generated manifest metadata must include prCommentMode");
+}
+if (
+  !generatorText.includes('DEFAULT_PR_COMMENT_MARKER = "<!-- quality-report-platform:summary -->"')
+) {
+  fail("generated PR comments must use the platform summary marker by default");
+}
+if (!canonicalText.includes('default: "<!-- quality-report-platform:summary -->"')) {
+  fail("workflow PR comment marker default must match generated comment marker");
+}
+if (!canonicalText.includes('contains(\\"$PR_COMMENT_MARKER\\")')) {
+  fail("workflow lookup must use the PR comment marker input");
+}
+if (!canonicalText.includes("path: ${{ steps.paths.outputs.report-zip-path }}")) {
+  fail("artifact mode must upload the generated report ZIP");
+}
+if (
+  !canonicalText.includes("uses: actions/upload-pages-artifact@v3") ||
+  !canonicalText.includes("path: dist/report")
+) {
+  fail("Pages mode must upload the extracted static report");
+}
+if (!canonicalText.includes("if-no-artifacts-found: error")) {
+  fail("artifact download must fail clearly when no artifacts match");
+}
+if (!canonicalText.includes("github.event.pull_request.head.repo.full_name == github.repository")) {
+  fail("PR comments must be fork-safe");
+}
+if (!ciText.includes("--quality-profile strict --no-fail-on-quality-gate --zip")) {
+  fail("strict CI generation must explicitly disable early quality-gate failure");
+}
 
 const readme = await readText("README.md");
 if (readme.includes("reusable-publish-quality-report.yml")) {
@@ -110,7 +156,9 @@ for (const required of [
   "issues: write",
   "pages: write",
   "pull requests should usually use `pr-comment-mode: minimal`",
-  "`pages-and-artifact`"
+  "`pages-and-artifact`",
+  "<!-- quality-report-platform:summary -->",
+  "Fork PRs are skipped by default"
 ]) {
   if (!readme.includes(required)) fail(`README is missing required guidance: ${required}`);
 }

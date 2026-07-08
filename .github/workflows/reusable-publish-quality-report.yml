@@ -1,3 +1,5 @@
+# Deprecated compatibility wrapper. New projects should use
+# .github/workflows/publish-quality-report.yml directly.
 name: Reusable Publish Quality Report Deprecated Wrapper
 
 on:
@@ -31,6 +33,10 @@ on:
         type: string
         required: false
         default: auto
+      pr-comment-marker:
+        type: string
+        required: false
+        default: "<!-- quality-report-platform:summary -->"
       update-pr-comment:
         type: boolean
         required: false
@@ -82,6 +88,7 @@ jobs:
       quality-profile: ${{ inputs.quality-profile }}
       publish-mode: ${{ inputs.publish-mode }}
       pr-comment-mode: ${{ inputs.pr-comment-mode }}
+      pr-comment-marker: ${{ inputs.pr-comment-marker }}
       update-pr-comment: ${{ inputs.update-pr-comment }}
       fail-on-quality-gate: ${{ inputs.fail-on-quality-gate }}
       report-title: ${{ inputs.report-title }}

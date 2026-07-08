@@ -105,10 +105,23 @@ program
   .option("--quality-profile <profile>", "Quality gate profile to use")
   .option("--quality-gates <path>", "Compatibility alias for external quality gates config")
   .option(
+    "--publish-mode <mode>",
+    "Resolved workflow publish mode to include in generated metadata"
+  )
+  .option(
+    "--pr-comment-mode <mode>",
+    "Resolved workflow PR comment mode to include in generated metadata"
+  )
+  .option(
+    "--pr-comment-marker <marker>",
+    "Marker used in generated PR comments for update-in-place workflows"
+  )
+  .option(
     "--fail-on-quality-gate",
     "Exit with status 1 when the selected quality gate fails",
     false
   )
+  .option("--no-fail-on-quality-gate", "Do not fail when the selected quality gate fails")
   .option("--zip", "Create quality-report.zip in the output directory", false)
   .action(
     async (options: {
@@ -117,6 +130,9 @@ program
       output: string;
       qualityProfile?: string;
       qualityGates?: string;
+      publishMode?: string;
+      prCommentMode?: string;
+      prCommentMarker?: string;
       failOnQualityGate?: boolean;
       zip?: boolean;
     }) => {
@@ -132,7 +148,10 @@ program
           configPath: options.config,
           inputPath: options.input,
           outputPath: options.output,
-          zip: options.zip
+          zip: options.zip,
+          publishMode: options.publishMode,
+          prCommentMode: options.prCommentMode,
+          prCommentMarker: options.prCommentMarker
         });
         console.log(`Generated report for ${report.metadata.projectName}: ${options.output}`);
         console.log(`Quality gate: ${report.qualityGate.status.toUpperCase()}`);

@@ -27,7 +27,7 @@ jobs:
       - run: npm run check:workflows-docs
       - run: npm run quality-report -- validate --config examples/minimal/quality-report.yml --quality-gates examples/minimal/quality-gates.yml --input examples/minimal/quality-artifacts --quality-profile relaxed
       - run: npm run quality-report -- generate --config examples/minimal/quality-report.yml --quality-gates examples/minimal/quality-gates.yml --input examples/minimal/quality-artifacts --output dist/example-report-relaxed --quality-profile relaxed --zip
-      - run: npm run quality-report -- generate --config examples/minimal/quality-report.yml --quality-gates examples/minimal/quality-gates.yml --input examples/minimal/quality-artifacts --output dist/example-report-strict --quality-profile strict --zip
+      - run: npm run quality-report -- generate --config examples/minimal/quality-report.yml --quality-gates examples/minimal/quality-gates.yml --input examples/minimal/quality-artifacts --output dist/example-report-strict --quality-profile strict --no-fail-on-quality-gate --zip
       - name: Smoke check generated report files
         shell: bash
         run: |
