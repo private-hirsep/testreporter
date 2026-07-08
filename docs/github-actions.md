@@ -157,3 +157,18 @@ permissions:
 The workflow exposes `quality-gate-status`, `quality-profile`, `report-path`,
 `report-zip-path`, `pages-url`, `pr-comment-url`, `summary-json-path`,
 `minimal-comment-path`, and `full-comment-path`.
+
+## PR comment smoke checks
+
+Use a test pull request with `pr-comment-mode: minimal` or `full`:
+
+- First run creates one comment containing `<!-- quality-report-platform:summary -->`.
+- Rerun updates that same marker comment when `update-pr-comment: true`.
+- No duplicate marker comments are created by default.
+- Setting `update-pr-comment: false` creates a new comment each run.
+- Running outside `pull_request` context logs a skip message and does not comment.
+- Removing `issues: write` causes the comment API step to fail with a permissions
+  error from GitHub.
+
+The final quality-gate failure step is intentionally last; report generation,
+artifact upload, Pages deployment, and PR commenting run before it.

@@ -253,7 +253,9 @@ async function writeMeta(outputPath: string, report: NormalizedReport, options: 
     marker: options.prCommentMarker ?? "<!-- quality-report-platform:summary -->",
     maxItems: options.prCommentMaxItems ?? 10,
     ...(options.fullReportUrl ? { fullReportUrl: options.fullReportUrl } : {}),
-    ...(options.artifactName ?? zipDownload ? { artifactName: options.artifactName ?? "quality-report" } : {})
+    ...(options.artifactName ?? zipDownload ? { artifactName: options.artifactName ?? "quality-report" } : {}),
+    ...(options.publishMode ? { publishMode: options.publishMode } : {}),
+    ...(options.prCommentMode ? { prCommentMode: options.prCommentMode } : {})
   };
   await writeFile(path.join(metaDir, "quality-summary.json"), JSON.stringify(summary, null, 2));
   await writeFile(path.join(metaDir, "pr-comment-minimal.md"), renderMinimalPrComment(report, commentOptions));

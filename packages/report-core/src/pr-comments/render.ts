@@ -1,21 +1,54 @@
 import type { NormalizedReport, SecurityFinding } from "../schema/report.js";
+import { redactSecrets } from "../utils/redact.js";
 
 export type PrCommentOptions = {
   marker: string;
   maxItems: number;
   fullReportUrl?: string;
   artifactName?: string;
+  publishMode?: string;
+  prCommentMode?: string;
 };
 
 const DEFAULT_MAX_COMMENT_LENGTH = 60000;
+const DEFAULT_VALUE_LIMIT = 300;
 
-function escapeMarkdown(value: unknown): string {
-  return String(value ?? "")
-    .replace(/[A-Za-z]:[\\/][^\s`'")\]]+/g, "[path]")
+function sanitizeValue(value: unknown, limit = DEFAULT_VALUE_LIMIT): string {
+  const sanitized = (redactSecrets(String(value ?? "")) ?? "")
+    .replace(/(^|[\s([:{])([A-Za-z]:[\\/][^\s`'")\]]+)/g, "$1[path]")
     .replace(/\/(?:home|tmp|Users|var|opt)\/[^\s`'")\]]+/g, "[path]")
-    .replace(/[\\`*_{}[\]()#+\-.!|>]/g, "\\$&")
     .replace(/\r?\n/g, " ")
-    .slice(0, 300);
+    .replace(/\s+/g, " ")
+    .trim();
+  return sanitized.length > limit ? `${sanitized.slice(0, Math.max(0, limit - 3))}...` : sanitized;
+}
+
+export function escapeMarkdownText(value: unknown): string {
+  return sanitizeValue(value)
+    .replace(/<(?=[A-Za-z/!])/g, "&lt;")
+    .replace(/\\/g, "\\\\")
+    .replace(/([*_#[\]()])/g, "\\$1");
+}
+
+export function escapeMarkdownTableCell(value: unknown): string {
+  return escapeMarkdownText(value).replace(/\|/g, "\\|");
+}
+
+export function formatInlineCode(value: unknown): string {
+  const sanitized = sanitizeValue(value).replace(/<(?=[A-Za-z/!])/g, "&lt;");
+  const runs = sanitized.match(/`+/g) ?? [];
+  const longest = runs.reduce((max, run) => Math.max(max, run.length), 0);
+  const delimiter = "`".repeat(longest + 1 || 1);
+  const padding = sanitized.startsWith("`") || sanitized.endsWith("`") ? " " : "";
+  return `${delimiter}${padding}${sanitized}${padding}${delimiter}`;
+}
+
+export function formatCodeBlock(value: unknown): string {
+  const sanitized = sanitizeValue(value, 4000);
+  const runs = sanitized.match(/`{3,}/g) ?? [];
+  const longest = runs.reduce((max, run) => Math.max(max, run.length), 2);
+  const delimiter = "`".repeat(longest + 1);
+  return `${delimiter}\n${sanitized}\n${delimiter}`;
 }
 
 function formatPercent(value: number | undefined): string {
@@ -36,23 +69,26 @@ function flakyCount(report: NormalizedReport): number {
 function blockers(report: NormalizedReport, limit: number): string[] {
   const items: string[] = [];
   for (const test of report.tests.filter((item) => item.status === "failed" || item.status === "broken").slice(0, limit)) {
-    items.push(`${test.status} test: \`${escapeMarkdown(test.fullName ?? test.name)}\``);
+    items.push(`${escapeMarkdownText(test.status)} test: ${formatInlineCode(test.fullName ?? test.name)}`);
   }
   for (const requirement of report.requirements.missing.slice(0, limit)) {
-    items.push(`missing requirement: \`${escapeMarkdown(requirement)}\``);
+    items.push(`missing requirement: ${formatInlineCode(requirement)}`);
   }
   for (const finding of report.security.filter((item) => item.severity === "critical" || item.severity === "high").slice(0, limit)) {
-    items.push(`${finding.severity} security finding: ${escapeMarkdown(finding.title)}`);
+    items.push(`${escapeMarkdownText(finding.severity)} security finding: ${escapeMarkdownText(finding.title)}`);
   }
   for (const check of report.qualityGate.checks.filter((item) => item.status === "failed").slice(0, limit)) {
-    items.push(`failed gate check: ${escapeMarkdown(check.label)} (${escapeMarkdown(check.actual)} / ${escapeMarkdown(check.expected)})`);
+    items.push(
+      `failed gate check: ${escapeMarkdownText(check.label)} (${escapeMarkdownText(check.actual)} / ${escapeMarkdownText(check.expected)})`
+    );
   }
   return items.slice(0, limit);
 }
 
 function reportLink(options: PrCommentOptions): string {
-  if (options.fullReportUrl) return `Full report: ${options.fullReportUrl}`;
-  if (options.artifactName) return `Full report: available in workflow artifact \`${escapeMarkdown(options.artifactName)}\`.`;
+  if (options.fullReportUrl) return `Full report: ${escapeMarkdownText(options.fullReportUrl)}`;
+  if (options.publishMode === "none") return "Full report: not published for this run.";
+  if (options.artifactName) return `Full report: available in workflow artifact ${formatInlineCode(options.artifactName)}.`;
   return "Full report: not published for this run.";
 }
 
@@ -67,15 +103,15 @@ export function renderMinimalPrComment(report: NormalizedReport, options: PrComm
     "## Quality Report",
     "",
     `**Gate:** ${gateLabel(report.qualityGate.status)}`,
-    `**Profile:** \`${escapeMarkdown(report.qualityGate.profile ?? report.metadata.qualityProfile ?? "standard")}\``,
+    `**Profile:** ${formatInlineCode(report.qualityGate.profile ?? report.metadata.qualityProfile ?? "standard")}`,
     "",
     "| Area | Result |",
     "|---|---:|",
-    `| Tests | ${report.summary.tests.total} total - ${report.summary.tests.failed} failed - ${report.summary.tests.broken} broken - ${report.summary.tests.skipped} skipped - ${flakyCount(report)} flaky |`,
-    `| Coverage | ${formatPercent(report.summary.coverage.totalPercentage)} total - ${formatPercent(report.summary.coverage.backendPercentage)} backend - ${formatPercent(report.summary.coverage.frontendPercentage)} frontend |`,
-    `| Requirements | ${formatPercent(report.requirements.percentage)} covered - ${report.requirements.missing.length} missing - ${report.requirements.extra.length} extra |`,
-    `| Security | ${report.summary.security.critical ?? 0} critical - ${report.summary.security.high ?? 0} high - ${report.summary.security.medium ?? 0} medium |`,
-    `| Warnings | ${report.warnings.length} parser warning${report.warnings.length === 1 ? "" : "s"} |`,
+    `| Tests | ${escapeMarkdownTableCell(`${report.summary.tests.total} total - ${report.summary.tests.failed} failed - ${report.summary.tests.broken} broken - ${report.summary.tests.skipped} skipped - ${flakyCount(report)} flaky`)} |`,
+    `| Coverage | ${escapeMarkdownTableCell(`${formatPercent(report.summary.coverage.totalPercentage)} total - ${formatPercent(report.summary.coverage.backendPercentage)} backend - ${formatPercent(report.summary.coverage.frontendPercentage)} frontend`)} |`,
+    `| Requirements | ${escapeMarkdownTableCell(`${formatPercent(report.requirements.percentage)} covered - ${report.requirements.missing.length} missing - ${report.requirements.extra.length} extra`)} |`,
+    `| Security | ${escapeMarkdownTableCell(`${report.summary.security.critical ?? 0} critical - ${report.summary.security.high ?? 0} high - ${report.summary.security.medium ?? 0} medium`)} |`,
+    `| Warnings | ${escapeMarkdownTableCell(`${report.warnings.length} parser warning${report.warnings.length === 1 ? "" : "s"}`)} |`,
     "",
     topItems.length ? "Top items:" : "Top items: none",
     ...topItems.map((item) => `- ${item}`),
@@ -100,29 +136,45 @@ export function renderFullPrComment(report: NormalizedReport, options: PrComment
   const sections = [
     renderMinimalPrComment(report, options),
     "",
+    ...(options.publishMode || options.prCommentMode
+      ? [
+          "### Delivery",
+          ...(options.publishMode ? [`- Publish mode: ${formatInlineCode(options.publishMode)}`] : []),
+          ...(options.prCommentMode ? [`- PR comment mode: ${formatInlineCode(options.prCommentMode)}`] : [])
+        ]
+      : []),
+    "",
     "### Quality Gate Checks",
-    ...report.qualityGate.checks.map((check) => `- ${gateLabel(check.status)}: ${escapeMarkdown(check.label)} (${escapeMarkdown(check.actual)} / ${escapeMarkdown(check.expected)})`),
+    ...report.qualityGate.checks.map(
+      (check) =>
+        `- ${gateLabel(check.status)}: ${escapeMarkdownText(check.label)} (${escapeMarkdownText(check.actual)} / ${escapeMarkdownText(check.expected)})`
+    ),
     ...cappedList(
       "Failed and Broken Tests",
       report.tests.filter((test) => test.status === "failed" || test.status === "broken"),
       limit,
-      (test) => `\`${escapeMarkdown(test.fullName ?? test.name)}\` (${escapeMarkdown(test.status)})`
+      (test) => `${formatInlineCode(test.fullName ?? test.name)} (${escapeMarkdownText(test.status)})`
     ),
     ...cappedList(
       "Slowest Tests",
       [...report.tests].filter((test) => test.durationMs !== undefined).sort((a, b) => (b.durationMs ?? 0) - (a.durationMs ?? 0)),
       limit,
-      (test) => `\`${escapeMarkdown(test.fullName ?? test.name)}\` - ${test.durationMs}ms`
+      (test) => `${formatInlineCode(test.fullName ?? test.name)} - ${test.durationMs}ms`
     ),
-    ...cappedList("Missing Requirements", report.requirements.missing, limit, (item) => `\`${escapeMarkdown(item)}\``),
-    ...cappedList("Extra Requirements", report.requirements.extra, limit, (item) => `\`${escapeMarkdown(item)}\``),
+    ...cappedList("Missing Requirements", report.requirements.missing, limit, (item) => formatInlineCode(item)),
+    ...cappedList("Extra Requirements", report.requirements.extra, limit, (item) => formatInlineCode(item)),
     ...cappedList(
       "Security Findings",
       report.security.filter((finding: SecurityFinding) => ["critical", "high", "medium"].includes(finding.severity)),
       limit,
-      (finding) => `${escapeMarkdown(finding.severity)}: ${escapeMarkdown(finding.title)}`
+      (finding) => `${escapeMarkdownText(finding.severity)}: ${escapeMarkdownText(finding.title)}`
     ),
-    ...cappedList("Parser Warnings", report.warnings, limit, (warning) => `${escapeMarkdown(warning.code)} - ${escapeMarkdown(warning.message)}`)
+    ...cappedList(
+      "Parser Warnings",
+      report.warnings,
+      limit,
+      (warning) => `${escapeMarkdownText(warning.code)} - ${escapeMarkdownText(warning.message)}`
+    )
   ];
   const body = sections.join("\n");
   return body.length > DEFAULT_MAX_COMMENT_LENGTH
