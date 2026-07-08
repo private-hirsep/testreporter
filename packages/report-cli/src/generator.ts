@@ -44,6 +44,13 @@ export type GenerateOptions = {
 
 const MAX_PARSE_BYTES = 50 * 1024 * 1024;
 
+function safeRelativePath(file: string, root: string): string {
+  if (!path.isAbsolute(file)) return (redactSecrets(file) ?? file).replace(/\\/g, "/");
+  const relative = path.relative(root, file);
+  const safe = relative && !relative.startsWith("..") && !path.isAbsolute(relative) ? relative : path.basename(file);
+  return (redactSecrets(safe) ?? safe).replace(/\\/g, "/");
+}
+
 function artifactDisplayPath(inputPath: string, file: string) {
   const relative = path.relative(inputPath, file).replace(/\\/g, "/");
   return relative && !relative.startsWith("..") && !path.isAbsolute(relative) ? relative : path.basename(file);
@@ -165,22 +172,21 @@ async function copyUi(outputPath: string) {
   ];
   const source = candidates.find((candidate) => fs.existsSync(path.join(candidate, "index.html")));
   if (!source) {
-    await writeFile(
-      path.join(outputPath, "index.html"),
-      [
-        "<!doctype html>",
-        '<html lang="en">',
-        "<head>",
-        '<meta charset="UTF-8" />',
-        '<meta name="viewport" content="width=device-width, initial-scale=1.0" />',
-        "<title>Quality Report</title>",
-        "</head>",
-        "<body>",
-        '<div id="app">Report UI was not built. Run npm run build.</div>',
-        "</body>",
-        "</html>"
-      ].join("")
-    );
+    const fallbackHtml = [
+      "<!doctype html>",
+      '<html lang="en">',
+      "<head>",
+      '<meta charset="UTF-8" />',
+      '<meta name="viewport" content="width=device-width, initial-scale=1.0" />',
+      "<title>Quality Report</title>",
+      "</head>",
+      "<body>",
+      '<div id="app">Report UI was not built. Run npm run build.</div>',
+      "</body>",
+      "</html>"
+    ].join("");
+    await writeFile(path.join(outputPath, "index.html"), fallbackHtml);
+    await writeFile(path.join(outputPath, "404.html"), fallbackHtml);
     return;
   }
   await fs.copy(source, outputPath, { overwrite: true });
@@ -230,9 +236,6 @@ async function zipDirectory(source: string, target: string) {
 async function cleanOutput(outputPath: string) {
   await rm(outputPath, { recursive: true, force: true });
   await mkdir(outputPath, { recursive: true });
-  for (const entry of await readdir(outputPath)) {
-    await rm(path.join(outputPath, entry), { recursive: true, force: true });
-  }
 }
 
 export async function buildReport(options: GenerateOptions): Promise<NormalizedReport> {

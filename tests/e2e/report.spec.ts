@@ -63,7 +63,8 @@ test("test detail shows multiple requirements, retry metadata, and attachments",
 
 test("security details render enriched fields defensively", async ({ page }) => {
   await page.goto("/#/security");
-  await expect(page.getByText("codeql Summary")).toBeVisible();
+  await expect(page.locator(".summary-strip")).toContainText("codeql");
+  await expect(page.locator(".summary-strip .chart-row", { hasText: "Critical" })).toBeVisible();
   await page.getByText("Missing anti-clickjacking header").click();
   await expect(page.getByText("Rule ID")).toBeVisible();
   await expect(page.getByText("10020")).toBeVisible();
