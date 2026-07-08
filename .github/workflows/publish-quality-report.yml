@@ -152,7 +152,7 @@ jobs:
           echo "Resolved PR comment mode: $pr_comment_mode"
           echo "Selected quality profile: ${{ inputs.quality-profile }}"
 
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           pattern: ${{ inputs.artifact-pattern }}
           path: ${{ inputs.artifact-path }}
