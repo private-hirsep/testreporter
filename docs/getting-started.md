@@ -1,9 +1,10 @@
 # Getting Started
 
-1. Produce standard CI artifacts from your existing test workflows.
-2. Add `quality-report.yml` to describe where those artifacts live.
-3. Run the CLI locally.
-4. Publish the generated static directory to GitHub Pages.
+1. Keep your existing CI jobs for tests, coverage, security scans, and requirement checks.
+2. Upload their outputs with `actions/upload-artifact`.
+3. Add `quality-report.yml` to describe the artifact paths.
+4. Run the CLI locally to validate the config.
+5. Call the canonical reusable workflow from CI.
 
 ```bash
 npm install
@@ -12,8 +13,6 @@ npm run quality-report -- validate --config quality-report.yml --input quality-a
 npm run quality-report -- generate --config quality-report.yml --input quality-artifacts --output dist/report --zip
 ```
 
-When `--zip` is used, the generated ZIP is added to the Downloads section and can
-also be uploaded as a workflow artifact.
+When `--zip` is used, the generated ZIP is added to the Downloads section and can also be uploaded as a workflow artifact.
 
-The first milestone is report-from-artifacts only. Keep your project-specific
-test execution workflow and upload artifacts in the formats documented here.
+The project is report-from-artifacts. It does not require a specific test runner, build tool, Docker image, or artifact layout.

@@ -1,68 +1,16 @@
 # Troubleshooting
 
-## No Artifacts Found
+## Generated Report Shows Old UI
 
-Run:
+Run `npm run build` before `npm run quality-report`. The CLI copies `packages/report-ui/dist` when it exists; otherwise it writes a fallback page that says the UI was not built.
 
-```bash
-npm run quality-report -- validate --config quality-report.yml --input quality-artifacts
-```
+## Pages Deploy Succeeds But The Page Is Blank
 
-Check that globs are relative to `--input`.
+Confirm the Pages artifact contains the extracted report directory with `index.html` and `data/manifest.json`. Do not deploy only `quality-report.zip`.
 
-## Report UI Shows a Loading Error
+## Pages Report Is Not Visible
 
-Confirm `data/manifest.json` exists in the generated output and that the site is
-served from a static server or GitHub Pages. Browser file loading restrictions can
-block `fetch` when opening `index.html` directly from disk.
-
-## Quality Gate Fails
-
-Run `summarize` to see concise totals:
-
-```bash
-npm run quality-report -- summarize --config quality-report.yml --input quality-artifacts
-```
-
-## Malformed Files
-
-Malformed artifacts are reported as parser warnings. Inspect `data/manifest.json`
-for the warning list.
-
-## PR Comments Look Over-Escaped
-
-Regenerate with the current CLI and inspect `meta/pr-comment-minimal.md`. Inline
-code should look like `backend.user.Test > handles JIRA-123`, not
-`backend\.user\.Test`. If it is still over-escaped, confirm the reusable workflow
-is using the same ref as the updated platform code.
-
-## PR Comment Is Duplicated Instead of Updated
-
-The default `update-pr-comment: true` updates an existing bot comment containing
-the hidden marker. Duplicates usually mean the marker was changed, the previous
-comment was created by a different account, or `update-pr-comment` was set to
-`false`.
-
-## No PR Comment Appears
-
-Confirm the run has pull request context, `pr-comment-mode` resolves to `minimal`
-or `full`, and the caller grants:
-
-```yaml
-permissions:
-  contents: read
-  actions: read
-  issues: write
-  pull-requests: write
-```
-
-Without `issues: write` and `pull-requests: write`, the GitHub API cannot create
-or update the pull request comment.
-
-## Pages Report Is Not Published
-
-Confirm `publish-mode` resolves to `pages` or `pages-and-artifact` and the caller
-grants:
+Use `publish-mode: pages` or `pages-and-artifact`, enable GitHub Pages for the repository, and grant:
 
 ```yaml
 permissions:
@@ -72,11 +20,60 @@ permissions:
   id-token: write
 ```
 
-For pull requests, `publish-mode: auto` resolves to `none` by default.
+## PR Comment Is Not Posted
 
-## Quality Gate Failed Before Report Was Uploaded
+Comments only run on `pull_request`, only when `pr-comment-mode` resolves to `minimal` or `full`, and only for same-repository PRs. Grant:
 
-The reusable workflow runs generation, upload/deploy, and comment steps before
-the final quality gate failure step. If a workflow fails earlier, inspect the
-failing step name. Parser/config errors, missing permissions, or artifact upload
-errors can still stop the workflow before the final gate step.
+```yaml
+permissions:
+  contents: read
+  actions: read
+  issues: write
+  pull-requests: write
+```
+
+Fork PR comments are skipped by default.
+
+## PR Comment Is Duplicated
+
+Keep `update-pr-comment: true` and keep the same hidden marker:
+
+```yaml
+pr-comment-marker: "<!-- quality-report-platform:summary -->"
+```
+
+The workflow updates only comments created by `github-actions[bot]` that contain the marker.
+
+## Workflow Cannot Download Artifacts
+
+The canonical workflow uses `actions/download-artifact@v4` with `if-no-artifacts-found: error`. Check that producing jobs uploaded artifacts before the report job, the report job has `needs` dependencies, and `artifact-pattern` matches artifact names.
+
+## No Artifacts Matched The Config
+
+Run:
+
+```bash
+npm run quality-report -- validate --config quality-report.yml --input quality-artifacts
+```
+
+Globs in `quality-report.yml` are relative to `--input` or the reusable workflow's `artifact-path`.
+
+## Quality Gate Failed Before Upload Or Comment
+
+The reusable workflow runs the final gate failure after generation, ZIP upload, Pages deploy, and PR comment steps. If the run stopped earlier, inspect the failed step. Common causes are invalid config, missing artifacts, `npm run build` failure, missing permissions, or Pages deployment errors.
+
+## Report ZIP Missing
+
+The canonical reusable workflow passes `--zip` and fails if no `quality-report*.zip` exists. Local generation creates the ZIP only when `--zip` is passed.
+
+## Absolute Paths Found In Output
+
+Generated source labels should be relative to the artifact input directory or scrubbed to `[path]`. If an absolute path appears in `data/manifest.json`, `meta/*.md`, or PR comments, treat it as a bug.
+
+## Strict Profile Fails Example Data
+
+Expected. CI intentionally generates a strict sample report and asserts that its quality gate fails.
+
+## Missing Permissions
+
+Use the smallest permission block for the selected mode. PR comments need `issues: write` and `pull-requests: write`; Pages needs `pages: write` and `id-token: write`.

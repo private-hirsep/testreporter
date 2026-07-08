@@ -1,31 +1,18 @@
 # History
 
-Milestone one writes a history-ready structure:
+The generated manifest contains a history-ready structure with the current run:
 
 ```json
 {
   "history": {
-    "runs": []
+    "runs": [
+      {
+        "generatedAt": "2026-07-08T00:00:00.000Z",
+        "qualityGateStatus": "passed"
+      }
+    ]
   }
 }
 ```
 
-The first implementation records the current run only. Later milestones should
-merge previous runs before rendering the final static report.
-
-Planned merge sources:
-
-- GitHub Pages: download the previous published `data/manifest.json` before
-  deployment and merge its `history.runs` with the current run.
-- Workflow artifacts: download a previous `history.json` or report ZIP artifact
-  from the same branch, release, or default branch.
-- Persisted history file: accept a configured file such as
-  `quality-artifacts/history/history.json` and merge it during generation.
-
-Merge behavior should be deterministic:
-
-- identify runs by run ID, commit SHA, or generated history ID
-- keep the newest copy when duplicate IDs exist
-- sort runs by `generatedAt` descending for display
-- cap stored history by count or age to keep the static report small
-- never require a database, API server, or external reporting service
+The current implementation records only the current run. It does not yet merge previous GitHub Pages deployments, previous workflow artifacts, or external history files.
