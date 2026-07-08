@@ -53,11 +53,11 @@ permissions:
   contents: read
   actions: read
   issues: write
-  pull-requests: read
+  pull-requests: write
 ```
 
-Without `issues: write`, the GitHub Issues Comments API cannot create or update
-the pull request comment.
+Without `issues: write` and `pull-requests: write`, the GitHub API cannot create
+or update the pull request comment.
 
 ## Pages Report Is Not Published
 

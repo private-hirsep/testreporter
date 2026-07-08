@@ -48,7 +48,7 @@ permissions:
   contents: read
   actions: read
   issues: write
-  pull-requests: read
+  pull-requests: write
   pages: write
   id-token: write
 
@@ -98,6 +98,13 @@ jobs:
     needs:
       - resolve-dogfood-inputs
       - prepare-dogfood-artifacts
+    permissions:
+      actions: read
+      contents: read
+      issues: write
+      pull-requests: write
+      pages: write
+      id-token: write
     uses: ./.github/workflows/publish-quality-report.yml
     with:
       artifact-pattern: quality-dogfood-artifacts

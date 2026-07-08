@@ -106,7 +106,7 @@ describe("report generator", () => {
     const reportZips = (await readdir(output)).filter((file) =>
       /^quality-report.*\.zip$/i.test(file)
     );
-    expect(reportZips).toHaveLength(1);
+    expect(reportZips).toEqual(["quality-report.zip"]);
     const manifest = JSON.parse(
       await readFile(path.join(output, "data/manifest.json"), "utf8")
     ) as {
@@ -191,7 +191,7 @@ describe("report generator", () => {
     const manifest = await readFile(path.join(output, "data/manifest.json"), "utf8");
     const tests = await readFile(path.join(output, "data/tests-0.json"), "utf8");
     const combined = `${manifest}\n${tests}`;
-    expect(zipFiles).toHaveLength(1);
+    expect(zipFiles).toEqual(["quality-report.zip"]);
     expect(zipFiles[0]).not.toBe("quality-report-stale.zip");
     expect(combined).not.toMatch(/[A-Za-z]:[\\/](?![\\/])/);
     expect(combined).not.toContain("file://");
