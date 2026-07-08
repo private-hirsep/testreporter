@@ -10,7 +10,7 @@ export const TestFrameworkSchema = z.enum([
   "unknown"
 ]);
 export const SeveritySchema = z.enum(["critical", "high", "medium", "low", "info", "unknown"]);
-export const GateStatusSchema = z.enum(["passed", "failed", "warning", "unknown"]);
+export const GateStatusSchema = z.enum(["passed", "failed", "skipped", "not_evaluated"]);
 
 export const NormalizedAttachmentSchema = z.object({
   name: z.string(),
@@ -128,11 +128,16 @@ export const RunMetadataSchema = z.object({
   branch: z.string().optional(),
   commitSha: z.string().optional(),
   runId: z.string().optional(),
-  actor: z.string().optional()
+  actor: z.string().optional(),
+  qualityProfile: z.string().optional(),
+  publishMode: z.string().optional(),
+  prCommentMode: z.string().optional()
 });
 
 export const QualityGateResultSchema = z.object({
   status: GateStatusSchema,
+  profile: z.string().optional(),
+  enabled: z.boolean().default(true),
   checks: z.array(
     z.object({
       id: z.string(),

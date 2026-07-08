@@ -47,7 +47,9 @@ npm run build
 npm run quality-report -- generate \
   --config examples/minimal/quality-report.yml \
   --input examples/minimal/quality-artifacts \
-  --output dist/example-report
+  --output dist/example-report \
+  --quality-profile standard \
+  --zip
 ```
 
 Open `dist/example-report/index.html` or publish `dist/example-report` to GitHub
@@ -56,12 +58,29 @@ Pages.
 ## Example GitHub Action
 
 ```yaml
-- uses: your-org/quality-report-platform/actions/generate-report@v1
-  with:
-    config-path: quality-report.yml
-    input-path: quality-artifacts
-    output-path: dist/report
+jobs:
+  quality-report:
+    uses: your-org/quality-report-platform/.github/workflows/publish-quality-report.yml@v1
+    permissions:
+      contents: read
+      actions: read
+      issues: write
+      pull-requests: read
+    with:
+      artifact-pattern: quality-*
+      quality-profile: standard
+      publish-mode: none
+      pr-comment-mode: minimal
+      fail-on-quality-gate: true
 ```
+
+Recommended modes:
+
+- Pull requests: `publish-mode: none` or `artifact`, `pr-comment-mode: minimal`
+- Manual runs: `publish-mode: pages-and-artifact`, `pr-comment-mode: off`
+- Releases: `publish-mode: pages-and-artifact`, `pr-comment-mode: off`
+- Merge queue: `quality-profile: strict`, `publish-mode: artifact` or `none`
+- Early adoption: `quality-profile: relaxed` or `off`
 
 ## Documentation
 

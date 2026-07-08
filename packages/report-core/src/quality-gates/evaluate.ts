@@ -1,10 +1,29 @@
 import type { QualityReportConfig } from "../config/config.js";
-import type { QualityGateResult, ReportSummary } from "../schema/report.js";
+import type { ParserWarning, QualityGateResult, ReportSummary } from "../schema/report.js";
 
 export function evaluateQualityGate(
   config: QualityReportConfig,
-  summary: ReportSummary
+  summary: ReportSummary,
+  warnings: ParserWarning[] = [],
+  options: { profile?: string; enabled?: boolean } = {}
 ): QualityGateResult {
+  if (options.enabled === false) {
+    return {
+      status: "skipped",
+      profile: options.profile,
+      enabled: false,
+      checks: [
+        {
+          id: "quality-gate.off",
+          label: "Quality gate",
+          actual: "report-only",
+          expected: "profile enabled",
+          status: "skipped",
+          message: "Quality gate profile disables failing checks."
+        }
+      ]
+    };
+  }
   const checks: QualityGateResult["checks"] = [];
   const add = (
     id: string,
@@ -89,6 +108,15 @@ export function evaluateQualityGate(
       summary.requirements.missing.length === 0
     );
   }
+  if (config.qualityGates.requirements.failOnExtra) {
+    add(
+      "requirements.extra",
+      "Extra requirements",
+      summary.requirements.extra.length,
+      "= 0",
+      summary.requirements.extra.length === 0
+    );
+  }
   add(
     "security.critical",
     "Critical security findings",
@@ -103,9 +131,25 @@ export function evaluateQualityGate(
     `<= ${config.qualityGates.security.maxHigh}`,
     (summary.security.high ?? 0) <= config.qualityGates.security.maxHigh
   );
+  add(
+    "security.medium",
+    "Medium security findings",
+    summary.security.medium ?? 0,
+    `<= ${config.qualityGates.security.maxMedium}`,
+    (summary.security.medium ?? 0) <= config.qualityGates.security.maxMedium
+  );
+  add(
+    "warnings.count",
+    "Parser warnings",
+    warnings.length,
+    `<= ${config.qualityGates.warnings.maxWarnings}`,
+    warnings.length <= config.qualityGates.warnings.maxWarnings
+  );
 
   return {
     status: checks.some((check) => check.status === "failed") ? "failed" : "passed",
+    profile: options.profile,
+    enabled: true,
     checks
   };
 }

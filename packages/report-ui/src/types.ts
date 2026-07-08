@@ -89,6 +89,9 @@ export type Manifest = {
     commitSha?: string;
     runId?: string;
     actor?: string;
+    qualityProfile?: string;
+    publishMode?: string;
+    prCommentMode?: string;
   };
   summary: {
     tests: {
@@ -113,6 +116,8 @@ export type Manifest = {
   security: SecurityFinding[];
   qualityGate: {
     status: string;
+    profile?: string;
+    enabled?: boolean;
     checks: Array<{ id: string; label: string; status: string; actual: string | number; expected: string; message?: string }>;
   };
   downloads: Download[];

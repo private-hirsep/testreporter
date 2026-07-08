@@ -10,6 +10,8 @@ import {
   deduplicateTests,
   evaluateQualityGate,
   NormalizedReportSchema,
+  renderFullPrComment,
+  renderMinimalPrComment,
   redactSecrets,
   stableId,
   type CoverageSummary,
@@ -40,6 +42,14 @@ export type GenerateOptions = {
   inputPath: string;
   outputPath: string;
   zip?: boolean | undefined;
+  qualityProfile?: string | undefined;
+  qualityGateEnabled?: boolean | undefined;
+  publishMode?: string | undefined;
+  prCommentMode?: string | undefined;
+  prCommentMarker?: string | undefined;
+  prCommentMaxItems?: number | undefined;
+  fullReportUrl?: string | undefined;
+  artifactName?: string | undefined;
 };
 
 const MAX_PARSE_BYTES = 50 * 1024 * 1024;
@@ -69,7 +79,7 @@ async function safeRead(file: string, warnings: ParserWarning[], displayPath: st
   return readFile(file, "utf8");
 }
 
-function metadata(config: QualityReportConfig) {
+function metadata(config: QualityReportConfig, options: GenerateOptions) {
   return {
     projectName: config.project.name,
     ...(config.project.repository ? { repository: config.project.repository } : {}),
@@ -77,7 +87,10 @@ function metadata(config: QualityReportConfig) {
     branch: redactSecrets(process.env.GITHUB_REF_NAME),
     commitSha: redactSecrets(process.env.GITHUB_SHA),
     runId: redactSecrets(process.env.GITHUB_RUN_ID),
-    actor: redactSecrets(process.env.GITHUB_ACTOR)
+    actor: redactSecrets(process.env.GITHUB_ACTOR),
+    qualityProfile: options.qualityProfile ?? "standard",
+    publishMode: options.publishMode,
+    prCommentMode: options.prCommentMode
   };
 }
 
@@ -221,6 +234,32 @@ async function writeData(outputPath: string, report: NormalizedReport) {
   await writeFile(path.join(dataDir, "manifest.json"), JSON.stringify(manifest, null, 2));
 }
 
+async function writeMeta(outputPath: string, report: NormalizedReport, options: GenerateOptions) {
+  const metaDir = path.join(outputPath, "meta");
+  await mkdir(metaDir, { recursive: true });
+  const zipDownload = report.downloads.find((download) => download.category === "report" && download.path.endsWith(".zip"));
+  const summary = {
+    qualityGateStatus: report.qualityGate.status,
+    qualityProfile: report.qualityGate.profile ?? report.metadata.qualityProfile ?? "standard",
+    reportPath: outputPath,
+    reportZipPath: zipDownload ? path.join(outputPath, zipDownload.path).replace(/\\/g, "/") : undefined,
+    summaryJsonPath: path.join(metaDir, "quality-summary.json").replace(/\\/g, "/"),
+    minimalCommentPath: path.join(metaDir, "pr-comment-minimal.md").replace(/\\/g, "/"),
+    fullCommentPath: path.join(metaDir, "pr-comment-full.md").replace(/\\/g, "/"),
+    publishMode: options.publishMode,
+    prCommentMode: options.prCommentMode
+  };
+  const commentOptions = {
+    marker: options.prCommentMarker ?? "<!-- quality-report-platform:summary -->",
+    maxItems: options.prCommentMaxItems ?? 10,
+    ...(options.fullReportUrl ? { fullReportUrl: options.fullReportUrl } : {}),
+    ...(options.artifactName ?? zipDownload ? { artifactName: options.artifactName ?? "quality-report" } : {})
+  };
+  await writeFile(path.join(metaDir, "quality-summary.json"), JSON.stringify(summary, null, 2));
+  await writeFile(path.join(metaDir, "pr-comment-minimal.md"), renderMinimalPrComment(report, commentOptions));
+  await writeFile(path.join(metaDir, "pr-comment-full.md"), renderFullPrComment(report, commentOptions));
+}
+
 async function zipDirectory(source: string, target: string) {
   await new Promise<void>((resolve, reject) => {
     const output = createWriteStream(target);
@@ -288,8 +327,11 @@ export async function buildReport(options: GenerateOptions): Promise<NormalizedR
   }
   const downloads = await copyRawArtifacts(artifacts, options.outputPath, inputRoot);
   const summary = buildSummary(dedupedTests, mergedCoverage, requirements, security);
-  const qualityGate = evaluateQualityGate(options.config, summary);
-  const meta = metadata(options.config);
+  const qualityGate = evaluateQualityGate(options.config, summary, warnings, {
+    profile: options.qualityProfile ?? "standard",
+    ...(options.qualityGateEnabled !== undefined ? { enabled: options.qualityGateEnabled } : {})
+  });
+  const meta = metadata(options.config, options);
   const report = NormalizedReportSchema.parse({
     schemaVersion: "1.0",
     metadata: meta,
@@ -335,5 +377,6 @@ export async function buildReport(options: GenerateOptions): Promise<NormalizedR
     });
     await writeData(options.outputPath, report);
   }
+  await writeMeta(options.outputPath, report, options);
   return report;
 }
