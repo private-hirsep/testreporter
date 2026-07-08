@@ -47,16 +47,25 @@ const MAX_PARSE_BYTES = 50 * 1024 * 1024;
 function safeRelativePath(file: string, root: string): string {
   if (!path.isAbsolute(file)) return (redactSecrets(file) ?? file).replace(/\\/g, "/");
   const relative = path.relative(root, file);
-  const safe = relative && !relative.startsWith("..") && !path.isAbsolute(relative) ? relative : path.basename(file);
+  const safe =
+    relative && !relative.startsWith("..") && !path.isAbsolute(relative)
+      ? relative
+      : path.basename(file);
   return (redactSecrets(safe) ?? safe).replace(/\\/g, "/");
 }
 
 function artifactDisplayPath(inputPath: string, file: string) {
   const relative = path.relative(inputPath, file).replace(/\\/g, "/");
-  return relative && !relative.startsWith("..") && !path.isAbsolute(relative) ? relative : path.basename(file);
+  return relative && !relative.startsWith("..") && !path.isAbsolute(relative)
+    ? relative
+    : path.basename(file);
 }
 
-async function safeRead(file: string, warnings: ParserWarning[], displayPath: string): Promise<string | undefined> {
+async function safeRead(
+  file: string,
+  warnings: ParserWarning[],
+  displayPath: string
+): Promise<string | undefined> {
   const size = (await stat(file)).size;
   if (size > MAX_PARSE_BYTES) {
     warnings.push({
@@ -94,10 +103,18 @@ function mergeCoverage(items: CoverageSummary[]): CoverageSummary[] {
   });
 }
 
-async function readExpectedRequirements(artifacts: DiscoveredArtifact[], warnings: ParserWarning[], inputPath: string) {
+async function readExpectedRequirements(
+  artifacts: DiscoveredArtifact[],
+  warnings: ParserWarning[],
+  inputPath: string
+) {
   const keys: string[] = [];
   for (const artifact of artifacts.filter((item) => item.kind === "expectedRequirements")) {
-    const content = await safeRead(artifact.path, warnings, artifactDisplayPath(inputPath, artifact.path));
+    const content = await safeRead(
+      artifact.path,
+      warnings,
+      artifactDisplayPath(inputPath, artifact.path)
+    );
     if (!content) continue;
     for (const line of content.split(/\r?\n/)) {
       const key = line.split(",")[0]?.trim();
@@ -115,14 +132,35 @@ async function applyRequirementMappings(
 ) {
   const byId = new Map(tests.map((test) => [test.id, test]));
   for (const artifact of artifacts.filter((item) => item.kind === "requirementMapping")) {
-    const content = await safeRead(artifact.path, warnings, artifactDisplayPath(inputPath, artifact.path));
+    const content = await safeRead(
+      artifact.path,
+      warnings,
+      artifactDisplayPath(inputPath, artifact.path)
+    );
     if (!content) continue;
-    const mappings = JSON.parse(content) as Array<{ testId?: string; name?: string; requirement: string }>;
+    let mappings: Array<{ testId?: string; name?: string; requirement: string }>;
+    try {
+      mappings = JSON.parse(content) as Array<{
+        testId?: string;
+        name?: string;
+        requirement: string;
+      }>;
+      if (!Array.isArray(mappings)) throw new Error("Requirement mapping JSON must be an array.");
+    } catch (error) {
+      warnings.push({
+        sourcePath: artifactDisplayPath(inputPath, artifact.path),
+        code: "requirements.mapping.parse-failed",
+        message: error instanceof Error ? error.message : "Invalid requirement mapping JSON."
+      });
+      continue;
+    }
     for (const mapping of mappings) {
+      if (!mapping.requirement) continue;
       const matches = mapping.testId
         ? [byId.get(mapping.testId)].filter((test): test is NormalizedTestCase => Boolean(test))
         : tests.filter((test) => test.name === mapping.name || test.fullName === mapping.name);
-      for (const test of matches) test.requirements = [...new Set([...test.requirements, mapping.requirement])];
+      for (const test of matches)
+        test.requirements = [...new Set([...test.requirements, mapping.requirement])];
     }
   }
 }
@@ -259,16 +297,56 @@ export async function buildReport(options: GenerateOptions): Promise<NormalizedR
         ...(artifact.layer ? { layer: artifact.layer } : {}),
         requirementPattern
       };
-      if (artifact.kind === "junit") tests.push(...parseJUnitXml(content, context).items);
-      if (artifact.kind === "vitestJson") tests.push(...parseVitestJson(content, context).items);
-      if (artifact.kind === "playwrightJson") tests.push(...parsePlaywrightJson(content, context).items);
-      if (artifact.kind === "jacocoXml") coverage.push(...parseJaCoCoXml(content, context).items);
-      if (artifact.kind === "jacocoCsv") coverage.push(...parseJaCoCoCsv(content, context).items);
-      if (artifact.kind === "coberturaXml") coverage.push(...parseCoberturaXml(content, context).items);
-      if (artifact.kind === "lcov") coverage.push(...parseLcov(content, context).items);
-      if (artifact.kind === "istanbulSummary") coverage.push(...parseIstanbulSummary(content, context).items);
-      if (artifact.kind === "sarif") security.push(...parseSarif(content, context).items);
-      if (artifact.kind === "zapJson") security.push(...parseZapJson(content, context).items);
+      if (artifact.kind === "junit") {
+        const result = parseJUnitXml(content, context);
+        tests.push(...result.items);
+        warnings.push(...result.warnings);
+      }
+      if (artifact.kind === "vitestJson") {
+        const result = parseVitestJson(content, context);
+        tests.push(...result.items);
+        warnings.push(...result.warnings);
+      }
+      if (artifact.kind === "playwrightJson") {
+        const result = parsePlaywrightJson(content, context);
+        tests.push(...result.items);
+        warnings.push(...result.warnings);
+      }
+      if (artifact.kind === "jacocoXml") {
+        const result = parseJaCoCoXml(content, context);
+        coverage.push(...result.items);
+        warnings.push(...result.warnings);
+      }
+      if (artifact.kind === "jacocoCsv") {
+        const result = parseJaCoCoCsv(content, context);
+        coverage.push(...result.items);
+        warnings.push(...result.warnings);
+      }
+      if (artifact.kind === "coberturaXml") {
+        const result = parseCoberturaXml(content, context);
+        coverage.push(...result.items);
+        warnings.push(...result.warnings);
+      }
+      if (artifact.kind === "lcov") {
+        const result = parseLcov(content, context);
+        coverage.push(...result.items);
+        warnings.push(...result.warnings);
+      }
+      if (artifact.kind === "istanbulSummary") {
+        const result = parseIstanbulSummary(content, context);
+        coverage.push(...result.items);
+        warnings.push(...result.warnings);
+      }
+      if (artifact.kind === "sarif") {
+        const result = parseSarif(content, context);
+        security.push(...result.items);
+        warnings.push(...result.warnings);
+      }
+      if (artifact.kind === "zapJson") {
+        const result = parseZapJson(content, context);
+        security.push(...result.items);
+        warnings.push(...result.warnings);
+      }
     } catch (error) {
       warnings.push({
         sourcePath: displayPath,

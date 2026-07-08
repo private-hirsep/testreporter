@@ -1,14 +1,6 @@
 import type { NormalizedTestCase } from "../schema/report.js";
 import { stableId } from "../utils/hash.js";
 
-const statusRank: Record<NormalizedTestCase["status"], number> = {
-  broken: 5,
-  failed: 4,
-  unknown: 3,
-  skipped: 2,
-  passed: 1
-};
-
 export function extractRequirementKeys(text: string | undefined, pattern: RegExp): string[] {
   if (!text) return [];
   return [...new Set([...text.matchAll(pattern)].map((match) => match[0]))];
@@ -28,12 +20,7 @@ export function deduplicateTests(tests: NormalizedTestCase[]): NormalizedTestCas
   }
 
   return [...grouped.values()].map((group) => {
-    const sorted = [...group].sort((a: NormalizedTestCase, b: NormalizedTestCase) => {
-      const rankDelta = statusRank[b.status] - statusRank[a.status];
-      if (rankDelta !== 0) return rankDelta;
-      return (b.durationMs ?? 0) - (a.durationMs ?? 0);
-    });
-    const selected = sorted[0]!;
+    const selected = group.at(-1)!;
     return {
       ...selected,
       id: testIdentity(selected),

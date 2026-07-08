@@ -1,6 +1,13 @@
-import { XMLParser } from "fast-xml-parser";
+import { XMLParser, XMLValidator } from "fast-xml-parser";
 import type { CoverageSummary, TestLayer } from "@quality-report/report-core";
-import { metric, numberOrUndefined, pct, toArray } from "./helpers.js";
+import {
+  metric,
+  numberOrUndefined,
+  parserWarning,
+  pct,
+  safeDisplayPath,
+  toArray
+} from "./helpers.js";
 import type { CoverageParseResult, ParseContext } from "./types.js";
 
 type XmlRecord = Record<string, unknown>;
@@ -32,6 +39,19 @@ function counterMap(counters: XmlRecord | XmlRecord[] | undefined) {
 }
 
 export function parseJaCoCoXml(content: string, context: ParseContext): CoverageParseResult {
+  const validation = XMLValidator.validate(content);
+  if (validation !== true) {
+    return {
+      items: [],
+      warnings: [
+        parserWarning(
+          context.sourcePath,
+          "coverage.jacoco-xml.malformed",
+          validation.err?.msg ?? "Malformed JaCoCo XML file."
+        )
+      ]
+    };
+  }
   const doc = parser.parse(content) as XmlRecord;
   const report = doc.report as XmlRecord | undefined;
   const counters = counterMap(report?.counter as XmlRecord | XmlRecord[] | undefined);
@@ -40,7 +60,7 @@ export function parseJaCoCoXml(content: string, context: ParseContext): Coverage
     return toArray(pkg.sourcefile as XmlRecord | XmlRecord[] | undefined).map((file) => {
       const fileCounters = counterMap(file.counter as XmlRecord | XmlRecord[] | undefined);
       return {
-        path: [packageName, file.name].filter(Boolean).join("/"),
+        path: safeDisplayPath([packageName, file.name].filter(Boolean).join("/")) ?? "unknown",
         ...(packageName ? { packageName } : {}),
         instructions: fileCounters.instruction,
         branches: fileCounters.branch,
@@ -65,6 +85,19 @@ export function parseJaCoCoXml(content: string, context: ParseContext): Coverage
 }
 
 export function parseCoberturaXml(content: string, context: ParseContext): CoverageParseResult {
+  const validation = XMLValidator.validate(content);
+  if (validation !== true) {
+    return {
+      items: [],
+      warnings: [
+        parserWarning(
+          context.sourcePath,
+          "coverage.cobertura-xml.malformed",
+          validation.err?.msg ?? "Malformed Cobertura XML file."
+        )
+      ]
+    };
+  }
   const doc = parser.parse(content) as XmlRecord;
   const coverage = doc.coverage as XmlRecord | undefined;
   const lineRate = numberOrUndefined(coverage?.["line-rate"]);
@@ -73,8 +106,12 @@ export function parseCoberturaXml(content: string, context: ParseContext): Cover
     items: [
       {
         ...empty(layer(context)),
-        lines: lineRate !== undefined ? { percentage: Math.round(lineRate * 10000) / 100 } : undefined,
-        branches: branchRate !== undefined ? { percentage: Math.round(branchRate * 10000) / 100 } : undefined
+        lines:
+          lineRate !== undefined ? { percentage: Math.round(lineRate * 10000) / 100 } : undefined,
+        branches:
+          branchRate !== undefined
+            ? { percentage: Math.round(branchRate * 10000) / 100 }
+            : undefined
       }
     ],
     warnings: []
@@ -85,6 +122,18 @@ export function parseJaCoCoCsv(content: string, context: ParseContext): Coverage
   const lines = content.trim().split(/\r?\n/);
   const [header, ...rows] = lines;
   const headers = header?.split(",") ?? [];
+  if (!headers.includes("INSTRUCTION_MISSED") && !headers.includes("INSTRUCTION_COVERED")) {
+    return {
+      items: [],
+      warnings: [
+        parserWarning(
+          context.sourcePath,
+          "coverage.jacoco-csv.unexpected-shape",
+          "JaCoCo CSV header is missing coverage columns."
+        )
+      ]
+    };
+  }
   const totals = { instructionMissed: 0, instructionCovered: 0, branchMissed: 0, branchCovered: 0 };
   for (const row of rows) {
     const cols = row.split(",");
@@ -107,8 +156,34 @@ export function parseJaCoCoCsv(content: string, context: ParseContext): Coverage
 }
 
 export function parseIstanbulSummary(content: string, context: ParseContext): CoverageParseResult {
-  const json = JSON.parse(content) as JsonRecord;
+  let json: JsonRecord;
+  try {
+    json = JSON.parse(content) as JsonRecord;
+  } catch (error) {
+    return {
+      items: [],
+      warnings: [
+        parserWarning(
+          context.sourcePath,
+          "coverage.istanbul.malformed",
+          error instanceof Error ? error.message : "Malformed Istanbul coverage summary JSON file."
+        )
+      ]
+    };
+  }
   const total = json.total as JsonRecord | undefined;
+  if (!total) {
+    return {
+      items: [],
+      warnings: [
+        parserWarning(
+          context.sourcePath,
+          "coverage.istanbul.unexpected-shape",
+          "Istanbul summary JSON is missing total coverage."
+        )
+      ]
+    };
+  }
   const item = (name: string) => {
     const value = total?.[name] as JsonRecord | undefined;
     const covered = numberOrUndefined(value?.covered);
@@ -143,7 +218,7 @@ export function parseLcov(content: string, context: ParseContext): CoverageParse
   const fileCoverage = [];
 
   for (const record of files) {
-    const sourceFile = record.match(/^SF:(.+)$/m)?.[1] ?? "unknown";
+    const sourceFile = safeDisplayPath(record.match(/^SF:(.+)$/m)?.[1]) ?? "unknown";
     const lf = Number(record.match(/^LF:(\d+)$/m)?.[1] ?? 0);
     const lh = Number(record.match(/^LH:(\d+)$/m)?.[1] ?? 0);
     const brf = Number(record.match(/^BRF:(\d+)$/m)?.[1] ?? 0);
