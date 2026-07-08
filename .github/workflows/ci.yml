@@ -23,7 +23,31 @@ jobs:
       - run: npm run typecheck
       - run: npm test
       - run: npm run build
-      - run: npm run quality-report -- generate --config examples/minimal/quality-report.yml --input examples/minimal/quality-artifacts --output dist/example-report
+      - run: npm run check:workflows-docs
+      - run: npm run quality-report -- validate --config examples/minimal/quality-report.yml --quality-gates examples/minimal/quality-gates.yml --input examples/minimal/quality-artifacts --quality-profile relaxed
+      - run: npm run quality-report -- generate --config examples/minimal/quality-report.yml --quality-gates examples/minimal/quality-gates.yml --input examples/minimal/quality-artifacts --output dist/example-report-relaxed --quality-profile relaxed --zip
+      - run: npm run quality-report -- generate --config examples/minimal/quality-report.yml --quality-gates examples/minimal/quality-gates.yml --input examples/minimal/quality-artifacts --output dist/example-report-strict --quality-profile strict --no-fail-on-quality-gate --zip
+      - name: Smoke check generated report files
+        shell: bash
+        run: |
+          set -euo pipefail
+          for file in \
+            dist/example-report-relaxed/index.html \
+            dist/example-report-relaxed/404.html \
+            dist/example-report-relaxed/data/manifest.json \
+            dist/example-report-relaxed/meta/pr-comment-minimal.md \
+            dist/example-report-relaxed/meta/pr-comment-full.md \
+            dist/example-report-relaxed/meta/quality-summary.json \
+            dist/example-report-strict/index.html \
+            dist/example-report-strict/404.html \
+            dist/example-report-strict/data/manifest.json \
+            dist/example-report-strict/meta/pr-comment-minimal.md \
+            dist/example-report-strict/meta/pr-comment-full.md \
+            dist/example-report-strict/meta/quality-summary.json; do
+            test -f "$file"
+          done
+          strict_status="$(node -e "console.log(require('./dist/example-report-strict/meta/quality-summary.json').qualityGateStatus)")"
+          test "$strict_status" = "failed"
 
   codeql:
     runs-on: ubuntu-latest

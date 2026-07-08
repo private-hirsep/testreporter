@@ -1,27 +1,27 @@
 # GitHub Actions Integration
 
-Composite action:
+The recommended integration is the reusable workflow:
 
 ```yaml
-- uses: your-org/quality-report-platform/actions/generate-report@v1
-  with:
-    config-path: quality-report.yml
-    input-path: quality-artifacts
-    output-path: dist/report
-```
-
-Optional reusable workflow:
-
-```yaml
+# PR minimal comment only
 jobs:
   quality-report:
     uses: your-org/quality-report-platform/.github/workflows/publish-quality-report.yml@v1
     with:
       artifact-pattern: quality-*
-      config-path: .github/quality-report.yml
-      deploy-pages: true
+      artifact-path: quality-artifacts
+      config-path: quality-report.yml
+      quality-gates-path: quality-gates.yml
+      quality-profile: standard
+      publish-mode: artifact
+      pr-comment-mode: minimal
+      pr-comment-marker: "<!-- quality-report-platform:summary -->"
+      update-pr-comment: true
+      fail-on-quality-gate: true
 ```
 
-The reusable workflow downloads artifacts, generates the static report, uploads a
-Pages artifact, optionally deploys Pages, and uploads the report ZIP. It does not
-dictate how tests are executed.
+Run tests in your own jobs, upload their outputs with `actions/upload-artifact`, and let the reusable workflow consume those artifacts. The workflow generates the static report before it evaluates the final failure condition, so artifacts, Pages deployments, and PR comments can still be produced for failing gates.
+
+Use `publish-mode: none` or `artifact` on PRs. Use `pages-and-artifact` for manual dispatch, releases, or trusted main-branch publishing. PR comments require `issues: write` and use `<!-- quality-report-platform:summary -->` for update-in-place lookup. Fork PR comments are skipped by default; do not use `pull_request_target` without a security review. Pages publishing requires `pages: write` and `id-token: write`.
+
+The old `reusable-publish-quality-report.yml` filename is kept only as a compatibility wrapper. New consumers should use `publish-quality-report.yml`.

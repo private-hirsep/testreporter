@@ -1,16 +1,10 @@
-import { z } from "zod";
+﻿import { z } from "zod";
 
 export const TestStatusSchema = z.enum(["passed", "failed", "broken", "skipped", "unknown"]);
 export const TestLayerSchema = z.enum(["backend", "frontend", "e2e", "unknown"]);
-export const TestFrameworkSchema = z.enum([
-  "junit",
-  "pytest",
-  "vitest",
-  "playwright",
-  "unknown"
-]);
+export const TestFrameworkSchema = z.enum(["junit", "pytest", "vitest", "playwright", "unknown"]);
 export const SeveritySchema = z.enum(["critical", "high", "medium", "low", "info", "unknown"]);
-export const GateStatusSchema = z.enum(["passed", "failed", "warning", "unknown"]);
+export const GateStatusSchema = z.enum(["passed", "failed", "skipped", "not_evaluated"]);
 
 export const NormalizedAttachmentSchema = z.object({
   name: z.string(),
@@ -128,21 +122,26 @@ export const RunMetadataSchema = z.object({
   branch: z.string().optional(),
   commitSha: z.string().optional(),
   runId: z.string().optional(),
-  actor: z.string().optional()
+  actor: z.string().optional(),
+  qualityProfile: z.string().optional(),
+  publishMode: z.string().optional(),
+  prCommentMode: z.string().optional()
+});
+
+export const QualityGateCheckSchema = z.object({
+  id: z.string(),
+  label: z.string(),
+  status: GateStatusSchema,
+  actual: z.union([z.string(), z.number()]),
+  expected: z.string(),
+  message: z.string().optional()
 });
 
 export const QualityGateResultSchema = z.object({
   status: GateStatusSchema,
-  checks: z.array(
-    z.object({
-      id: z.string(),
-      label: z.string(),
-      status: GateStatusSchema,
-      actual: z.union([z.string(), z.number()]),
-      expected: z.string(),
-      message: z.string().optional()
-    })
-  )
+  profile: z.string().optional(),
+  enabled: z.boolean().default(true),
+  checks: z.array(QualityGateCheckSchema)
 });
 
 export const HistoryRunSchema = z.object({
@@ -202,6 +201,8 @@ export type SecurityFinding = z.infer<typeof SecurityFindingSchema>;
 export type DownloadableArtifact = z.infer<typeof DownloadableArtifactSchema>;
 export type ParserWarning = z.infer<typeof ParserWarningSchema>;
 export type RunMetadata = z.infer<typeof RunMetadataSchema>;
+export type ReportMetadata = RunMetadata;
+export type QualityGateCheck = z.infer<typeof QualityGateCheckSchema>;
 export type QualityGateResult = z.infer<typeof QualityGateResultSchema>;
 export type HistoryRun = z.infer<typeof HistoryRunSchema>;
 export type ReportSummary = z.infer<typeof ReportSummarySchema>;

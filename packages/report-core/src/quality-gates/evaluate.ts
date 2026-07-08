@@ -1,10 +1,29 @@
-import type { QualityReportConfig } from "../config/config.js";
-import type { QualityGateResult, ReportSummary } from "../schema/report.js";
+﻿import type { QualityReportConfig } from "../config/config.js";
+import type { ParserWarning, QualityGateResult, ReportSummary } from "../schema/report.js";
 
 export function evaluateQualityGate(
   config: QualityReportConfig,
-  summary: ReportSummary
+  summary: ReportSummary,
+  warnings: ParserWarning[] = [],
+  options: { profile?: string; enabled?: boolean } = {}
 ): QualityGateResult {
+  if (options.enabled === false || config.qualityGates.enabled === false) {
+    return {
+      status: "skipped",
+      profile: options.profile,
+      enabled: false,
+      checks: [
+        {
+          id: "quality-gate.off",
+          label: "Quality gate",
+          actual: "report-only",
+          expected: "profile enabled",
+          status: "skipped",
+          message: "Quality gate profile disables failing checks."
+        }
+      ]
+    };
+  }
   const checks: QualityGateResult["checks"] = [];
   const add = (
     id: string,
@@ -38,7 +57,22 @@ export function evaluateQualityGate(
     `<= ${config.qualityGates.tests.allowBroken}`,
     summary.tests.broken <= config.qualityGates.tests.allowBroken
   );
-  if (config.qualityGates.coverage.totalMinimum !== undefined && summary.coverage.totalPercentage !== undefined) {
+  if (
+    config.qualityGates.tests.allowSkipped !== undefined &&
+    config.qualityGates.tests.allowSkipped !== null
+  ) {
+    add(
+      "tests.skipped",
+      "Skipped tests",
+      summary.tests.skipped,
+      `<= ${config.qualityGates.tests.allowSkipped}`,
+      summary.tests.skipped <= config.qualityGates.tests.allowSkipped
+    );
+  }
+  if (
+    config.qualityGates.coverage.totalMinimum !== undefined &&
+    summary.coverage.totalPercentage !== undefined
+  ) {
     add(
       "coverage.total",
       "Total coverage",
@@ -89,6 +123,15 @@ export function evaluateQualityGate(
       summary.requirements.missing.length === 0
     );
   }
+  if (config.qualityGates.requirements.failOnExtra) {
+    add(
+      "requirements.extra",
+      "Extra requirements",
+      summary.requirements.extra.length,
+      "= 0",
+      summary.requirements.extra.length === 0
+    );
+  }
   add(
     "security.critical",
     "Critical security findings",
@@ -103,9 +146,47 @@ export function evaluateQualityGate(
     `<= ${config.qualityGates.security.maxHigh}`,
     (summary.security.high ?? 0) <= config.qualityGates.security.maxHigh
   );
+  if (
+    config.qualityGates.security.maxMedium !== undefined &&
+    config.qualityGates.security.maxMedium !== null
+  ) {
+    add(
+      "security.medium",
+      "Medium security findings",
+      summary.security.medium ?? 0,
+      `<= ${config.qualityGates.security.maxMedium}`,
+      (summary.security.medium ?? 0) <= config.qualityGates.security.maxMedium
+    );
+  }
+  if (
+    config.qualityGates.security.maxLow !== undefined &&
+    config.qualityGates.security.maxLow !== null
+  ) {
+    add(
+      "security.low",
+      "Low security findings",
+      summary.security.low ?? 0,
+      `<= ${config.qualityGates.security.maxLow}`,
+      (summary.security.low ?? 0) <= config.qualityGates.security.maxLow
+    );
+  }
+  if (
+    config.qualityGates.warnings.maxWarnings !== undefined &&
+    config.qualityGates.warnings.maxWarnings !== null
+  ) {
+    add(
+      "warnings.maxWarnings",
+      "Parser warnings",
+      warnings.length,
+      `<= ${config.qualityGates.warnings.maxWarnings}`,
+      warnings.length <= config.qualityGates.warnings.maxWarnings
+    );
+  }
 
   return {
     status: checks.some((check) => check.status === "failed") ? "failed" : "passed",
+    profile: options.profile,
+    enabled: true,
     checks
   };
 }

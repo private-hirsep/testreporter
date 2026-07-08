@@ -1,8 +1,9 @@
-import { mkdir, mkdtemp, readFile, readdir, stat, writeFile } from "node:fs/promises";
+﻿import { mkdir, mkdtemp, readFile, readdir, stat, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
-import { loadConfig } from "../src/config.js";
+import { QualityReportConfigSchema } from "@quality-report/report-core";
+import { BUILT_IN_QUALITY_PROFILES, loadConfig } from "../src/config.js";
 import { buildReport } from "../src/generator.js";
 
 async function assertFullHtml(output: string) {
@@ -29,6 +30,22 @@ async function assertManifestReferencesExist(output: string) {
   for (const download of manifest.downloads) {
     await expect(stat(path.join(output, download.path))).resolves.toBeTruthy();
   }
+}
+
+async function readGeneratedTextFiles(root: string): Promise<string> {
+  const parts: string[] = [];
+  const visit = async (dir: string) => {
+    for (const entry of await readdir(dir, { withFileTypes: true })) {
+      const full = path.join(dir, entry.name);
+      if (entry.isDirectory()) {
+        await visit(full);
+        continue;
+      }
+      if (/\.(json|html)$/i.test(entry.name)) parts.push(await readFile(full, "utf8"));
+    }
+  };
+  await visit(root);
+  return parts.join("\n");
 }
 
 function zipEntries(buffer: Buffer) {
@@ -59,27 +76,71 @@ describe("report generator", () => {
       configPath,
       inputPath: path.join(root, "examples/minimal/quality-artifacts"),
       outputPath: output,
-      zip: true
+      zip: true,
+      qualityProfile: "relaxed",
+      publishMode: "artifact",
+      prCommentMode: "minimal",
+      prCommentMarker: "<!-- quality-report-platform:summary -->"
     });
     expect(report.tests.length).toBeGreaterThan(0);
     expect(report.summary.tests.byLayer.backend).toBeGreaterThan(0);
     expect(report.downloads.length).toBeGreaterThan(0);
     const serialized = JSON.stringify(report);
     expect(serialized).not.toContain(root.replace(/\\/g, "\\\\"));
-    expect(report.downloads.every((download) => !download.sourcePath || !path.isAbsolute(download.sourcePath))).toBe(
-      true
-    );
-    expect(report.downloads.some((download) => download.category === "report" && download.path.endsWith(".zip"))).toBe(
-      true
-    );
-    expect(report.warnings.some((warning) => warning.code === "artifact.parse-failed")).toBe(true);
+    expect(
+      report.downloads.every(
+        (download) => !download.sourcePath || !path.isAbsolute(download.sourcePath)
+      )
+    ).toBe(true);
+    expect(
+      report.downloads.some(
+        (download) => download.category === "report" && download.path.endsWith(".zip")
+      )
+    ).toBe(true);
+    expect(report.warnings.some((warning) => warning.code === "sarif.malformed")).toBe(true);
     expect(report.requirements.testsByRequirement["JIRA-101"]?.length).toBeGreaterThan(0);
     expect(report.security.some((finding) => finding.helpUri || finding.evidence)).toBe(true);
     await assertFullHtml(output);
     await assertManifestReferencesExist(output);
     await expect(stat(path.join(output, "assets", "stale.js"))).rejects.toThrow();
-    const reportZips = (await readdir(output)).filter((file) => /^quality-report.*\.zip$/i.test(file));
+    const reportZips = (await readdir(output)).filter((file) =>
+      /^quality-report.*\.zip$/i.test(file)
+    );
     expect(reportZips).toEqual(["quality-report.zip"]);
+    const manifest = JSON.parse(
+      await readFile(path.join(output, "data/manifest.json"), "utf8")
+    ) as {
+      metadata: { qualityProfile?: string; publishMode?: string; prCommentMode?: string };
+    };
+    const summary = JSON.parse(
+      await readFile(path.join(output, "meta/quality-summary.json"), "utf8")
+    ) as {
+      publishMode?: string;
+      prCommentMode?: string;
+    };
+    const minimalComment = await readFile(path.join(output, "meta/pr-comment-minimal.md"), "utf8");
+    const fullComment = await readFile(path.join(output, "meta/pr-comment-full.md"), "utf8");
+    expect(manifest.metadata.qualityProfile).toBe("relaxed");
+    expect(manifest.metadata.publishMode).toBe("artifact");
+    expect(manifest.metadata.prCommentMode).toBe("minimal");
+    expect(summary.publishMode).toBe("artifact");
+    expect(summary.prCommentMode).toBe("minimal");
+    expect(minimalComment.startsWith("<!-- quality-report-platform:summary -->")).toBe(true);
+    expect(fullComment.startsWith("<!-- quality-report-platform:summary -->")).toBe(true);
+  });
+
+  it("keeps built-in profiles and custom quality-gate fields typed", async () => {
+    expect(BUILT_IN_QUALITY_PROFILES.strict.requirements?.failOnExtra).toBe(true);
+    expect(BUILT_IN_QUALITY_PROFILES.relaxed.security?.maxMedium).toBe(10);
+    const root = path.resolve(import.meta.dirname, "../../..");
+    const configPath = path.join(root, "examples/minimal/quality-report.yml");
+    const config = await loadConfig(configPath, {
+      qualityGatesPath: path.join(root, "examples/minimal/quality-gates.yml"),
+      qualityProfile: "dogfood-strict"
+    });
+    expect(config.qualityGates.requirements.failOnExtra).toBe(true);
+    expect(config.qualityGates.security.maxMedium).toBe(0);
+    expect(config.qualityGates.warnings.maxWarnings).toBe(0);
   });
 
   it("generates passing and failing reports with the same UI bundle and downloadable ZIPs", async () => {
@@ -139,8 +200,120 @@ describe("report generator", () => {
 
     const zipBuffer = await readFile(path.join(output, zipFiles[0]!));
     const entriesInZip = zipEntries(zipBuffer);
-    expect(entriesInZip.some((entry) => /^quality-report.*\.zip$/i.test(path.basename(entry)))).toBe(false);
+    expect(
+      entriesInZip.some((entry) => /^quality-report.*\.zip$/i.test(path.basename(entry)))
+    ).toBe(false);
     expect(entriesInZip).toContain("index.html");
     expect(entriesInZip).toContain("404.html");
   });
+
+  it("generates complete output with missing optional sections and chunks large suites", async () => {
+    const temp = await mkdtemp(path.join(os.tmpdir(), "quality-report-large-"));
+    const input = path.join(temp, "quality-artifacts");
+    const output = path.join(temp, "report");
+    await mkdir(path.join(input, "tests", "backend", "junit"), { recursive: true });
+    const cases = Array.from(
+      { length: 505 },
+      (_, index) => `<testcase classname="Large" name="test JIRA-${index + 1}" time="0.001" />`
+    ).join("");
+    await writeFile(
+      path.join(input, "tests", "backend", "junit", "large.xml"),
+      `<testsuite>${cases}</testsuite>`
+    );
+    const config = loadConfigFromObject({
+      project: { name: "Large" },
+      artifacts: { tests: { backend: { junit: "tests/backend/junit/**/*.xml" } } },
+      requirements: { keyPattern: "JIRA-[0-9]+" }
+    });
+
+    const report = await buildReport({
+      config,
+      configPath: "quality-report.yml",
+      inputPath: input,
+      outputPath: output
+    });
+
+    expect(report.tests).toHaveLength(505);
+    expect(report.coverage).toEqual([]);
+    expect(report.security).toEqual([]);
+    await assertFullHtml(output);
+    const manifest = JSON.parse(
+      await readFile(path.join(output, "data/manifest.json"), "utf8")
+    ) as {
+      chunks: { tests: string[] };
+    };
+    expect(manifest.chunks.tests).toEqual(["tests-0.json", "tests-1.json"]);
+    await assertManifestReferencesExist(output);
+  });
+
+  it("continues through malformed optional artifacts and does not leak absolute parser paths", async () => {
+    const temp = await mkdtemp(path.join(os.tmpdir(), "quality-report-warnings-"));
+    const input = path.join(temp, "quality-artifacts");
+    const output = path.join(temp, "report");
+    await mkdir(path.join(input, "tests", "backend", "junit"), { recursive: true });
+    await mkdir(path.join(input, "coverage", "frontend"), { recursive: true });
+    await mkdir(path.join(input, "requirements"), { recursive: true });
+    await mkdir(path.join(input, "security", "codeql"), { recursive: true });
+    await mkdir(path.join(input, "raw"), { recursive: true });
+    await writeFile(
+      path.join(input, "tests", "backend", "junit", "tests.xml"),
+      '<testsuite><testcase classname="A" name="uses JIRA-1" file="/home/runner/work/repo/src/a.test.ts" /></testsuite>'
+    );
+    await writeFile(path.join(input, "coverage", "frontend", "coverage-summary.json"), "{");
+    await writeFile(
+      path.join(input, "requirements", "expected.csv"),
+      "key\nJIRA-1\nJIRA-2\nJIRA-2\n"
+    );
+    await writeFile(path.join(input, "requirements", "mapping.json"), "{");
+    await writeFile(path.join(input, "security", "codeql", "bad.sarif"), "{");
+    await writeFile(path.join(input, "raw", "evidence.txt"), "raw");
+    await mkdir(output, { recursive: true });
+    await writeFile(path.join(output, "old.txt"), "stale");
+    const config = loadConfigFromObject({
+      project: { name: "Warnings" },
+      artifacts: {
+        tests: { backend: { junit: "tests/backend/junit/**/*.xml" } },
+        coverage: { frontend: { summaryJson: "coverage/frontend/coverage-summary.json" } },
+        requirements: {
+          expectedKeys: "requirements/expected.csv",
+          mapping: "requirements/mapping.json"
+        },
+        security: { codeqlSarif: "security/codeql/**/*.sarif" },
+        raw: "raw/**/*"
+      },
+      requirements: { keyPattern: "JIRA-[0-9]+" },
+      qualityGates: { requirements: { failOnMissing: true } }
+    });
+
+    const report = await buildReport({
+      config,
+      configPath: "quality-report.yml",
+      inputPath: input,
+      outputPath: output,
+      zip: true
+    });
+
+    expect(report.warnings.map((warning) => warning.code)).toEqual(
+      expect.arrayContaining([
+        "coverage.istanbul.malformed",
+        "requirements.mapping.parse-failed",
+        "sarif.malformed"
+      ])
+    );
+    expect(report.qualityGate.status).toBe("failed");
+    expect(report.requirements.missing).toEqual(["JIRA-2"]);
+    expect(report.downloads.some((download) => download.name === "evidence.txt")).toBe(true);
+    await expect(stat(path.join(output, "old.txt"))).rejects.toThrow();
+    await assertManifestReferencesExist(output);
+    const generatedText = await readGeneratedTextFiles(output);
+    expect(generatedText).not.toMatch(/(^|[\s"'(])([A-Za-z]:[\\/](?![\\/]))/);
+    expect(generatedText).not.toContain("/home/");
+    expect(generatedText).not.toContain("/Users/");
+    expect(generatedText).not.toContain("/mnt/");
+    expect(generatedText).not.toContain("file://");
+  });
 });
+
+function loadConfigFromObject(value: unknown) {
+  return QualityReportConfigSchema.parse(value);
+}

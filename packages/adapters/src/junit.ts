@@ -1,6 +1,6 @@
-import { XMLParser } from "fast-xml-parser";
+import { XMLParser, XMLValidator } from "fast-xml-parser";
 import type { TestLayer } from "@quality-report/report-core";
-import { buildTestCase, numberOrUndefined, toArray } from "./helpers.js";
+import { buildTestCase, numberOrUndefined, parserWarning, toArray } from "./helpers.js";
 import type { ParseContext, TestParseResult } from "./types.js";
 
 type XmlRecord = Record<string, unknown>;
@@ -49,6 +49,25 @@ function labelsOf(testcase: XmlRecord): Record<string, string[]> {
 
 export function parseJUnitXml(xml: string, context: ParseContext): TestParseResult {
   const warnings = [];
+  if (!xml.trim()) {
+    return {
+      items: [],
+      warnings: [parserWarning(context.sourcePath, "junit.empty", "JUnit XML file is empty.")]
+    };
+  }
+  const validation = XMLValidator.validate(xml);
+  if (validation !== true) {
+    return {
+      items: [],
+      warnings: [
+        parserWarning(
+          context.sourcePath,
+          "junit.malformed",
+          validation.err?.msg ?? "Malformed JUnit XML file."
+        )
+      ]
+    };
+  }
   const document = parser.parse(xml) as XmlRecord;
   const root = document.testsuites ?? document.testsuite;
   const suites =
@@ -69,7 +88,9 @@ export function parseJUnitXml(xml: string, context: ParseContext): TestParseResu
         suite: classname,
         file: typeof testcase.file === "string" ? testcase.file : undefined,
         line: numberOrUndefined(testcase.line),
-        framework: inferFramework(classname, context.framework) as ReturnType<typeof inferFramework>,
+        framework: inferFramework(classname, context.framework) as ReturnType<
+          typeof inferFramework
+        >,
         layer: context.layer ?? ("unknown" as TestLayer),
         status: statusOf(testcase),
         durationMs: Math.round((numberOrUndefined(testcase.time) ?? 0) * 1000),
