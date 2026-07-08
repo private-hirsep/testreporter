@@ -7,6 +7,7 @@ import {
   deduplicateTests,
   evaluateQualityGate,
   escapeMarkdownTableCell,
+  extractRequirementKeys,
   formatInlineCode,
   publishModeDeploysPages,
   publishModeUploadsArtifact,
@@ -15,6 +16,7 @@ import {
   resolvePrCommentMode,
   resolvePublishMode,
   resolveQualityProfile,
+  testIdentity,
   QualityReportConfigSchema,
   type NormalizedReport,
   type NormalizedTestCase,
@@ -43,38 +45,38 @@ describe("core normalization and gates", () => {
       test({
         status: "failed",
         durationMs: 10,
-        requirements: ["RFL-1"],
+        requirements: ["JIRA-1"],
         attachments: [{ name: "trace", path: "trace.zip" }]
       }),
-      test({ status: "passed", durationMs: 12, requirements: ["RFL-2"] })
+      test({ status: "passed", durationMs: 12, requirements: ["JIRA-2"] })
     ]);
     expect(result).toHaveLength(1);
     expect(result[0]?.status).toBe("passed");
     expect(result[0]?.retries).toBe(1);
-    expect(result[0]?.requirements).toEqual(["RFL-1", "RFL-2"]);
+    expect(result[0]?.requirements).toEqual(["JIRA-1", "JIRA-2"]);
     expect(result[0]?.attachments).toHaveLength(1);
     expect(result[0]?.id).toBe(testIdentity(result[0]!));
   });
 
   it("extracts and calculates requirement coverage deterministically", () => {
-    expect(extractRequirementKeys("RFL-2 RFL-1 RFL-2", /RFL-[0-9]+/g)).toEqual(["RFL-2", "RFL-1"]);
+    expect(extractRequirementKeys("JIRA-2 JIRA-1 JIRA-2", /JIRA-[0-9]+/g)).toEqual(["JIRA-2", "JIRA-1"]);
     const result = calculateRequirementCoverage(
-      ["RFL-2", "RFL-1", "RFL-1", "RFL-3"],
+      ["JIRA-2", "JIRA-1", "JIRA-1", "JIRA-3"],
       [
-        test({ id: "a", requirements: ["RFL-1", "RFL-2"] }),
-        test({ id: "b", name: "other", requirements: ["RFL-2", "RFL-99"] })
+        test({ id: "a", requirements: ["JIRA-1", "JIRA-2"] }),
+        test({ id: "b", name: "other", requirements: ["JIRA-2", "JIRA-99"] })
       ]
     );
-    expect(result.expected).toEqual(["RFL-1", "RFL-2", "RFL-3"]);
-    expect(result.covered).toEqual(["RFL-1", "RFL-2"]);
-    expect(result.missing).toEqual(["RFL-3"]);
-    expect(result.extra).toEqual(["RFL-99"]);
+    expect(result.expected).toEqual(["JIRA-1", "JIRA-2", "JIRA-3"]);
+    expect(result.covered).toEqual(["JIRA-1", "JIRA-2"]);
+    expect(result.missing).toEqual(["JIRA-3"]);
+    expect(result.extra).toEqual(["JIRA-99"]);
     expect(result.percentage).toBe(66.67);
-    expect(result.testsByRequirement["RFL-2"]).toEqual(["a", "b"]);
+    expect(result.testsByRequirement["JIRA-2"]).toEqual(["a", "b"]);
   });
 
   it("evaluates default strict failed, broken, and security quality gates", () => {
-    const requirements = calculateRequirementCoverage(["RFL-1"], [test({})]);
+    const requirements = calculateRequirementCoverage(["JIRA-1"], [test({})]);
     const security: SecurityFinding[] = [
       { id: "s1", tool: "codeql", title: "critical", severity: "critical", tags: [] },
       { id: "s2", tool: "zap", title: "high", severity: "high", tags: [] }

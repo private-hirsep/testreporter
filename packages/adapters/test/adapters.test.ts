@@ -23,7 +23,7 @@ describe("adapters", () => {
       [
         "<testsuites>",
         '<testsuite name="Suite">',
-        '<testcase classname="A" name="passes RFL-1" time="0.1" file="/home/runner/work/src/a.test.ts" line="7"><properties><property name="requirement" value="RFL-2"/></properties></testcase>',
+        '<testcase classname="A" name="passes JIRA-1" time="0.1" file="/home/runner/work/src/a.test.ts" line="7"><properties><property name="requirement" value="JIRA-2"/></properties></testcase>',
         '<testcase classname="A" name="fails" time="0.2"><failure message="bad">trace</failure></testcase>',
         '<testcase classname="A" name="breaks"><error message="boom">stack</error></testcase>',
         '<testcase classname="A" name="skips"><skipped /></testcase>',
@@ -42,8 +42,8 @@ describe("adapters", () => {
     expect(result.items[0]?.durationMs).toBe(100);
     expect(result.items[0]?.file).toBe("a.test.ts");
     expect(result.items[0]?.line).toBe(7);
-    expect(result.items[0]?.labels.requirement).toEqual(["RFL-2"]);
-    expect(result.items[0]?.requirements).toEqual(["RFL-1", "RFL-2"]);
+    expect(result.items[0]?.labels.requirement).toEqual(["JIRA-2"]);
+    expect(result.items[0]?.requirements).toEqual(["JIRA-1", "JIRA-2"]);
     expect(result.items[1]?.error?.message).toBe("bad");
     expect(result.items[2]?.error?.trace).toBe("stack");
   });
@@ -69,11 +69,11 @@ describe("adapters", () => {
                 title: "child",
                 tests: [
                   {
-                    title: "t RFL-2",
+                    title: "t JIRA-2",
                     projectName: "chromium",
                     browserName: "chromium",
                     location: { file: "C:/work/repo/tests/e2e.spec.ts", line: 12 },
-                    annotations: [{ type: "requirement", description: "RFL-3" }],
+                    annotations: [{ type: "requirement", description: "JIRA-3" }],
                     results: [
                       { status: "failed", retry: 0, errors: [{ message: "bad", stack: "stack" }] },
                       {
@@ -103,7 +103,7 @@ describe("adapters", () => {
     expect(result.items[0]?.status).toBe("passed");
     expect(result.items[0]?.retries).toBe(1);
     expect(result.items[0]?.labels.project).toEqual(["chromium"]);
-    expect(result.items[0]?.requirements).toEqual(["RFL-2", "RFL-3"]);
+    expect(result.items[0]?.requirements).toEqual(["JIRA-2", "JIRA-3"]);
     expect(result.items[0]?.file).toBe("e2e.spec.ts");
     expect(result.items[0]?.line).toBe(12);
     expect(result.items[0]?.attachments[0]?.path).toBe("trace.zip");
@@ -122,7 +122,7 @@ describe("adapters", () => {
             tasks: [
               {
                 type: "test",
-                name: "passes RFL-4",
+                name: "passes JIRA-4",
                 filepath: "/Users/peter/repo/a.test.ts",
                 result: { state: "pass", duration: 3 }
               },
@@ -143,7 +143,7 @@ describe("adapters", () => {
     expect(result.items[0]?.file).toBe("a.test.ts");
     expect(result.items[0]?.durationMs).toBe(3);
     expect(result.items[1]?.error?.message).toBe("bad");
-    expect(result.items[0]?.requirements).toEqual(["RFL-4"]);
+    expect(result.items[0]?.requirements).toEqual(["JIRA-4"]);
     expect(parseVitestJson("{}", context).warnings[0]?.code).toBe("vitest.unexpected-shape");
     expect(parseVitestJson("{", context).warnings[0]?.code).toBe("vitest.malformed");
   });

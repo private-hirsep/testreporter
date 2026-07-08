@@ -279,11 +279,11 @@ async function writeMeta(outputPath: string, report: NormalizedReport, options: 
   const summary = {
     qualityGateStatus: report.qualityGate.status,
     qualityProfile: report.qualityGate.profile ?? report.metadata.qualityProfile ?? "standard",
-    reportPath: outputPath,
-    reportZipPath: zipDownload ? path.join(outputPath, zipDownload.path).replace(/\\/g, "/") : undefined,
-    summaryJsonPath: path.join(metaDir, "quality-summary.json").replace(/\\/g, "/"),
-    minimalCommentPath: path.join(metaDir, "pr-comment-minimal.md").replace(/\\/g, "/"),
-    fullCommentPath: path.join(metaDir, "pr-comment-full.md").replace(/\\/g, "/"),
+    reportPath: ".",
+    reportZipPath: zipDownload?.path,
+    summaryJsonPath: "meta/quality-summary.json",
+    minimalCommentPath: "meta/pr-comment-minimal.md",
+    fullCommentPath: "meta/pr-comment-full.md",
     publishMode: options.publishMode,
     prCommentMode: options.prCommentMode
   };
