@@ -229,7 +229,7 @@ jobs:
       - id: deploy-pages
         name: Deploy GitHub Pages
         if: steps.resolve.outputs.publish-mode == 'pages' || steps.resolve.outputs.publish-mode == 'pages-and-artifact'
-        uses: actions/deploy-pages@v4
+        uses: actions/deploy-pages@v5
 
       - id: pr-comment
         name: Post or update PR comment
