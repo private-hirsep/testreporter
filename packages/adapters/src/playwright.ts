@@ -13,12 +13,21 @@ function visitSuite(suite: JsonRecord, context: ParseContext, parent: string[] =
     const error = toArray(latest.errors as JsonRecord[] | JsonRecord | undefined)[0];
     const annotations = toArray(test.annotations as JsonRecord[] | JsonRecord | undefined);
     const labels: Record<string, string[]> = {};
+    if (typeof test.projectName === "string") labels.project = [test.projectName];
+    if (typeof test.browserName === "string") labels.browser = [test.browserName];
     for (const annotation of annotations) {
       const type = typeof annotation.type === "string" ? annotation.type : "annotation";
       const description =
         typeof annotation.description === "string" ? annotation.description : String(annotation.description ?? "");
       labels[type] = [...(labels[type] ?? []), description].filter(Boolean);
     }
+    const attachments = toArray(latest.attachments as JsonRecord[] | JsonRecord | undefined)
+      .map((attachment) => ({
+        name: String(attachment.name ?? "attachment"),
+        path: String(attachment.path ?? attachment.url ?? ""),
+        ...(typeof attachment.contentType === "string" ? { contentType: attachment.contentType } : {})
+      }))
+      .filter((attachment) => attachment.path);
     const name = typeof test.title === "string" ? test.title : "unnamed playwright test";
     return [
       buildTestCase({
@@ -38,9 +47,11 @@ function visitSuite(suite: JsonRecord, context: ParseContext, parent: string[] =
                 ? "failed"
                 : "unknown",
         durationMs: numberOrUndefined(latest.duration),
+        retries: numberOrUndefined(latest.retry),
         message: typeof error?.message === "string" ? error.message : undefined,
         trace: typeof error?.stack === "string" ? error.stack : undefined,
         labels,
+        attachments,
         requirementPattern: context.requirementPattern,
         sourcePath: context.sourcePath
       })

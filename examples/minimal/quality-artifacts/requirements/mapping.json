@@ -1,3 +1,4 @@
 [
-  { "name": "reports health RFL-103", "requirement": "RFL-103" }
+  { "name": "exports daily quality metrics", "requirement": "RFL-601" },
+  { "name": "handles empty export state", "requirement": "RFL-601" }
 ]

@@ -37,7 +37,7 @@ export function deduplicateTests(tests: NormalizedTestCase[]): NormalizedTestCas
     return {
       ...selected,
       id: testIdentity(selected),
-      retries: Math.max(0, group.length - 1),
+      retries: Math.max(group.length - 1, ...group.map((test) => test.retries)),
       requirements: [...new Set(group.flatMap((test) => test.requirements))],
       attachments: group.flatMap((test) => test.attachments)
     };

@@ -1,36 +1,57 @@
 <template>
   <div v-if="manifest">
-    <h1>Downloads</h1>
-    <v-table density="compact">
-      <thead><tr><th>Name</th><th>Category</th><th>Source</th><th>Size</th><th>Link</th></tr></thead>
+    <div class="page-heading">
+      <div>
+        <h1>Downloads</h1>
+        <div class="page-kicker">{{ manifest.downloads.length }} static artifact links in this report</div>
+      </div>
+    </div>
+    <v-table density="compact" class="data-table list-table">
+      <thead><tr><th>Category</th><th>Name</th><th>Size</th><th class="text-right">Action</th></tr></thead>
       <tbody>
-        <tr v-for="download in manifest.downloads" :key="download.id">
-          <td>{{ download.name }}</td>
-          <td>{{ download.category }}</td>
-          <td>{{ download.sourcePath ?? "generated" }}</td>
-          <td>{{ download.sizeBytes ?? "directory" }}</td>
-          <td><a :href="download.path" target="_blank" rel="noopener">download</a></td>
-        </tr>
+        <template v-for="group in grouped" :key="group.category">
+          <tr v-for="download in group.items" :key="download.id">
+            <td><v-chip size="small" variant="tonal" label>{{ labelFor(group.category) }}</v-chip></td>
+            <td class="wrap-anywhere">
+              <div>{{ download.name }}</div>
+              <div class="page-kicker mono">{{ download.path }}</div>
+            </td>
+            <td class="mono">{{ formatBytes(download.sizeBytes) }}</td>
+            <td class="text-right">
+              <v-btn :href="download.path" target="_blank" rel="noopener" size="small" variant="flat" color="primary" prepend-icon="mdi-download">
+                Download
+              </v-btn>
+            </td>
+          </tr>
+        </template>
       </tbody>
     </v-table>
-    <h2 class="section-heading">Parser Warnings</h2>
-    <v-table density="compact">
-      <thead><tr><th>Code</th><th>Source</th><th>Message</th></tr></thead>
-      <tbody>
-        <tr v-for="warning in manifest.warnings" :key="`${warning.code}-${warning.sourcePath}-${warning.message}`">
-          <td>{{ warning.code }}</td>
-          <td>{{ warning.sourcePath ?? "n/a" }}</td>
-          <td>{{ warning.message }}</td>
-        </tr>
-        <tr v-if="manifest.warnings.length === 0">
-          <td colspan="3">No parser warnings or skipped malformed inputs were recorded.</td>
-        </tr>
-      </tbody>
-    </v-table>
+    <v-alert v-if="manifest.warnings.length" type="warning" variant="tonal" class="mt-4" title="Parser warnings available">
+      {{ manifest.warnings.length }} warning(s) were produced while reading artifacts.
+      <v-btn to="/diagnostics" size="small" variant="text" class="ml-2">Open diagnostics</v-btn>
+    </v-alert>
   </div>
 </template>
 
 <script setup lang="ts">
+import { computed } from "vue";
+import { formatBytes } from "../format";
 import type { Manifest, TestCase } from "../types";
-defineProps<{ manifest?: Manifest; tests: TestCase[] }>();
+const props = defineProps<{ manifest?: Manifest; tests: TestCase[] }>();
+
+const order = ["report", "tests", "coverage", "requirements", "security", "raw"];
+const grouped = computed(() =>
+  order
+    .map((category) => ({
+      category,
+      items: props.manifest?.downloads.filter((download) => download.category === category) ?? []
+    }))
+    .filter((group) => group.items.length)
+);
+
+function labelFor(category: string) {
+  if (category === "report") return "Full report";
+  if (category === "raw") return "Raw artifacts";
+  return category;
+}
 </script>

@@ -11,7 +11,61 @@ export type TestCase = {
   durationMs?: number;
   retries: number;
   requirements: string[];
+  labels?: Record<string, string[]>;
   error?: { message?: string; trace?: string };
+  attachments?: Array<{ name: string; path: string; contentType?: string }>;
+  sourcePath?: string;
+};
+
+export type CoverageMetric = {
+  covered?: number;
+  missed?: number;
+  total?: number;
+  percentage?: number;
+};
+
+export type CoverageFile = {
+  path: string;
+  packageName?: string;
+  statements?: CoverageMetric;
+  instructions?: CoverageMetric;
+  branches?: CoverageMetric;
+  lines?: CoverageMetric;
+  functions?: CoverageMetric;
+  methods?: CoverageMetric;
+};
+
+export type CoverageSummary = {
+  layer: string;
+  statements?: CoverageMetric;
+  instructions?: CoverageMetric;
+  branches?: CoverageMetric;
+  lines?: CoverageMetric;
+  functions?: CoverageMetric;
+  methods?: CoverageMetric;
+  files?: CoverageFile[];
+  rawLinks?: string[];
+};
+
+export type SecurityFinding = {
+  id: string;
+  tool?: string;
+  ruleId?: string;
+  title?: string;
+  message?: string;
+  severity?: string;
+  confidence?: string;
+  riskCode?: string;
+  evidence?: string;
+  cwe?: string | string[];
+  wasc?: string | string[];
+  file?: string;
+  line?: number;
+  url?: string;
+  remediation?: string;
+  help?: string;
+  helpUri?: string;
+  sourcePath?: string;
 };
 
 export type CoverageMetric = {
@@ -110,7 +164,7 @@ export type Manifest = {
   security: SecurityFinding[];
   qualityGate: {
     status: string;
-    checks: Array<{ id: string; label: string; status: string; actual: string | number; expected: string }>;
+    checks: Array<{ id: string; label: string; status: string; actual: string | number; expected: string; message?: string }>;
   };
   downloads: Download[];
   history: {

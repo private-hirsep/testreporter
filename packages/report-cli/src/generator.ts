@@ -44,18 +44,16 @@ export type GenerateOptions = {
 
 const MAX_PARSE_BYTES = 50 * 1024 * 1024;
 
-function safeRelativePath(file: string, root: string): string {
-  if (!path.isAbsolute(file)) return (redactSecrets(file) ?? file).replace(/\\/g, "/");
-  const relative = path.relative(root, file);
-  const safe = relative && !relative.startsWith("..") && !path.isAbsolute(relative) ? relative : path.basename(file);
-  return (redactSecrets(safe) ?? safe).replace(/\\/g, "/");
+function artifactDisplayPath(inputPath: string, file: string) {
+  const relative = path.relative(inputPath, file).replace(/\\/g, "/");
+  return relative && !relative.startsWith("..") && !path.isAbsolute(relative) ? relative : path.basename(file);
 }
 
-async function safeRead(file: string, warnings: ParserWarning[]): Promise<string | undefined> {
+async function safeRead(file: string, warnings: ParserWarning[], displayPath: string): Promise<string | undefined> {
   const size = (await stat(file)).size;
   if (size > MAX_PARSE_BYTES) {
     warnings.push({
-      sourcePath: file,
+      sourcePath: displayPath,
       code: "artifact.too-large",
       message: `Skipped artifact larger than ${MAX_PARSE_BYTES} bytes.`
     });
@@ -89,10 +87,10 @@ function mergeCoverage(items: CoverageSummary[]): CoverageSummary[] {
   });
 }
 
-async function readExpectedRequirements(artifacts: DiscoveredArtifact[], warnings: ParserWarning[]) {
+async function readExpectedRequirements(artifacts: DiscoveredArtifact[], warnings: ParserWarning[], inputPath: string) {
   const keys: string[] = [];
   for (const artifact of artifacts.filter((item) => item.kind === "expectedRequirements")) {
-    const content = await safeRead(artifact.path, warnings);
+    const content = await safeRead(artifact.path, warnings, artifactDisplayPath(inputPath, artifact.path));
     if (!content) continue;
     for (const line of content.split(/\r?\n/)) {
       const key = line.split(",")[0]?.trim();
@@ -105,11 +103,12 @@ async function readExpectedRequirements(artifacts: DiscoveredArtifact[], warning
 async function applyRequirementMappings(
   tests: NormalizedTestCase[],
   artifacts: DiscoveredArtifact[],
-  warnings: ParserWarning[]
+  warnings: ParserWarning[],
+  inputPath: string
 ) {
   const byId = new Map(tests.map((test) => [test.id, test]));
   for (const artifact of artifacts.filter((item) => item.kind === "requirementMapping")) {
-    const content = await safeRead(artifact.path, warnings);
+    const content = await safeRead(artifact.path, warnings, artifactDisplayPath(inputPath, artifact.path));
     if (!content) continue;
     const mappings = JSON.parse(content) as Array<{ testId?: string; name?: string; requirement: string }>;
     for (const mapping of mappings) {
@@ -231,6 +230,9 @@ async function zipDirectory(source: string, target: string) {
 async function cleanOutput(outputPath: string) {
   await rm(outputPath, { recursive: true, force: true });
   await mkdir(outputPath, { recursive: true });
+  for (const entry of await readdir(outputPath)) {
+    await rm(path.join(outputPath, entry), { recursive: true, force: true });
+  }
 }
 
 export async function buildReport(options: GenerateOptions): Promise<NormalizedReport> {
@@ -245,11 +247,12 @@ export async function buildReport(options: GenerateOptions): Promise<NormalizedR
 
   for (const artifact of artifacts) {
     if (["expectedRequirements", "requirementMapping", "rawHtml"].includes(artifact.kind)) continue;
-    const content = await safeRead(artifact.path, warnings);
+    const displayPath = artifactDisplayPath(options.inputPath, artifact.path);
+    const content = await safeRead(artifact.path, warnings, displayPath);
     if (!content) continue;
     try {
       const context = {
-        sourcePath: safeRelativePath(artifact.path, inputRoot),
+        sourcePath: displayPath,
         ...(artifact.layer ? { layer: artifact.layer } : {}),
         requirementPattern
       };
@@ -265,7 +268,7 @@ export async function buildReport(options: GenerateOptions): Promise<NormalizedR
       if (artifact.kind === "zapJson") security.push(...parseZapJson(content, context).items);
     } catch (error) {
       warnings.push({
-        sourcePath: safeRelativePath(artifact.path, inputRoot),
+        sourcePath: displayPath,
         code: "artifact.parse-failed",
         message: error instanceof Error ? error.message : "Unknown parser error"
       });
@@ -273,8 +276,8 @@ export async function buildReport(options: GenerateOptions): Promise<NormalizedR
   }
 
   const dedupedTests = deduplicateTests(tests);
-  await applyRequirementMappings(dedupedTests, artifacts, warnings);
-  const expected = await readExpectedRequirements(artifacts, warnings);
+  await applyRequirementMappings(dedupedTests, artifacts, warnings, options.inputPath);
+  const expected = await readExpectedRequirements(artifacts, warnings, options.inputPath);
   const requirements = calculateRequirementCoverage(expected, dedupedTests);
   const mergedCoverage = mergeCoverage(coverage);
   for (const warning of warnings) {

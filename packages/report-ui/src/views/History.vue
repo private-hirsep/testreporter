@@ -1,39 +1,35 @@
 <template>
   <div v-if="manifest">
-    <h1>History</h1>
+    <div class="page-heading">
+      <div>
+        <h1>History</h1>
+        <div class="page-kicker">Current-run summary prepared for future history merging</div>
+      </div>
+      <v-chip :color="gateColor(manifest.qualityGate.status)" label>{{ manifest.qualityGate.status }}</v-chip>
+    </div>
     <v-alert type="info" variant="tonal" class="mb-4">
-      History storage is prepared in the report data model. Milestone one records the current run only.
+      Historical trend merging is not enabled for this static report yet. This page shows the current run without inventing prior data.
     </v-alert>
-    <v-table density="compact">
-      <thead>
-        <tr>
-          <th>Generated</th>
-          <th>Gate</th>
-          <th>Tests</th>
-          <th>Failed</th>
-          <th>Coverage</th>
-          <th>Requirements</th>
-          <th>Critical</th>
-          <th>High</th>
-        </tr>
-      </thead>
-      <tbody>
-        <tr v-for="run in manifest.history.runs" :key="run.id">
-          <td>{{ run.generatedAt }}</td>
-          <td>{{ run.qualityGateStatus }}</td>
-          <td>{{ run.testsTotal }}</td>
-          <td>{{ run.testsFailed }}</td>
-          <td>{{ run.coveragePercentage ?? "n/a" }}%</td>
-          <td>{{ run.requirementCoveragePercentage ?? "n/a" }}%</td>
-          <td>{{ run.criticalFindings }}</td>
-          <td>{{ run.highFindings }}</td>
-        </tr>
-      </tbody>
-    </v-table>
+    <section class="summary-strip">
+      <div>
+        <div class="page-kicker">Current run</div>
+        <div class="summary-number">{{ generatedDate }}</div>
+      </div>
+      <div class="inline-metrics">
+        <div><strong>{{ manifest.summary.tests.total }}</strong><span>Tests</span></div>
+        <div><strong>{{ formatPercent(manifest.summary.coverage.totalPercentage) }}</strong><span>Coverage</span></div>
+        <div><strong>{{ formatPercent(manifest.requirements.percentage) }}</strong><span>Requirements</span></div>
+        <div><strong :class="securityTotal ? 'text-error' : 'text-success'">{{ securityTotal }}</strong><span>Security findings</span></div>
+      </div>
+    </section>
   </div>
 </template>
 
 <script setup lang="ts">
+import { computed } from "vue";
+import { formatPercent, gateColor } from "../format";
 import type { Manifest, TestCase } from "../types";
-defineProps<{ manifest?: Manifest; tests: TestCase[] }>();
+const props = defineProps<{ manifest?: Manifest; tests: TestCase[] }>();
+const generatedDate = computed(() => (props.manifest ? new Date(props.manifest.metadata.generatedAt).toLocaleDateString() : "n/a"));
+const securityTotal = computed(() => Object.values(props.manifest?.summary.security ?? {}).reduce((sum, value) => sum + value, 0));
 </script>
