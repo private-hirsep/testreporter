@@ -1,4 +1,4 @@
-name: Publish Example Report
+name: Publish Example Pages Report
 
 on:
   workflow_dispatch:
@@ -22,7 +22,7 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm run build
-      - run: npm run quality-report -- generate --config examples/minimal/quality-report.yml --input examples/minimal/quality-artifacts --output dist/example-report --zip
+      - run: npm run quality-report -- generate --config examples/minimal/quality-report.yml --quality-gates examples/minimal/quality-gates.yml --input examples/minimal/quality-artifacts --output dist/example-report --quality-profile relaxed --zip
       - uses: actions/upload-pages-artifact@v3
         with:
           path: dist/example-report

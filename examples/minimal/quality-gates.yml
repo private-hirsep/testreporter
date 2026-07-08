@@ -1,0 +1,30 @@
+qualityGates:
+  tests:
+    allowFailed: 3
+    allowBroken: 2
+  coverage:
+    totalMinimum: 70
+    backendMinimum: 70
+    frontendMinimum: 60
+  requirements:
+    minimum: 75
+    failOnMissing: false
+  security:
+    maxCritical: 0
+    maxHigh: 0
+
+qualityGateProfiles:
+  dogfood-strict:
+    tests:
+      allowFailed: 0
+      allowBroken: 0
+    coverage:
+      totalMinimum: 90
+      backendMinimum: 90
+      frontendMinimum: 85
+    requirements:
+      minimum: 100
+      failOnMissing: true
+    security:
+      maxCritical: 0
+      maxHigh: 0

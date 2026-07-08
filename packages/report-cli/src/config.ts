@@ -1,9 +1,98 @@
 import { readFile } from "node:fs/promises";
 import { parse as parseYaml } from "yaml";
-import { QualityReportConfigSchema, type QualityReportConfig } from "@quality-report/report-core";
+import {
+  QualityReportConfigSchema,
+  type QualityGateConfig,
+  type QualityReportConfig
+} from "@quality-report/report-core";
+import { z } from "zod";
 
-export async function loadConfig(path: string): Promise<QualityReportConfig> {
+const ExternalQualityGatesSchema = z.object({
+  qualityGates: QualityReportConfigSchema.shape.qualityGates.optional(),
+  qualityGateProfiles: QualityReportConfigSchema.shape.qualityGateProfiles.optional()
+});
+
+const builtInProfiles: Record<string, QualityGateConfig> = {
+  off: {
+    tests: { allowFailed: 999999, allowBroken: 999999 },
+    coverage: {},
+    requirements: { failOnMissing: false },
+    security: { maxCritical: 999999, maxHigh: 999999 }
+  },
+  relaxed: {
+    tests: { allowFailed: 3, allowBroken: 2 },
+    coverage: { totalMinimum: 60 },
+    requirements: { minimum: 60, failOnMissing: false },
+    security: { maxCritical: 0, maxHigh: 5 }
+  },
+  standard: {
+    tests: { allowFailed: 0, allowBroken: 0 },
+    coverage: { totalMinimum: 70 },
+    requirements: { minimum: 75, failOnMissing: false },
+    security: { maxCritical: 0, maxHigh: 0 }
+  },
+  strict: {
+    tests: { allowFailed: 0, allowBroken: 0 },
+    coverage: { totalMinimum: 85, backendMinimum: 85, frontendMinimum: 80 },
+    requirements: { minimum: 90, failOnMissing: true },
+    security: { maxCritical: 0, maxHigh: 0 }
+  },
+  release: {
+    tests: { allowFailed: 0, allowBroken: 0 },
+    coverage: { totalMinimum: 90, backendMinimum: 90, frontendMinimum: 85 },
+    requirements: { minimum: 100, failOnMissing: true },
+    security: { maxCritical: 0, maxHigh: 0 }
+  }
+};
+
+export type QualityProfileName = keyof typeof builtInProfiles | string;
+
+export function availableProfiles(config: QualityReportConfig): string[] {
+  return [...Object.keys(builtInProfiles), ...Object.keys(config.qualityGateProfiles)];
+}
+
+export function applyQualityProfile(
+  config: QualityReportConfig,
+  profile: QualityProfileName
+): QualityReportConfig {
+  if (!profile) return config;
+  const gates = config.qualityGateProfiles[profile] ?? builtInProfiles[profile];
+  if (!gates) {
+    throw new Error(
+      `Unknown quality profile "${profile}". Available profiles: ${availableProfiles(config).join(", ")}`
+    );
+  }
+  return { ...config, qualityGates: gates };
+}
+
+async function loadExternalQualityGates(
+  config: QualityReportConfig,
+  path?: string
+): Promise<QualityReportConfig> {
+  if (!path) return config;
   const content = await readFile(path, "utf8");
   const raw = parseYaml(content) as unknown;
-  return QualityReportConfigSchema.parse(raw);
+  const external = ExternalQualityGatesSchema.parse(raw);
+  return {
+    ...config,
+    ...(external.qualityGates ? { qualityGates: external.qualityGates } : {}),
+    qualityGateProfiles: {
+      ...config.qualityGateProfiles,
+      ...(external.qualityGateProfiles ?? {})
+    }
+  };
+}
+
+export async function loadConfig(
+  path: string,
+  profile?: string,
+  qualityGatesPath?: string
+): Promise<QualityReportConfig> {
+  const content = await readFile(path, "utf8");
+  const raw = parseYaml(content) as unknown;
+  const config = await loadExternalQualityGates(
+    QualityReportConfigSchema.parse(raw),
+    qualityGatesPath
+  );
+  return profile ? applyQualityProfile(config, profile) : config;
 }

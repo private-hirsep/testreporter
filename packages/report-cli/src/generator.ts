@@ -47,16 +47,25 @@ const MAX_PARSE_BYTES = 50 * 1024 * 1024;
 function safeRelativePath(file: string, root: string): string {
   if (!path.isAbsolute(file)) return (redactSecrets(file) ?? file).replace(/\\/g, "/");
   const relative = path.relative(root, file);
-  const safe = relative && !relative.startsWith("..") && !path.isAbsolute(relative) ? relative : path.basename(file);
+  const safe =
+    relative && !relative.startsWith("..") && !path.isAbsolute(relative)
+      ? relative
+      : path.basename(file);
   return (redactSecrets(safe) ?? safe).replace(/\\/g, "/");
 }
 
 function artifactDisplayPath(inputPath: string, file: string) {
   const relative = path.relative(inputPath, file).replace(/\\/g, "/");
-  return relative && !relative.startsWith("..") && !path.isAbsolute(relative) ? relative : path.basename(file);
+  return relative && !relative.startsWith("..") && !path.isAbsolute(relative)
+    ? relative
+    : path.basename(file);
 }
 
-async function safeRead(file: string, warnings: ParserWarning[], displayPath: string): Promise<string | undefined> {
+async function safeRead(
+  file: string,
+  warnings: ParserWarning[],
+  displayPath: string
+): Promise<string | undefined> {
   const size = (await stat(file)).size;
   if (size > MAX_PARSE_BYTES) {
     warnings.push({
@@ -94,10 +103,18 @@ function mergeCoverage(items: CoverageSummary[]): CoverageSummary[] {
   });
 }
 
-async function readExpectedRequirements(artifacts: DiscoveredArtifact[], warnings: ParserWarning[], inputPath: string) {
+async function readExpectedRequirements(
+  artifacts: DiscoveredArtifact[],
+  warnings: ParserWarning[],
+  inputPath: string
+) {
   const keys: string[] = [];
   for (const artifact of artifacts.filter((item) => item.kind === "expectedRequirements")) {
-    const content = await safeRead(artifact.path, warnings, artifactDisplayPath(inputPath, artifact.path));
+    const content = await safeRead(
+      artifact.path,
+      warnings,
+      artifactDisplayPath(inputPath, artifact.path)
+    );
     if (!content) continue;
     for (const line of content.split(/\r?\n/)) {
       const key = line.split(",")[0]?.trim();
@@ -115,14 +132,23 @@ async function applyRequirementMappings(
 ) {
   const byId = new Map(tests.map((test) => [test.id, test]));
   for (const artifact of artifacts.filter((item) => item.kind === "requirementMapping")) {
-    const content = await safeRead(artifact.path, warnings, artifactDisplayPath(inputPath, artifact.path));
+    const content = await safeRead(
+      artifact.path,
+      warnings,
+      artifactDisplayPath(inputPath, artifact.path)
+    );
     if (!content) continue;
-    const mappings = JSON.parse(content) as Array<{ testId?: string; name?: string; requirement: string }>;
+    const mappings = JSON.parse(content) as Array<{
+      testId?: string;
+      name?: string;
+      requirement: string;
+    }>;
     for (const mapping of mappings) {
       const matches = mapping.testId
         ? [byId.get(mapping.testId)].filter((test): test is NormalizedTestCase => Boolean(test))
         : tests.filter((test) => test.name === mapping.name || test.fullName === mapping.name);
-      for (const test of matches) test.requirements = [...new Set([...test.requirements, mapping.requirement])];
+      for (const test of matches)
+        test.requirements = [...new Set([...test.requirements, mapping.requirement])];
     }
   }
 }
@@ -221,6 +247,80 @@ async function writeData(outputPath: string, report: NormalizedReport) {
   await writeFile(path.join(dataDir, "manifest.json"), JSON.stringify(manifest, null, 2));
 }
 
+function markdownEscape(value: string | number | undefined): string {
+  return String(value ?? "n/a").replace(/[\\`*_{}[\]()#+\-.!|<>]/g, "\\$&");
+}
+
+function qualitySummary(report: NormalizedReport) {
+  return {
+    qualityGateStatus: report.qualityGate.status,
+    projectName: report.metadata.projectName,
+    generatedAt: report.metadata.generatedAt,
+    tests: report.summary.tests,
+    coverage: report.summary.coverage,
+    requirements: {
+      percentage: report.summary.requirements.percentage,
+      expected: report.summary.requirements.expected.length,
+      covered: report.summary.requirements.covered.length,
+      missing: report.summary.requirements.missing.length
+    },
+    security: report.summary.security,
+    warnings: report.warnings.length,
+    failedChecks: report.qualityGate.checks.filter((check) => check.status === "failed")
+  };
+}
+
+async function writeMeta(outputPath: string, report: NormalizedReport) {
+  const metaDir = path.join(outputPath, "meta");
+  await mkdir(metaDir, { recursive: true });
+  const summary = qualitySummary(report);
+  await writeFile(path.join(metaDir, "quality-summary.json"), JSON.stringify(summary, null, 2));
+
+  const gateIcon = report.qualityGate.status === "passed" ? "PASS" : "FAIL";
+  const minimal = [
+    "<!-- quality-report:pr-comment -->",
+    `## Quality Report: ${gateIcon}`,
+    "",
+    `Project: **${markdownEscape(report.metadata.projectName)}**`,
+    "",
+    "| Metric | Value |",
+    "| --- | ---: |",
+    `| Tests | ${report.summary.tests.total} total, ${report.summary.tests.failed} failed, ${report.summary.tests.broken} broken |`,
+    `| Coverage | ${markdownEscape(report.summary.coverage.totalPercentage)}% |`,
+    `| Requirements | ${report.summary.requirements.percentage}% |`,
+    `| Security | critical ${report.summary.security.critical ?? 0}, high ${report.summary.security.high ?? 0} |`,
+    `| Warnings | ${report.warnings.length} |`,
+    "",
+    `Generated from run \`${markdownEscape(report.metadata.runId)}\`.`
+  ].join("\n");
+
+  const failedChecks = report.qualityGate.checks
+    .filter((check) => check.status === "failed")
+    .map(
+      (check) =>
+        `- ${markdownEscape(check.label)}: ${markdownEscape(check.actual)} expected ${markdownEscape(check.expected)}`
+    );
+  const full = [
+    minimal,
+    "",
+    "### Quality Gate Checks",
+    "",
+    "| Check | Actual | Expected | Status |",
+    "| --- | ---: | --- | --- |",
+    ...report.qualityGate.checks.map(
+      (check) =>
+        `| ${markdownEscape(check.label)} | ${markdownEscape(check.actual)} | ${markdownEscape(check.expected)} | ${markdownEscape(check.status)} |`
+    ),
+    "",
+    "### Failed Checks",
+    "",
+    ...(failedChecks.length > 0 ? failedChecks : ["- None"])
+  ].join("\n");
+
+  await writeFile(path.join(metaDir, "pr-comment-minimal.md"), `${minimal}\n`);
+  await writeFile(path.join(metaDir, "pr-comment-full.md"), `${full}\n`);
+}
+
 async function zipDirectory(source: string, target: string) {
   await new Promise<void>((resolve, reject) => {
     const output = createWriteStream(target);
@@ -261,12 +361,15 @@ export async function buildReport(options: GenerateOptions): Promise<NormalizedR
       };
       if (artifact.kind === "junit") tests.push(...parseJUnitXml(content, context).items);
       if (artifact.kind === "vitestJson") tests.push(...parseVitestJson(content, context).items);
-      if (artifact.kind === "playwrightJson") tests.push(...parsePlaywrightJson(content, context).items);
+      if (artifact.kind === "playwrightJson")
+        tests.push(...parsePlaywrightJson(content, context).items);
       if (artifact.kind === "jacocoXml") coverage.push(...parseJaCoCoXml(content, context).items);
       if (artifact.kind === "jacocoCsv") coverage.push(...parseJaCoCoCsv(content, context).items);
-      if (artifact.kind === "coberturaXml") coverage.push(...parseCoberturaXml(content, context).items);
+      if (artifact.kind === "coberturaXml")
+        coverage.push(...parseCoberturaXml(content, context).items);
       if (artifact.kind === "lcov") coverage.push(...parseLcov(content, context).items);
-      if (artifact.kind === "istanbulSummary") coverage.push(...parseIstanbulSummary(content, context).items);
+      if (artifact.kind === "istanbulSummary")
+        coverage.push(...parseIstanbulSummary(content, context).items);
       if (artifact.kind === "sarif") security.push(...parseSarif(content, context).items);
       if (artifact.kind === "zapJson") security.push(...parseZapJson(content, context).items);
     } catch (error) {
@@ -320,6 +423,7 @@ export async function buildReport(options: GenerateOptions): Promise<NormalizedR
 
   await copyUi(options.outputPath);
   await writeData(options.outputPath, report);
+  await writeMeta(options.outputPath, report);
   if (options.zip) {
     const zipFile = `quality-report-${Date.now()}.zip`;
     const zipPath = path.join(options.outputPath, zipFile);
@@ -334,6 +438,7 @@ export async function buildReport(options: GenerateOptions): Promise<NormalizedR
       sizeBytes: (await stat(zipPath)).size
     });
     await writeData(options.outputPath, report);
+    await writeMeta(options.outputPath, report);
   }
   return report;
 }
