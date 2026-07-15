@@ -1,0 +1,17 @@
+id: RFL-MT-0012
+title: Verify TOKAI draft usability
+description: Confirm a saved reporting draft survives a page reload.
+status: approved
+priority: high
+risk: high
+requirements: [RFL-123]
+tags: [tokai, regression]
+estimatedMinutes: 4
+preconditions: [User is authenticated, Reporting API is available]
+steps:
+  - action: Open the TOKAI report dialog
+    expected: The event type selection is displayed
+  - action: Complete all mandatory fields
+    expected: Save Draft becomes available
+  - action: Save and reload the page
+    expected: The saved draft remains available

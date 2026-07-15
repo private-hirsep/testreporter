@@ -1,5 +1,7 @@
 ﻿import { z } from "zod";
 
+import { ManualCaseSchema, ManualExecutionSchema } from "./manual.js";
+
 export const TestStatusSchema = z.enum(["passed", "failed", "broken", "skipped", "unknown"]);
 export const TestLayerSchema = z.enum(["backend", "frontend", "e2e", "unknown"]);
 export const TestFrameworkSchema = z.enum(["junit", "pytest", "vitest", "playwright", "unknown"]);
@@ -93,6 +95,9 @@ export const RequirementCoverageSchema = z.object({
   extra: z.array(z.string()).default([]),
   percentage: z.number().min(0).max(100),
   testsByRequirement: z.record(z.array(z.string())).default({})
+  ,manualCasesByRequirement: z.record(z.array(z.string())).default({}),
+  latestManualResultByRequirement: z.record(z.enum(["not-run", "passed", "failed", "blocked", "skipped"])).default({}),
+  evidenceTypeByRequirement: z.record(z.enum(["automated", "manual-defined", "manual-executed", "both"])).default({})
 });
 
 export const SecurityFindingSchema = z.object({
@@ -121,7 +126,7 @@ export const SecurityFindingSchema = z.object({
 export const DownloadableArtifactSchema = z.object({
   id: z.string(),
   name: z.string(),
-  category: z.enum(["tests", "coverage", "security", "requirements", "raw", "report"]),
+  category: z.enum(["tests", "coverage", "security", "requirements", "manual", "raw", "report"]),
   path: z.string(),
   sourcePath: z.string().optional(),
   sizeBytes: z.number().int().nonnegative().optional()
@@ -190,7 +195,30 @@ export const ReportSummarySchema = z.object({
     frontendPercentage: z.number().min(0).max(100).optional()
   }),
   security: z.record(z.number().int().nonnegative()),
-  requirements: RequirementCoverageSchema
+  requirements: RequirementCoverageSchema,
+  manual: z
+    .object({
+      cases: z.number().int().nonnegative(),
+      executed: z.number().int().nonnegative(),
+      passed: z.number().int().nonnegative(),
+      failed: z.number().int().nonnegative(),
+      blocked: z.number().int().nonnegative(),
+      skipped: z.number().int().nonnegative(),
+      notRun: z.number().int().nonnegative(),
+      completionPercentage: z.number().min(0).max(100),
+      missingEvidence: z.number().int().nonnegative()
+    })
+    .default({
+      cases: 0,
+      executed: 0,
+      passed: 0,
+      failed: 0,
+      blocked: 0,
+      skipped: 0,
+      notRun: 0,
+      completionPercentage: 100,
+      missingEvidence: 0
+    })
 });
 
 export const IdentityDiagnosticsSchema = z.object({
@@ -217,6 +245,8 @@ export const NormalizedReportSchema = z.object({
   downloads: z.array(DownloadableArtifactSchema),
   history: z.object({ runs: z.array(HistoryRunSchema).default([]) }).default({ runs: [] }),
   warnings: z.array(ParserWarningSchema),
+  manualCases: z.array(ManualCaseSchema).default([]),
+  manualExecutions: z.array(ManualExecutionSchema).default([]),
   identityDiagnostics: IdentityDiagnosticsSchema.default({
     total: 0,
     explicit: 0,

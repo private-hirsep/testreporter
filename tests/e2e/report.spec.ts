@@ -1,5 +1,26 @@
 import { expect, test } from "@playwright/test";
 
+test("manual case runner restores progress and exports a validated result", async ({ page }) => {
+  await page.goto("/#/manual");
+  await expect(page.getByRole("heading", { name: "Manual testing" })).toBeVisible();
+  await expect(page.getByText("RFL-MT-0012 — Verify TOKAI draft usability")).toBeVisible();
+  await page.getByRole("button", { name: "Run case" }).first().click();
+  await page.getByRole("button", { name: "passed" }).nth(0).click();
+  await page.getByRole("button", { name: "passed" }).nth(1).click();
+  await page.getByRole("button", { name: "passed" }).nth(2).click();
+  await page.getByTestId("case-status").click();
+  await page.getByRole("option", { name: "passed" }).click();
+  await page.reload();
+  await expect(page.getByText("1 completed · 1 remaining")).toBeVisible();
+  await page.getByRole("button", { name: "Save and next" }).click();
+  await page.getByRole("button", { name: "skipped" }).click();
+  await page.getByTestId("case-status").click();
+  await page.getByRole("option", { name: "skipped" }).click();
+  const download = page.waitForEvent("download");
+  await page.getByRole("button", { name: "Export validated JSON" }).click();
+  expect((await download).suggestedFilename()).toMatch(/^manual-result-.*\.json$/);
+});
+
 test("generated report loads dashboard and tests", async ({ page }) => {
   await page.goto("/");
   await expect(page.locator(".gate-hero")).toBeVisible();

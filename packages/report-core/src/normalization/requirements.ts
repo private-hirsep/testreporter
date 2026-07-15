@@ -23,7 +23,11 @@ export function calculateRequirementCoverage(
     covered,
     missing,
     extra,
-    percentage: expected.length === 0 ? 100 : Math.round((covered.length / expected.length) * 10000) / 100,
-    testsByRequirement
+    percentage:
+      expected.length === 0 ? 100 : Math.round((covered.length / expected.length) * 10000) / 100,
+    testsByRequirement,
+    manualCasesByRequirement: {},
+    latestManualResultByRequirement: {},
+    evidenceTypeByRequirement: {}
   };
 }

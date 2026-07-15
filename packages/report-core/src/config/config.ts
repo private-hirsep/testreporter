@@ -46,6 +46,14 @@ export const QualityGateConfigSchema = z
         maxLow: z.number().int().nonnegative().nullable().optional()
       })
       .default({ maxCritical: 0, maxHigh: 0, maxMedium: 3 }),
+    manual: z
+      .object({
+        requireCompleted: z.boolean().default(false),
+        failOnFailed: z.boolean().default(false),
+        failOnBlocked: z.boolean().default(false),
+        minimumCompletion: z.number().min(0).max(100).optional()
+      })
+      .optional(),
     warnings: z
       .object({
         maxWarnings: z.number().int().nonnegative().nullable().default(10)
@@ -119,7 +127,10 @@ export const QualityReportConfigSchema = z.object({
           zapJson: MaybeGlobSchema
         })
         .optional(),
-      raw: MaybeGlobSchema
+      raw: MaybeGlobSchema,
+      manual: z
+        .object({ cases: MaybeGlobSchema, results: MaybeGlobSchema, evidence: MaybeGlobSchema })
+        .optional()
     })
     .default({}),
   requirements: z

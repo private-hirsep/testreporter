@@ -7,5 +7,6 @@ export * from "./quality-gates/evaluate.js";
 export * from "./quality-gates/profiles.js";
 export * from "./pr-comments/render.js";
 export * from "./schema/report.js";
+export * from "./schema/manual.js";
 export * from "./utils/hash.js";
 export * from "./utils/redact.js";

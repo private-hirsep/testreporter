@@ -15,6 +15,7 @@
   },
   "dependencies": {
     "@quality-report/report-core": "file:../report-core",
-    "fast-xml-parser": "^5.2.5"
+    "fast-xml-parser": "^5.2.5",
+    "yaml": "^2.8.0"
   }
 }

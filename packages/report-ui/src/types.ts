@@ -168,6 +168,8 @@ export type Manifest = {
     ambiguousMappings: number;
   };
   chunks: { tests: string[] };
+  manualCases: ManualCase[];
+  manualExecutions: ManualExecution[];
 };
 
 export type RequirementCoverage = {
@@ -177,4 +179,54 @@ export type RequirementCoverage = {
   extra: string[];
   percentage: number;
   testsByRequirement: Record<string, string[]>;
+  manualCasesByRequirement?: Record<string, string[]>;
+  latestManualResultByRequirement?: Record<string, ManualStatus>;
+  evidenceTypeByRequirement?: Record<string, "automated" | "manual-defined" | "manual-executed" | "both">;
+};
+
+export type ManualStatus = "not-run" | "passed" | "failed" | "blocked" | "skipped";
+export type ManualCase = {
+  id: string;
+  title: string;
+  description?: string;
+  status: string;
+  priority: string;
+  risk: string;
+  requirements: string[];
+  tags: string[];
+  owner?: string;
+  estimatedMinutes?: number;
+  preconditions: string[];
+  steps: Array<{ action: string; expected: string }>;
+  sourcePath?: string;
+  revision?: string;
+};
+export type ManualExecution = {
+  schemaVersion: "1.0";
+  executionId: string;
+  projectKey: string;
+  release?: string;
+  testedBuild: string;
+  environment: string;
+  tester: string;
+  startedAt: string;
+  completedAt?: string;
+  sourceCommit?: string;
+  state: "draft" | "completed";
+  cases: Array<{
+    caseId: string;
+    caseRevision?: string;
+    status: ManualStatus;
+    steps: Array<{
+      index: number;
+      status: ManualStatus;
+      actualResult?: string;
+      notes?: string;
+      evidence: string[];
+    }>;
+    actualResult?: string;
+    notes?: string;
+    defects: string[];
+    evidence: string[];
+  }>;
 };
