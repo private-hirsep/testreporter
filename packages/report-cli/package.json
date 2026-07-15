@@ -14,7 +14,7 @@
     "@quality-report/adapters": "file:../adapters",
     "@quality-report/report-core": "file:../report-core",
     "archiver": "^7.0.1",
-    "commander": "^12.1.0",
+    "commander": "^15.0.0",
     "fast-glob": "^3.3.3",
     "fs-extra": "^11.3.0",
     "yaml": "^2.8.0",
