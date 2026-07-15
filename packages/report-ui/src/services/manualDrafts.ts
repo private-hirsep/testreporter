@@ -1,33 +1,11 @@
 import type { ManualExecution } from "../types";
 const prefix = "quality-report:manual-draft:";
-export function draftKey(
-  value: Pick<ManualExecution, "projectKey" | "release" | "executionId" | "testedBuild">
-) {
-  return (
-    prefix +
-    [value.projectKey, value.release ?? "", value.executionId, value.testedBuild]
-      .map(encodeURIComponent)
-      .join(":")
-  );
+export type ManualDraftScope = { project: string; reportRun: string; testedBuild: string };
+export function draftKey(scope: ManualDraftScope) {
+  return prefix + [scope.project, scope.reportRun, scope.testedBuild].map(encodeURIComponent).join(":");
 }
 export const manualDrafts = {
-  save(value: ManualExecution) {
-    localStorage.setItem(draftKey(value), JSON.stringify(value));
-  },
-  load(key: string) {
-    const value = localStorage.getItem(key);
-    return value ? (JSON.parse(value) as ManualExecution) : undefined;
-  },
-  remove(key: string) {
-    localStorage.removeItem(key);
-  },
-  list() {
-    return Object.keys(localStorage)
-      .filter((key) => key.startsWith(prefix))
-      .map((key) => ({ key, value: this.load(key)! }))
-      .filter((item) => item.value);
-  },
-  find(context: Pick<ManualExecution, "projectKey" | "release" | "executionId" | "testedBuild">) {
-    return this.load(draftKey(context));
-  }
+  save(scope: ManualDraftScope, value: ManualExecution) { localStorage.setItem(draftKey(scope), JSON.stringify(value)); },
+  load(scope: ManualDraftScope) { const value = localStorage.getItem(draftKey(scope)); return value ? JSON.parse(value) as ManualExecution : undefined; },
+  remove(scope: ManualDraftScope) { localStorage.removeItem(draftKey(scope)); }
 };

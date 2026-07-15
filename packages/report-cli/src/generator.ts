@@ -585,7 +585,7 @@ export async function buildReport(options: GenerateOptions): Promise<NormalizedR
   const security: SecurityFinding[] = [];
   const manualCases: ManualCase[] = [];
   const manualExecutions: ManualExecution[] = [];
-  const officialManualResultPaths = new Set<string>();
+  const manualExecutionPaths = new Map<string, string>();
   const requirementPattern = new RegExp(options.config.requirements.keyPattern, "g");
 
   for (const artifact of artifacts) {
@@ -637,8 +637,7 @@ export async function buildReport(options: GenerateOptions): Promise<NormalizedR
       if (artifact.kind === "manualResult") {
         const parsed = parseManualExecution(content, displayPath);
         collectParseResult(manualExecutions, parsed, warnings);
-        if (parsed.items.some((execution) => execution.state === "completed"))
-          officialManualResultPaths.add(artifact.path);
+        for (const execution of parsed.items) manualExecutionPaths.set(execution.executionId, artifact.path);
       }
     } catch (error) {
       warnings.push({
@@ -662,12 +661,29 @@ export async function buildReport(options: GenerateOptions): Promise<NormalizedR
     (item, index) => manualCases.findIndex((other) => other.id === item.id) === index
   );
   const activeManualCases = uniqueManualCases.filter((item) => item.status === "approved");
+  const activeDefinitions = new Map(activeManualCases.map((item) => [item.id, item]));
+  const definitionIssues = (execution: ManualExecution) => execution.cases.flatMap((result) => {
+    const definition = activeDefinitions.get(result.caseId);
+    if (!definition) return [`${result.caseId} is not an approved manual case`];
+    const indices = result.steps.map((step) => step.index);
+    const expectedIndices = definition.steps.map((_, index) => index);
+    const issues: string[] = [];
+    if (indices.length !== expectedIndices.length || indices.some((value, index) => value !== expectedIndices[index])) issues.push(`${result.caseId} step indices do not match its definition`);
+    if (definition.revision && result.caseRevision !== definition.revision) issues.push(`${result.caseId} revision does not match its definition`);
+    return issues;
+  });
   const officialManualExecutions = manualExecutions
-    .filter((execution) => execution.state === "completed")
+    .filter((execution) => {
+      if (execution.state !== "completed") return false;
+      const issues = definitionIssues(execution);
+      for (const message of issues) warnings.push({ code: "manual.execution.definition-mismatch", sourcePath: manualExecutionPaths.get(execution.executionId), message });
+      return issues.length === 0;
+    })
     .sort((left, right) => left.completedAt!.localeCompare(right.completedAt!));
-  const latest = new Map<string, ManualExecution["cases"][number]>();
+  const officialManualResultPaths = new Set(officialManualExecutions.map((execution) => manualExecutionPaths.get(execution.executionId)).filter((value): value is string => Boolean(value)));
+  const latest = new Map<string, { completedAt: string; executionId: string; result: ManualExecution["cases"][number] }>();
   for (const execution of officialManualExecutions)
-    for (const result of execution.cases) latest.set(result.caseId, result);
+    for (const result of execution.cases) latest.set(result.caseId, { completedAt: execution.completedAt!, executionId: execution.executionId, result });
   for (const test of dedupedTests) {
     const malformed = test.labels.__identityMalformed;
     if (malformed?.length)
@@ -692,8 +708,8 @@ export async function buildReport(options: GenerateOptions): Promise<NormalizedR
   for (const manualCase of activeManualCases) {
     for (const key of manualCase.requirements) {
       requirements.manualCasesByRequirement[key] = [...new Set([...(requirements.manualCasesByRequirement[key] ?? []), manualCase.id])].sort();
-      const statuses = requirements.manualCasesByRequirement[key]!.map((id) => latest.get(id)?.status ?? "not-run");
-      const manualResult = statuses.includes("failed") ? "failed" : statuses.includes("blocked") ? "blocked" : statuses.includes("passed") ? "passed" : statuses.includes("skipped") ? "skipped" : "not-run";
+      const latestRequirementResult = requirements.manualCasesByRequirement[key]!.map((id) => latest.get(id)).filter((value): value is NonNullable<typeof value> => Boolean(value)).sort((left, right) => left.completedAt.localeCompare(right.completedAt) || left.executionId.localeCompare(right.executionId) || left.result.caseId.localeCompare(right.result.caseId)).at(-1);
+      const manualResult = latestRequirementResult?.result.status ?? "not-run";
       requirements.latestManualResultByRequirement[key] = manualResult;
       const automated = Boolean(requirements.testsByRequirement[key]?.length);
       requirements.evidenceTypeByRequirement[key] = automated ? "both" : manualResult === "not-run" ? "manual-defined" : "manual-executed";
@@ -713,7 +729,7 @@ export async function buildReport(options: GenerateOptions): Promise<NormalizedR
   const summary = buildSummary(dedupedTests, mergedCoverage, requirements, security);
   const counts = { passed: 0, failed: 0, blocked: 0, skipped: 0, notRun: 0 };
   for (const item of activeManualCases) {
-    const status = latest.get(item.id)?.status ?? "not-run";
+    const status = latest.get(item.id)?.result.status ?? "not-run";
     counts[status === "not-run" ? "notRun" : status] += 1;
   }
   const executed = activeManualCases.length - counts.notRun;
@@ -724,7 +740,13 @@ export async function buildReport(options: GenerateOptions): Promise<NormalizedR
     completionPercentage: activeManualCases.length
       ? Math.round((executed / activeManualCases.length) * 10000) / 100
       : 100,
-    missingEvidence: [...new Set(officialManualExecutions.flatMap((execution) => execution.cases).flatMap((result) => [...result.evidence, ...result.steps.flatMap((step) => step.evidence)]).filter((name) => !artifacts.some((artifact) => artifact.kind === "manualEvidence" && (artifactDisplayPath(options.inputPath, artifact.path) === name.replace(/\\/g, "/") || path.basename(artifact.path) === path.basename(name)))))].length
+    missingEvidence: (() => {
+      const available = new Set(artifacts.filter((artifact) => artifact.kind === "manualEvidence").map((artifact) => artifactDisplayPath(options.inputPath, artifact.path)));
+      const referenced = officialManualExecutions.flatMap((execution) => execution.cases).flatMap((result) => [...result.evidence, ...result.steps.flatMap((step) => step.evidence)]);
+      const missing = [...new Set(referenced.map((name) => name.replace(/\\/g, "/")).filter((name) => path.posix.isAbsolute(name) || path.posix.normalize(name).startsWith("../") || !available.has(path.posix.normalize(name))))];
+      for (const name of missing) warnings.push({ code: "manual.evidence.missing", message: `Manual evidence reference does not resolve exactly: ${name}` });
+      return missing.length;
+    })()
   };
   const qualityGate = evaluateQualityGate(options.config, summary, warnings);
   const meta = metadata(options.config, options);

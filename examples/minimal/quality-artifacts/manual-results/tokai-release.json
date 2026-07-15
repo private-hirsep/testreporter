@@ -21,13 +21,13 @@
           "index": 2,
           "status": "failed",
           "actualResult": "Draft disappeared after reload",
-          "evidence": ["draft-reload.txt"]
+          "evidence": ["manual-evidence/draft-reload.txt"]
         }
       ],
       "actualResult": "Draft did not survive reload.",
       "notes": "Reproduced twice.",
       "defects": ["BUG-417"],
-      "evidence": ["draft-reload.txt"]
+      "evidence": ["manual-evidence/draft-reload.txt"]
     }
   ]
 }
