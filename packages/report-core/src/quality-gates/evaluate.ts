@@ -42,6 +42,39 @@ export function evaluateQualityGate(
       ...(message ? { message } : {})
     });
   };
+  const manual = config.qualityGates.manual;
+  if (manual?.requireCompleted)
+    add(
+      "manual.completed",
+      "Required manual cases completed",
+      summary.manual.notRun,
+      "= 0",
+      summary.manual.notRun === 0
+    );
+  if (manual?.failOnFailed)
+    add(
+      "manual.failed",
+      "Failed manual cases",
+      summary.manual.failed,
+      "= 0",
+      summary.manual.failed === 0
+    );
+  if (manual?.failOnBlocked)
+    add(
+      "manual.blocked",
+      "Blocked manual cases",
+      summary.manual.blocked,
+      "= 0",
+      summary.manual.blocked === 0
+    );
+  if (manual?.minimumCompletion !== undefined)
+    add(
+      "manual.completion",
+      "Manual completion",
+      summary.manual.completionPercentage,
+      `>= ${manual.minimumCompletion}%`,
+      summary.manual.completionPercentage >= manual.minimumCompletion
+    );
 
   add(
     "tests.failed",

@@ -56,7 +56,9 @@ export function buildSummary(
   const totalPercentage =
     percentages.length === 0
       ? undefined
-      : Math.round((percentages.reduce((sum, value) => sum + value, 0) / percentages.length) * 100) / 100;
+      : Math.round(
+          (percentages.reduce((sum, value) => sum + value, 0) / percentages.length) * 100
+        ) / 100;
 
   return {
     tests: byStatus,
@@ -66,6 +68,17 @@ export function buildSummary(
       frontendPercentage: pct(frontend)
     },
     security: securityCounts,
-    requirements
+    requirements,
+    manual: {
+      cases: 0,
+      executed: 0,
+      passed: 0,
+      failed: 0,
+      blocked: 0,
+      skipped: 0,
+      notRun: 0,
+      completionPercentage: 100,
+      missingEvidence: 0
+    }
   };
 }

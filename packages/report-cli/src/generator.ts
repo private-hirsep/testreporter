@@ -20,7 +20,9 @@ import {
   type ParserWarning,
   type QualityGateCheck,
   type QualityReportConfig,
-  type SecurityFinding
+  type SecurityFinding,
+  type ManualCase,
+  type ManualExecution
 } from "@quality-report/report-core";
 import {
   parseCoberturaXml,
@@ -29,6 +31,8 @@ import {
   parseJaCoCoXml,
   parseJUnitXml,
   parseLcov,
+  parseManualCase,
+  parseManualExecution,
   parsePlaywrightJson,
   parseSarif,
   parseVitestJson,
@@ -199,7 +203,10 @@ type TestMapping = {
 const TEST_MAPPING_SELECTORS = ["framework", "file", "suite", "fullName", "title"] as const;
 
 function exactPatternMatch(pattern: RegExp, value: string): boolean {
-  return new RegExp(`^(?:${pattern.source})$`, pattern.flags.replace("g", "").replace("y", "")).test(value);
+  return new RegExp(
+    `^(?:${pattern.source})$`,
+    pattern.flags.replace("g", "").replace("y", "")
+  ).test(value);
 }
 
 function parseStringArray(value: unknown, field: string): string[] | undefined {
@@ -227,7 +234,11 @@ function parseTestMapping(value: unknown, index: number, identityPattern: RegExp
   }
   if (Object.keys(match).length === 0)
     throw new Error(`Entry ${index}.match must contain at least one selector.`);
-  if (entry.canonicalId !== undefined && (typeof entry.canonicalId !== "string" || !exactPatternMatch(identityPattern, entry.canonicalId)))
+  if (
+    entry.canonicalId !== undefined &&
+    (typeof entry.canonicalId !== "string" ||
+      !exactPatternMatch(identityPattern, entry.canonicalId))
+  )
     throw new Error(`Entry ${index}.canonicalId does not exactly match identity.idPattern.`);
   let links: TestMapping["links"];
   if (entry.links !== undefined) {
@@ -236,8 +247,10 @@ function parseTestMapping(value: unknown, index: number, identityPattern: RegExp
       if (!link || typeof link !== "object" || Array.isArray(link))
         throw new Error(`Entry ${index}.links[${linkIndex}] must be an object.`);
       const item = link as Record<string, unknown>;
-      if (typeof item.label !== "string" || !item.label) throw new Error(`Entry ${index}.links[${linkIndex}].label must be a non-empty string.`);
-      if (typeof item.url !== "string") throw new Error(`Entry ${index}.links[${linkIndex}].url must be a URL.`);
+      if (typeof item.label !== "string" || !item.label)
+        throw new Error(`Entry ${index}.links[${linkIndex}].label must be a non-empty string.`);
+      if (typeof item.url !== "string")
+        throw new Error(`Entry ${index}.links[${linkIndex}].url must be a URL.`);
       try {
         const url = new URL(item.url);
         if (!["http:", "https:"].includes(url.protocol)) throw new Error("unsafe protocol");
@@ -289,7 +302,11 @@ async function applyTestMappings(
         try {
           mappings.push(parseTestMapping(entry, index, identityPattern));
         } catch (error) {
-          warnings.push({ sourcePath: display, code: "identity.mapping.invalid-entry", message: error instanceof Error ? error.message : `Invalid mapping entry ${index}.` });
+          warnings.push({
+            sourcePath: display,
+            code: "identity.mapping.invalid-entry",
+            message: error instanceof Error ? error.message : `Invalid mapping entry ${index}.`
+          });
         }
       }
     } catch (error) {
@@ -379,8 +396,9 @@ async function copyRawArtifacts(
     downloads.push({
       id: stableId(["download", artifact.path]),
       name,
-      category:
-        artifact.kind === "sarif" || artifact.kind === "zapJson"
+      category: artifact.kind.startsWith("manual")
+        ? "manual"
+        : artifact.kind === "sarif" || artifact.kind === "zapJson"
           ? "security"
           : artifact.kind.includes("jacoco") ||
               artifact.kind === "lcov" ||
@@ -454,6 +472,8 @@ async function writeData(outputPath: string, report: NormalizedReport) {
     downloads: report.downloads,
     warnings: report.warnings,
     identityDiagnostics: report.identityDiagnostics,
+    manualCases: report.manualCases,
+    manualExecutions: report.manualExecutions,
     history: report.history,
     chunks: { tests: testChunks }
   };
@@ -563,13 +583,20 @@ export async function buildReport(options: GenerateOptions): Promise<NormalizedR
   const tests: NormalizedTestCase[] = [];
   const coverage: CoverageSummary[] = [];
   const security: SecurityFinding[] = [];
+  const manualCases: ManualCase[] = [];
+  const manualExecutions: ManualExecution[] = [];
+  const manualExecutionPaths = new Map<string, string>();
   const requirementPattern = new RegExp(options.config.requirements.keyPattern, "g");
 
   for (const artifact of artifacts) {
     if (
-      ["expectedRequirements", "requirementMapping", "testMapping", "rawHtml"].includes(
-        artifact.kind
-      )
+      [
+        "expectedRequirements",
+        "requirementMapping",
+        "testMapping",
+        "rawHtml",
+        "manualEvidence"
+      ].includes(artifact.kind)
     )
       continue;
     const displayPath = artifactDisplayPath(options.inputPath, artifact.path);
@@ -605,6 +632,13 @@ export async function buildReport(options: GenerateOptions): Promise<NormalizedR
         collectParseResult(security, parseSarif(content, context), warnings);
       if (artifact.kind === "zapJson")
         collectParseResult(security, parseZapJson(content, context), warnings);
+      if (artifact.kind === "manualCase")
+        collectParseResult(manualCases, parseManualCase(content, displayPath), warnings);
+      if (artifact.kind === "manualResult") {
+        const parsed = parseManualExecution(content, displayPath);
+        collectParseResult(manualExecutions, parsed, warnings);
+        for (const execution of parsed.items) manualExecutionPaths.set(execution.executionId, artifact.path);
+      }
     } catch (error) {
       warnings.push({
         sourcePath: displayPath,
@@ -615,6 +649,45 @@ export async function buildReport(options: GenerateOptions): Promise<NormalizedR
   }
 
   const dedupedTests = deduplicateTests(tests);
+  const duplicateManualIds = manualCases
+    .filter((item, index) => manualCases.findIndex((other) => other.id === item.id) !== index)
+    .map((item) => item.id);
+  if (duplicateManualIds.length)
+    warnings.push({
+      code: "manual.case.duplicate-id",
+      message: `Duplicate manual case IDs: ${[...new Set(duplicateManualIds)].join(", ")}`
+    });
+  const uniqueManualCases = manualCases.filter(
+    (item, index) => manualCases.findIndex((other) => other.id === item.id) === index
+  );
+  const activeManualCases = uniqueManualCases.filter((item) => item.status === "approved");
+  const activeDefinitions = new Map(activeManualCases.map((item) => [item.id, item]));
+  const definitionIssues = (execution: ManualExecution) => execution.cases.flatMap((result) => {
+    const definition = activeDefinitions.get(result.caseId);
+    if (!definition) return [`${result.caseId} is not an approved manual case`];
+    const indices = result.steps.map((step) => step.index);
+    const expectedIndices = definition.steps.map((_, index) => index);
+    const issues: string[] = [];
+    if (indices.length !== expectedIndices.length || indices.some((value, index) => value !== expectedIndices[index])) issues.push(`${result.caseId} step indices do not match its definition`);
+    if (definition.revision && result.caseRevision !== definition.revision) issues.push(`${result.caseId} revision does not match its definition`);
+    return issues;
+  });
+  const officialManualExecutions = manualExecutions
+    .filter((execution) => {
+      if (execution.state !== "completed") return false;
+      const issues = definitionIssues(execution);
+      for (const message of issues) warnings.push({ code: "manual.execution.definition-mismatch", sourcePath: manualExecutionPaths.get(execution.executionId), message });
+      return issues.length === 0;
+    })
+    .sort(
+      (left, right) =>
+        left.completedAt!.localeCompare(right.completedAt!) ||
+        left.executionId.localeCompare(right.executionId)
+    );
+  const officialManualResultPaths = new Set(officialManualExecutions.map((execution) => manualExecutionPaths.get(execution.executionId)).filter((value): value is string => Boolean(value)));
+  const latest = new Map<string, { completedAt: string; executionId: string; result: ManualExecution["cases"][number] }>();
+  for (const execution of officialManualExecutions)
+    for (const result of execution.cases) latest.set(result.caseId, { completedAt: execution.completedAt!, executionId: execution.executionId, result });
   for (const test of dedupedTests) {
     const malformed = test.labels.__identityMalformed;
     if (malformed?.length)
@@ -636,12 +709,67 @@ export async function buildReport(options: GenerateOptions): Promise<NormalizedR
   addConfiguredLinks(dedupedTests, options.config);
   const expected = await readExpectedRequirements(artifacts, warnings, options.inputPath);
   const requirements = calculateRequirementCoverage(expected, dedupedTests);
+  for (const manualCase of activeManualCases) {
+    for (const key of manualCase.requirements) {
+      requirements.manualCasesByRequirement[key] = [...new Set([...(requirements.manualCasesByRequirement[key] ?? []), manualCase.id])].sort();
+      const latestCaseResults = requirements.manualCasesByRequirement[key]!
+        .map((id) => latest.get(id)?.result.status ?? "not-run");
+      const manualResult = latestCaseResults.includes("failed")
+        ? "failed"
+        : latestCaseResults.includes("blocked")
+          ? "blocked"
+          : latestCaseResults.includes("not-run")
+            ? "not-run"
+            : latestCaseResults.includes("passed")
+              ? "passed"
+              : latestCaseResults.includes("skipped")
+                ? "skipped"
+                : "not-run";
+      requirements.latestManualResultByRequirement[key] = manualResult;
+      const automated = Boolean(requirements.testsByRequirement[key]?.length);
+      const hasManualEvidence = latestCaseResults.some((status) => status !== "not-run");
+      requirements.evidenceTypeByRequirement[key] = automated && hasManualEvidence
+        ? "both"
+        : automated
+          ? "automated"
+          : hasManualEvidence
+            ? "manual-executed"
+            : "manual-defined";
+    }
+  }
+  const successfulManualRequirements = Object.entries(requirements.latestManualResultByRequirement).filter(([, status]) => status === "passed").map(([key]) => key);
+  requirements.covered = [...new Set([...requirements.covered, ...successfulManualRequirements.filter((key) => requirements.expected.includes(key))])].sort();
+  requirements.missing = requirements.expected.filter((key) => !requirements.covered.includes(key));
+  requirements.percentage = requirements.expected.length === 0 ? 100 : Math.round(requirements.covered.length / requirements.expected.length * 10000) / 100;
+  for (const key of Object.keys(requirements.testsByRequirement)) if (!requirements.evidenceTypeByRequirement[key]) requirements.evidenceTypeByRequirement[key] = "automated";
   const mergedCoverage = mergeCoverage(coverage);
   for (const warning of warnings) {
     if (warning.sourcePath) warning.sourcePath = safeRelativePath(warning.sourcePath, inputRoot);
   }
-  const downloads = await copyRawArtifacts(artifacts, options.outputPath, inputRoot);
+  const officialArtifacts = artifacts.filter((artifact) => artifact.kind !== "manualResult" || officialManualResultPaths.has(artifact.path));
+  const downloads = await copyRawArtifacts(officialArtifacts, options.outputPath, inputRoot);
   const summary = buildSummary(dedupedTests, mergedCoverage, requirements, security);
+  const counts = { passed: 0, failed: 0, blocked: 0, skipped: 0, notRun: 0 };
+  for (const item of activeManualCases) {
+    const status = latest.get(item.id)?.result.status ?? "not-run";
+    counts[status === "not-run" ? "notRun" : status] += 1;
+  }
+  const executed = activeManualCases.length - counts.notRun;
+  summary.manual = {
+    cases: activeManualCases.length,
+    executed,
+    ...counts,
+    completionPercentage: activeManualCases.length
+      ? Math.round((executed / activeManualCases.length) * 10000) / 100
+      : 100,
+    missingEvidence: (() => {
+      const available = new Set(artifacts.filter((artifact) => artifact.kind === "manualEvidence").map((artifact) => artifactDisplayPath(options.inputPath, artifact.path)));
+      const referenced = officialManualExecutions.flatMap((execution) => execution.cases).flatMap((result) => [...result.evidence, ...result.steps.flatMap((step) => step.evidence)]);
+      const missing = [...new Set(referenced.map((name) => name.replace(/\\/g, "/")).filter((name) => path.posix.isAbsolute(name) || path.posix.normalize(name).startsWith("../") || !available.has(path.posix.normalize(name))))];
+      for (const name of missing) warnings.push({ code: "manual.evidence.missing", message: `Manual evidence reference does not resolve exactly: ${name}` });
+      return missing.length;
+    })()
+  };
   const qualityGate = evaluateQualityGate(options.config, summary, warnings);
   const meta = metadata(options.config, options);
   const report = NormalizedReportSchema.parse({
@@ -670,6 +798,8 @@ export async function buildReport(options: GenerateOptions): Promise<NormalizedR
       ]
     },
     warnings,
+    manualCases: uniqueManualCases,
+    manualExecutions: officialManualExecutions,
     identityDiagnostics: calculateIdentityDiagnostics(dedupedTests, warnings)
   });
 

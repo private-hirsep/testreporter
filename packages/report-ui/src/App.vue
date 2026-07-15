@@ -3,24 +3,52 @@
     <v-navigation-drawer permanent width="282" class="sidebar desktop-drawer">
       <div class="brand">
         <div class="brand-title">{{ manifest?.metadata.projectName ?? "Quality Report" }}</div>
-        <div class="brand-subtitle">{{ manifest?.metadata.repository ?? "Static quality portal" }}</div>
+        <div class="brand-subtitle">
+          {{ manifest?.metadata.repository ?? "Static quality portal" }}
+        </div>
       </div>
       <div v-if="manifest" class="brand-meta">
-        <div class="meta-row"><span>Branch</span><strong class="mono truncate">{{ manifest.metadata.branch ?? "n/a" }}</strong></div>
-        <div class="meta-row"><span>Commit</span><strong class="mono truncate">{{ shortSha(manifest.metadata.commitSha) }}</strong></div>
-        <div class="meta-row"><span>Run</span><strong class="mono truncate">{{ manifest.metadata.runId ?? "n/a" }}</strong></div>
+        <div class="meta-row">
+          <span>Branch</span
+          ><strong class="mono truncate">{{ manifest.metadata.branch ?? "n/a" }}</strong>
+        </div>
+        <div class="meta-row">
+          <span>Commit</span
+          ><strong class="mono truncate">{{ shortSha(manifest.metadata.commitSha) }}</strong>
+        </div>
+        <div class="meta-row">
+          <span>Run</span
+          ><strong class="mono truncate">{{ manifest.metadata.runId ?? "n/a" }}</strong>
+        </div>
       </div>
       <v-list nav density="compact">
-        <v-list-item v-for="item in navItems" :key="item.to" :prepend-icon="item.icon" :title="item.title" :to="item.to" />
+        <v-list-item
+          v-for="item in navItems"
+          :key="item.to"
+          :prepend-icon="item.icon"
+          :title="item.title"
+          :to="item.to"
+        />
       </v-list>
     </v-navigation-drawer>
     <v-app-bar flat border color="surface">
       <v-menu class="mobile-nav">
         <template #activator="{ props: menuProps }">
-          <v-btn v-bind="menuProps" icon="mdi-menu" class="mobile-nav" aria-label="Open navigation" />
+          <v-btn
+            v-bind="menuProps"
+            icon="mdi-menu"
+            class="mobile-nav"
+            aria-label="Open navigation"
+          />
         </template>
         <v-list density="compact">
-          <v-list-item v-for="item in navItems" :key="item.to" :prepend-icon="item.icon" :title="item.title" :to="item.to" />
+          <v-list-item
+            v-for="item in navItems"
+            :key="item.to"
+            :prepend-icon="item.icon"
+            :title="item.title"
+            :to="item.to"
+          />
         </v-list>
       </v-menu>
       <v-app-bar-title>
@@ -48,6 +76,7 @@ const error = ref("");
 const navItems = [
   { title: "Dashboard", to: "/", icon: "mdi-view-dashboard" },
   { title: "Tests", to: "/tests", icon: "mdi-test-tube" },
+  { title: "Manual Testing", to: "/manual", icon: "mdi-clipboard-edit-outline" },
   { title: "Coverage", to: "/coverage", icon: "mdi-chart-donut" },
   { title: "Requirements", to: "/requirements", icon: "mdi-clipboard-check" },
   { title: "Security", to: "/security", icon: "mdi-shield-alert" },

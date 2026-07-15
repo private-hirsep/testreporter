@@ -1,0 +1,10 @@
+id: RFL-MT-0013
+title: Verify offline warning
+status: approved
+priority: medium
+risk: medium
+requirements: [RFL-124]
+tags: [tokai]
+steps:
+  - action: Disconnect the reporting API
+    expected: A non-destructive offline warning is displayed

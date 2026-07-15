@@ -1,0 +1,33 @@
+{
+  "schemaVersion": "1.0",
+  "executionId": "tokai-release-17",
+  "projectKey": "RFL",
+  "release": "17",
+  "testedBuild": "0123456789abcdef",
+  "environment": "staging",
+  "tester": "Example Tester",
+  "startedAt": "2026-07-14T09:00:00.000Z",
+  "completedAt": "2026-07-14T09:08:00.000Z",
+  "sourceCommit": "0123456789abcdef",
+  "state": "completed",
+  "cases": [
+    {
+      "caseId": "RFL-MT-0012",
+      "status": "failed",
+      "steps": [
+        { "index": 0, "status": "passed", "evidence": [] },
+        { "index": 1, "status": "passed", "evidence": [] },
+        {
+          "index": 2,
+          "status": "failed",
+          "actualResult": "Draft disappeared after reload",
+          "evidence": ["manual-evidence/draft-reload.txt"]
+        }
+      ],
+      "actualResult": "Draft did not survive reload.",
+      "notes": "Reproduced twice.",
+      "defects": ["BUG-417"],
+      "evidence": ["manual-evidence/draft-reload.txt"]
+    }
+  ]
+}

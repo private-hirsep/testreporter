@@ -16,6 +16,9 @@ export type ArtifactKind =
   | "expectedRequirements"
   | "requirementMapping"
   | "testMapping"
+  | "manualCase"
+  | "manualResult"
+  | "manualEvidence"
   | "rawHtml";
 
 export type DiscoveredArtifact = {
@@ -46,6 +49,9 @@ export async function discoverArtifacts(
 
   await add("junit", asArray(config.artifacts.tests?.backend?.junit), "backend");
   await add("testMapping", asArray(config.artifacts.tests?.mapping));
+  await add("manualCase", asArray(config.artifacts.manual?.cases));
+  await add("manualResult", asArray(config.artifacts.manual?.results));
+  await add("manualEvidence", asArray(config.artifacts.manual?.evidence));
   await add("junit", asArray(config.artifacts.tests?.backend?.pytestJunit), "backend");
   await add("junit", asArray(config.artifacts.tests?.frontend?.junit), "frontend");
   await add("vitestJson", asArray(config.artifacts.tests?.frontend?.vitestJson), "frontend");

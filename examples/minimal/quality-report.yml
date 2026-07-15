@@ -3,6 +3,10 @@ project:
   repository: your-org/example
 
 artifacts:
+  manual:
+    cases: [test-cases/**/*.yml, test-cases/**/*.yaml]
+    results: manual-results/**/*.json
+    evidence: manual-evidence/**/*
   tests:
     mapping: "tests/test-mapping.json"
     backend:
