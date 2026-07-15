@@ -1,6 +1,7 @@
 ﻿import { z } from "zod";
 
 import { ManualCaseSchema, ManualExecutionSchema } from "./manual.js";
+import { ReadinessSchema, ReleaseScopeSchema } from "../release/readiness.js";
 
 export const TestStatusSchema = z.enum(["passed", "failed", "broken", "skipped", "unknown"]);
 export const TestLayerSchema = z.enum(["backend", "frontend", "e2e", "unknown"]);
@@ -53,7 +54,14 @@ export const NormalizedTestCaseSchema = z.object({
     })
     .optional(),
   attachments: z.array(NormalizedAttachmentSchema).default([]),
-  sourcePath: z.string().optional()
+  sourcePath: z.string().optional(),
+  definitionHistory: z.object({
+    confidence: z.enum(["exact-id", "source-range", "file-level", "unavailable"]),
+    sourcePath: z.string().optional(),
+    earliest: z.object({ hash: z.string(), author: z.string(), date: z.string(), message: z.string(), url: z.string().url().optional() }).optional(),
+    latest: z.object({ hash: z.string(), author: z.string(), date: z.string(), message: z.string(), url: z.string().url().optional() }).optional(),
+    revisions: z.array(z.object({ hash: z.string(), author: z.string(), date: z.string(), message: z.string(), url: z.string().url().optional() })).default([])
+  }).optional()
 });
 
 export const CoverageMetricSchema = z.object({
@@ -139,12 +147,18 @@ export const ParserWarningSchema = z.object({
 });
 
 export const RunMetadataSchema = z.object({
+  projectKey: z.string().optional(),
   projectName: z.string(),
   repository: z.string().optional(),
   generatedAt: z.string(),
   branch: z.string().optional(),
   commitSha: z.string().optional(),
   runId: z.string().optional(),
+  release: z.string().optional(),
+  testedBuild: z.string().optional(),
+  environment: z.string().optional(),
+  workflowRun: z.string().optional(),
+  releaseDate: z.string().optional(),
   actor: z.string().optional(),
   qualityProfile: z.string().optional(),
   publishMode: z.string().optional(),
@@ -247,6 +261,9 @@ export const NormalizedReportSchema = z.object({
   warnings: z.array(ParserWarningSchema),
   manualCases: z.array(ManualCaseSchema).default([]),
   manualExecutions: z.array(ManualExecutionSchema).default([]),
+  releaseScope: ReleaseScopeSchema.optional(),
+  readiness: ReadinessSchema.optional(),
+  git: z.object({ available: z.boolean(), shallow: z.boolean().default(false), commit: z.string().optional(), branch: z.string().optional(), tags: z.array(z.string()).default([]), dirty: z.boolean().optional(), author: z.string().optional(), timestamp: z.string().optional(), message: z.string().optional(), warning: z.string().optional() }).optional(),
   identityDiagnostics: IdentityDiagnosticsSchema.default({
     total: 0,
     explicit: 0,

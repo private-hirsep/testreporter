@@ -6,8 +6,16 @@ import { ZodError } from "zod";
 import { loadConfig } from "./config.js";
 import { discoverArtifacts } from "./discovery.js";
 import { buildReport } from "./generator.js";
+import { buildPortfolio } from "./portfolio.js";
 
 const program = new Command();
+
+program
+  .command("portfolio")
+  .requiredOption("--input <path>", "Directory containing project summaries")
+  .requiredOption("--output <path>", "Static portfolio output directory")
+  .option("--stale-days <days>", "Age after which a summary is stale", "7")
+  .action(async (options: { input: string; output: string; staleDays: string }) => { try { const projects = await buildPortfolio(options.input, options.output, Number(options.staleDays)); console.log(`Generated portfolio for ${projects.length} project(s): ${options.output}`); } catch (error) { handleError(error); } });
 
 program
   .name("quality-report")
@@ -123,6 +131,14 @@ program
   )
   .option("--no-fail-on-quality-gate", "Do not fail when the selected quality gate fails")
   .option("--zip", "Create quality-report.zip in the output directory", false)
+  .option("--release <name>", "Release name/version")
+  .option("--tested-build <id>", "Tested build identifier")
+  .option("--commit-sha <sha>", "Commit SHA")
+  .option("--branch <name>", "Branch")
+  .option("--environment <name>", "Test environment")
+  .option("--workflow-run <id>", "Workflow run identifier or URL")
+  .option("--release-date <date>", "Release date")
+  .option("--release-scope <path>", "Release scope YAML or JSON")
   .action(
     async (options: {
       config: string;
@@ -135,6 +151,7 @@ program
       prCommentMarker?: string;
       failOnQualityGate?: boolean;
       zip?: boolean;
+      release?: string; testedBuild?: string; commitSha?: string; branch?: string; environment?: string; workflowRun?: string; releaseDate?: string; releaseScope?: string;
     }) => {
       try {
         const config = await loadConfig(
@@ -153,6 +170,7 @@ program
           publishMode: options.publishMode,
           prCommentMode: options.prCommentMode,
           prCommentMarker: options.prCommentMarker
+          ,...(options.release ? { release: options.release } : {}), ...(options.testedBuild ? { testedBuild: options.testedBuild } : {}), ...(options.commitSha ? { commitSha: options.commitSha } : {}), ...(options.branch ? { branch: options.branch } : {}), ...(options.environment ? { environment: options.environment } : {}), ...(options.workflowRun ? { workflowRun: options.workflowRun } : {}), ...(options.releaseDate ? { releaseDate: options.releaseDate } : {}), ...(options.releaseScope ? { releaseScope: options.releaseScope } : {})
         });
         console.log(`Generated report for ${report.metadata.projectName}: ${options.output}`);
         console.log(`Quality gate: ${report.qualityGate.status.toUpperCase()}`);

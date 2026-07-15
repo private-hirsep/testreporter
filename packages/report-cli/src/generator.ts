@@ -9,8 +9,10 @@ import {
   calculateIdentityDiagnostics,
   calculateRequirementCoverage,
   deduplicateTests,
+  determineReadiness,
   evaluateQualityGate,
   NormalizedReportSchema,
+  ReleaseScopeSchema,
   redactSecrets,
   stableId,
   type CoverageSummary,
@@ -24,6 +26,7 @@ import {
   type ManualCase,
   type ManualExecution
 } from "@quality-report/report-core";
+import { parse as parseYaml } from "yaml";
 import {
   parseCoberturaXml,
   parseIstanbulSummary,
@@ -39,6 +42,8 @@ import {
   parseZapJson
 } from "@quality-report/adapters";
 import { discoverArtifacts, type DiscoveredArtifact } from "./discovery.js";
+import { collectGitHistory } from "./git-history.js";
+import { writeEvidence, writeProjectSummary } from "./evidence.js";
 
 export type GenerateOptions = {
   config: QualityReportConfig;
@@ -50,6 +55,7 @@ export type GenerateOptions = {
   publishMode?: string | undefined;
   prCommentMode?: string | undefined;
   prCommentMarker?: string | undefined;
+  release?: string; testedBuild?: string; commitSha?: string; branch?: string; environment?: string; workflowRun?: string; releaseDate?: string; releaseScope?: string;
 };
 
 const MAX_PARSE_BYTES = 50 * 1024 * 1024;
@@ -100,13 +106,19 @@ async function safeRead(
 
 function metadata(config: QualityReportConfig, options: GenerateOptions) {
   return {
+    ...(config.project.key ? { projectKey: config.project.key } : {}),
     projectName: config.project.name,
     ...(config.project.repository ? { repository: config.project.repository } : {}),
     generatedAt: new Date().toISOString(),
-    branch: redactSecrets(process.env.GITHUB_REF_NAME),
-    commitSha: redactSecrets(process.env.GITHUB_SHA),
+    branch: redactSecrets(options.branch ?? process.env.QR_BRANCH ?? process.env.GITHUB_REF_NAME ?? config.release.branch),
+    commitSha: redactSecrets(options.commitSha ?? process.env.QR_COMMIT_SHA ?? process.env.GITHUB_SHA ?? config.release.commitSha),
     runId: redactSecrets(process.env.GITHUB_RUN_ID),
     actor: redactSecrets(process.env.GITHUB_ACTOR),
+    release: redactSecrets(options.release ?? process.env.QR_RELEASE ?? config.release.name),
+    testedBuild: redactSecrets(options.testedBuild ?? process.env.QR_TESTED_BUILD ?? config.release.testedBuild),
+    environment: redactSecrets(options.environment ?? process.env.QR_ENVIRONMENT ?? config.release.environment),
+    workflowRun: redactSecrets(options.workflowRun ?? process.env.QR_WORKFLOW_RUN ?? process.env.GITHUB_RUN_ID ?? config.release.workflowRun),
+    releaseDate: redactSecrets(options.releaseDate ?? process.env.QR_RELEASE_DATE ?? config.release.releaseDate),
     ...(options.qualityProfile ? { qualityProfile: options.qualityProfile } : {}),
     ...(options.publishMode ? { publishMode: options.publishMode } : {}),
     ...(options.prCommentMode ? { prCommentMode: options.prCommentMode } : {})
@@ -474,6 +486,9 @@ async function writeData(outputPath: string, report: NormalizedReport) {
     identityDiagnostics: report.identityDiagnostics,
     manualCases: report.manualCases,
     manualExecutions: report.manualExecutions,
+    releaseScope: report.releaseScope,
+    readiness: report.readiness,
+    git: report.git,
     history: report.history,
     chunks: { tests: testChunks }
   };
@@ -561,11 +576,11 @@ async function writeMeta(outputPath: string, report: NormalizedReport, prComment
 async function zipDirectory(source: string, target: string) {
   await new Promise<void>((resolve, reject) => {
     const output = createWriteStream(target);
-    const archive = archiver("zip", { zlib: { level: 9 } });
+    const archive = archiver("zip", { zlib: { level: 9 }, forceLocalTime: false });
     output.on("close", resolve);
     archive.on("error", reject);
     archive.pipe(output);
-    archive.glob("**/*", { cwd: source, ignore: ["quality-report*.zip"] });
+    archive.glob("**/*", { cwd: source, ignore: ["quality-report*.zip"], nodir: true }, { date: new Date("1980-01-01T00:00:00.000Z") });
     void archive.finalize();
   });
 }
@@ -772,6 +787,24 @@ export async function buildReport(options: GenerateOptions): Promise<NormalizedR
   };
   const qualityGate = evaluateQualityGate(options.config, summary, warnings);
   const meta = metadata(options.config, options);
+  let releaseScope;
+  const scopePath = options.releaseScope ?? options.config.release.scope;
+  if (scopePath) {
+    try {
+      const absolute = path.resolve(path.dirname(options.configPath), scopePath);
+      releaseScope = ReleaseScopeSchema.parse(parseYaml(await readFile(absolute, "utf8")));
+      const knownRequirements = new Set([...requirements.expected, ...requirements.covered, ...requirements.extra]);
+      const knownManualCases = new Set(uniqueManualCases.map((item) => item.id));
+      for (const id of releaseScope.requirements.filter((id) => !knownRequirements.has(id))) warnings.push({ code: "release-scope.unknown-requirement", message: `Unknown requirement ID: ${id}` });
+      for (const id of releaseScope.requiredManualCases.filter((id) => !knownManualCases.has(id))) warnings.push({ code: "release-scope.unknown-manual-case", message: `Unknown manual case ID: ${id}` });
+    } catch (error) { warnings.push({ code: "release-scope.invalid", message: error instanceof Error ? error.message : "Invalid release scope" }); }
+  }
+  const manualStatuses = Object.fromEntries(activeManualCases.map((item) => [item.id, latest.get(item.id)?.result.status ?? "not-run"]));
+  const readiness = determineReadiness({ project: meta.projectKey ?? meta.projectName, ...(releaseScope ? { scope: releaseScope } : {}), tests: dedupedTests, manualStatuses, coveredRequirements: requirements.covered, security, qualityGateStatus: qualityGate.status, missingEvidence: summary.manual.missingEvidence ? [`${summary.manual.missingEvidence} manual evidence reference(s)`] : [] });
+  const manualHistoryTargets: NormalizedTestCase[] = uniqueManualCases.map((item) => ({ id: item.id, name: item.title, framework: "unknown", layer: "unknown", status: "unknown", retries: 0, requirements: item.requirements, defects: [], tags: item.tags, links: [], labels: {}, attachments: [], ...(item.sourcePath ? { file: item.sourcePath } : {}) }));
+  const gitResult = options.config.git.enabled ? await collectGitHistory(options.config.git.repositoryPath, [...dedupedTests, ...manualHistoryTargets], { maxRevisions: options.config.git.maxRevisions, ...(options.config.git.commitUrlTemplate ? { commitUrlTemplate: options.config.git.commitUrlTemplate } : {}) }) : undefined;
+  if (gitResult) for (const test of dedupedTests) test.definitionHistory = gitResult.histories.get(test.id);
+  if (gitResult) for (const item of uniqueManualCases) item.definitionHistory = gitResult.histories.get(item.id);
   const report = NormalizedReportSchema.parse({
     schemaVersion: "1.0",
     metadata: meta,
@@ -800,13 +833,25 @@ export async function buildReport(options: GenerateOptions): Promise<NormalizedR
     warnings,
     manualCases: uniqueManualCases,
     manualExecutions: officialManualExecutions,
+    releaseScope,
+    readiness,
+    git: gitResult?.repository,
     identityDiagnostics: calculateIdentityDiagnostics(dedupedTests, warnings)
   });
+
+  if (releaseScope) {
+    const releaseScopeFile = "release-scope.json";
+    await writeFile(path.join(options.outputPath, releaseScopeFile), `${JSON.stringify(releaseScope, null, 2)}\n`);
+    report.downloads.push({ id: stableId(["download", "release-scope"]), name: "Normalized release scope", category: "requirements", path: releaseScopeFile, sizeBytes: (await stat(path.join(options.outputPath, releaseScopeFile))).size });
+  }
 
   await copyUi(options.outputPath);
   await writeData(options.outputPath, report);
   const prCommentMarker = options.prCommentMarker ?? DEFAULT_PR_COMMENT_MARKER;
   await writeMeta(options.outputPath, report, prCommentMarker);
+  await writeProjectSummary(options.outputPath, report, options.config.project.reportUrl);
+  await writeFile(path.join(options.outputPath, "normalized-report.json"), `${JSON.stringify(report, null, 2)}\n`);
+  await writeEvidence(options.outputPath, report);
   if (options.zip) {
     const zipFile = "quality-report.zip";
     const zipPath = path.join(options.outputPath, zipFile);

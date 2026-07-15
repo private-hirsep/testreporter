@@ -161,6 +161,10 @@ describe("report generator", () => {
     expect(summary.prCommentMode).toBe("minimal");
     expect(minimalComment.startsWith("<!-- quality-report-platform:summary -->")).toBe(true);
     expect(fullComment.startsWith("<!-- quality-report-platform:summary -->")).toBe(true);
+    const evidence = JSON.parse(await readFile(path.join(output, "evidence-manifest.json"), "utf8")) as { includedEvidence: Array<{path:string;sha256:string}> };
+    expect(evidence.includedEvidence.length).toBeGreaterThan(0);
+    expect(evidence.includedEvidence.every((item)=>/^[a-f0-9]{64}$/.test(item.sha256))).toBe(true);
+    await expect(stat(path.join(output,"project-quality-summary.json"))).resolves.toBeTruthy();
   });
 
   it("keeps built-in profiles and custom quality-gate fields typed", async () => {
@@ -239,6 +243,10 @@ describe("report generator", () => {
     ).toBe(false);
     expect(entriesInZip).toContain("index.html");
     expect(entriesInZip).toContain("404.html");
+    expect(entriesInZip).toContain("evidence-manifest.json");
+    expect(entriesInZip).toContain("checksums.sha256");
+    expect(entriesInZip).toContain("normalized-report.json");
+    expect(entriesInZip).toContain("project-quality-summary.json");
   });
 
   it("generates complete output with missing optional sections and chunks large suites", async () => {

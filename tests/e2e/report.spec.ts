@@ -39,6 +39,29 @@ test("generated report loads dashboard and tests", async ({ page }) => {
   await expect(page.getByText("creates user account JIRA-101")).toBeVisible();
 });
 
+test("release readiness explains a blocker and links to its test", async ({ page }) => {
+  await page.goto("/#/readiness");
+  await expect(page.getByRole("heading", { name: "Release readiness" })).toBeVisible();
+  await expect(page.getByText(/release blocker/)).toBeVisible();
+  const failed = page.getByText(/Test .* failed\./).first();
+  await expect(failed).toBeVisible();
+  await failed.click();
+  await expect(page.locator(".test-detail")).toBeVisible();
+});
+
+test("test detail separates definition and execution history", async ({ page }) => {
+  await page.goto("/#/tests"); await page.getByText("creates user account JIRA-101").click();
+  await expect(page.getByRole("heading", { name: "Execution History" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Definition History" })).toBeVisible();
+  await expect(page.getByText(/unavailable/).last()).toBeVisible();
+});
+
+test("audit evidence manifest and checksums are inspectable", async ({ request }) => {
+  const manifest=await request.get("/evidence-manifest.json"); expect(manifest.ok()).toBeTruthy();
+  const value=await manifest.json() as {includedEvidence:Array<{sha256:string}>}; expect(value.includedEvidence.length).toBeGreaterThan(0);
+  const checksums=await request.get("/checksums.sha256"); expect(checksums.ok()).toBeTruthy(); expect(await checksums.text()).toMatch(/[a-f0-9]{64}/);
+});
+
 test("navigation routes work with GitHub Pages hash fallback", async ({ page }) => {
   await page.goto("/404.html#/coverage");
   await expect(page.getByRole("heading", { name: "Coverage", exact: true })).toBeVisible();

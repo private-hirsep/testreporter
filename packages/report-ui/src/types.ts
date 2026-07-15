@@ -29,7 +29,9 @@ export type TestCase = {
   error?: { message?: string; trace?: string };
   attachments?: Array<{ name: string; path: string; contentType?: string }>;
   sourcePath?: string;
+  definitionHistory?: { confidence: "exact-id"|"source-range"|"file-level"|"unavailable"; sourcePath?: string; earliest?: DefinitionRevision; latest?: DefinitionRevision; revisions: DefinitionRevision[] };
 };
+export type DefinitionRevision = { hash:string; author:string; date:string; message:string; url?:string };
 
 export type CoverageMetric = {
   covered?: number;
@@ -106,6 +108,7 @@ export type Manifest = {
     qualityProfile?: string;
     publishMode?: string;
     prCommentMode?: string;
+    projectKey?: string; release?: string; testedBuild?: string; environment?: string; workflowRun?: string; releaseDate?: string;
   };
   summary: {
     tests: {
@@ -170,6 +173,7 @@ export type Manifest = {
   chunks: { tests: string[] };
   manualCases: ManualCase[];
   manualExecutions: ManualExecution[];
+  readiness?: { status:"ready"|"ready-with-accepted-risks"|"warning"|"blocked"|"incomplete"; reasons:string[]; automated:{passed:number;failed:number;skipped:number;missing:boolean}; manual:{passed:number;failed:number;blocked:number;notRun:number}; requirements:{covered:number;uncovered:string[]}; securityBlockers:number; qualityGateFailed:boolean; acceptedRisks:Array<{id:string;reason:string;reference?:string}>; missingEvidence:string[]; actions:Array<{severity:string;type:string;project:string;reference?:string;message:string;href?:string}> };
 };
 
 export type RequirementCoverage = {
@@ -200,6 +204,7 @@ export type ManualCase = {
   steps: Array<{ action: string; expected: string }>;
   sourcePath?: string;
   revision?: string;
+  definitionHistory?: { confidence:"exact-id"|"source-range"|"file-level"|"unavailable"; sourcePath?:string; earliest?:DefinitionRevision; latest?:DefinitionRevision; revisions:DefinitionRevision[] };
 };
 export type ManualExecution = {
   schemaVersion: "1.0";

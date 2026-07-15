@@ -75,6 +75,7 @@ const tests = ref<TestCase[]>([]);
 const error = ref("");
 const navItems = [
   { title: "Dashboard", to: "/", icon: "mdi-view-dashboard" },
+  { title: "Release Readiness", to: "/readiness", icon: "mdi-rocket-launch" },
   { title: "Tests", to: "/tests", icon: "mdi-test-tube" },
   { title: "Manual Testing", to: "/manual", icon: "mdi-clipboard-edit-outline" },
   { title: "Coverage", to: "/coverage", icon: "mdi-chart-donut" },

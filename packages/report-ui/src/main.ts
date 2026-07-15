@@ -17,6 +17,7 @@ import Security from "./views/Security.vue";
 import TestDetail from "./views/TestDetail.vue";
 import Tests from "./views/Tests.vue";
 import Manual from "./views/Manual.vue";
+import Readiness from "./views/Readiness.vue";
 
 const router = createRouter({
   history: createWebHashHistory(),
@@ -25,6 +26,7 @@ const router = createRouter({
     { path: "/tests", component: Tests },
     { path: "/tests/:id", component: TestDetail },
     { path: "/manual", component: Manual },
+    { path: "/readiness", component: Readiness },
     { path: "/coverage", component: Coverage },
     { path: "/requirements", component: Requirements },
     { path: "/security", component: Security },
