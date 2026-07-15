@@ -37,6 +37,9 @@ describe("manual testing model", () => {
       })
     ).toThrow();
   });
+  it("enforces case status from step statuses", () => {
+    expect(() => ManualExecutionSchema.parse({ schemaVersion: "1.0", executionId: "run", projectKey: "APP", testedBuild: "build", environment: "test", tester: "tester", startedAt: "2026-01-01T00:00:00.000Z", completedAt: "2026-01-01T01:00:00.000Z", state: "completed", cases: [{ caseId: "APP-MT-1", status: "passed", steps: [{ index: 0, status: "failed", evidence: [] }], defects: [], evidence: [] }] })).toThrow(/does not match step status failed/);
+  });
   it("keeps manual gates opt-in", () => {
     const config = QualityReportConfigSchema.parse({ project: { name: "APP" } });
     const summary = {

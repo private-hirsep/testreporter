@@ -5,6 +5,8 @@ test("manual case runner restores progress and exports a validated result", asyn
   await expect(page.getByRole("heading", { name: "Manual testing" })).toBeVisible();
   await expect(page.getByText("RFL-MT-0012 — Verify TOKAI draft usability")).toBeVisible();
   await page.getByRole("button", { name: "Run case" }).first().click();
+  await expect(page.getByLabel("Execution ID")).toBeEditable();
+  await page.getByLabel("Tester").fill("E2E Tester");
   await page.getByRole("button", { name: "passed" }).nth(0).click();
   await page.getByRole("button", { name: "passed" }).nth(1).click();
   await page.getByRole("button", { name: "passed" }).nth(2).click();

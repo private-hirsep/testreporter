@@ -26,5 +26,8 @@ export const manualDrafts = {
       .filter((key) => key.startsWith(prefix))
       .map((key) => ({ key, value: this.load(key)! }))
       .filter((item) => item.value);
+  },
+  find(context: Pick<ManualExecution, "projectKey" | "release" | "executionId" | "testedBuild">) {
+    return this.load(draftKey(context));
   }
 };

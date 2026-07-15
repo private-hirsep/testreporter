@@ -63,11 +63,24 @@ export const ManualExecutionSchema = z
           message: "Duplicate case ID"
         });
       ids.add(item.caseId);
+      const calculated = calculateManualCaseStatus(item.steps);
+      if (item.status !== calculated)
+        ctx.addIssue({
+          code: "custom",
+          path: ["cases", index, "status"],
+          message: `Case status ${item.status} does not match step status ${calculated}`
+        });
       if (value.state === "completed" && item.status === "not-run")
         ctx.addIssue({
           code: "custom",
           path: ["cases", index, "status"],
           message: "Completed executions cannot contain not-run cases"
+        });
+      if (value.state === "completed" && item.steps.some((step) => step.status === "not-run"))
+        ctx.addIssue({
+          code: "custom",
+          path: ["cases", index, "steps"],
+          message: "Completed executions cannot contain not-run steps"
         });
     });
     if (value.state === "completed" && !value.completedAt)

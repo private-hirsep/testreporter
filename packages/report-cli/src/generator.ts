@@ -585,6 +585,7 @@ export async function buildReport(options: GenerateOptions): Promise<NormalizedR
   const security: SecurityFinding[] = [];
   const manualCases: ManualCase[] = [];
   const manualExecutions: ManualExecution[] = [];
+  const officialManualResultPaths = new Set<string>();
   const requirementPattern = new RegExp(options.config.requirements.keyPattern, "g");
 
   for (const artifact of artifacts) {
@@ -633,8 +634,12 @@ export async function buildReport(options: GenerateOptions): Promise<NormalizedR
         collectParseResult(security, parseZapJson(content, context), warnings);
       if (artifact.kind === "manualCase")
         collectParseResult(manualCases, parseManualCase(content, displayPath), warnings);
-      if (artifact.kind === "manualResult")
-        collectParseResult(manualExecutions, parseManualExecution(content, displayPath), warnings);
+      if (artifact.kind === "manualResult") {
+        const parsed = parseManualExecution(content, displayPath);
+        collectParseResult(manualExecutions, parsed, warnings);
+        if (parsed.items.some((execution) => execution.state === "completed"))
+          officialManualResultPaths.add(artifact.path);
+      }
     } catch (error) {
       warnings.push({
         sourcePath: displayPath,
@@ -656,6 +661,13 @@ export async function buildReport(options: GenerateOptions): Promise<NormalizedR
   const uniqueManualCases = manualCases.filter(
     (item, index) => manualCases.findIndex((other) => other.id === item.id) === index
   );
+  const activeManualCases = uniqueManualCases.filter((item) => item.status === "approved");
+  const officialManualExecutions = manualExecutions
+    .filter((execution) => execution.state === "completed")
+    .sort((left, right) => left.completedAt!.localeCompare(right.completedAt!));
+  const latest = new Map<string, ManualExecution["cases"][number]>();
+  for (const execution of officialManualExecutions)
+    for (const result of execution.cases) latest.set(result.caseId, result);
   for (const test of dedupedTests) {
     const malformed = test.labels.__identityMalformed;
     if (malformed?.length)
@@ -677,50 +689,42 @@ export async function buildReport(options: GenerateOptions): Promise<NormalizedR
   addConfiguredLinks(dedupedTests, options.config);
   const expected = await readExpectedRequirements(artifacts, warnings, options.inputPath);
   const requirements = calculateRequirementCoverage(expected, dedupedTests);
-  for (const manualCase of uniqueManualCases) {
+  for (const manualCase of activeManualCases) {
     for (const key of manualCase.requirements) {
-      requirements.manualCasesByRequirement[key] = [...(requirements.manualCasesByRequirement[key] ?? []), manualCase.id];
-      const manualResult = [...manualExecutions].reverse().flatMap((execution) => execution.cases).find((result) => result.caseId === manualCase.id)?.status ?? "not-run";
+      requirements.manualCasesByRequirement[key] = [...new Set([...(requirements.manualCasesByRequirement[key] ?? []), manualCase.id])].sort();
+      const statuses = requirements.manualCasesByRequirement[key]!.map((id) => latest.get(id)?.status ?? "not-run");
+      const manualResult = statuses.includes("failed") ? "failed" : statuses.includes("blocked") ? "blocked" : statuses.includes("passed") ? "passed" : statuses.includes("skipped") ? "skipped" : "not-run";
       requirements.latestManualResultByRequirement[key] = manualResult;
       const automated = Boolean(requirements.testsByRequirement[key]?.length);
       requirements.evidenceTypeByRequirement[key] = automated ? "both" : manualResult === "not-run" ? "manual-defined" : "manual-executed";
     }
   }
+  const successfulManualRequirements = Object.entries(requirements.latestManualResultByRequirement).filter(([, status]) => status === "passed").map(([key]) => key);
+  requirements.covered = [...new Set([...requirements.covered, ...successfulManualRequirements.filter((key) => requirements.expected.includes(key))])].sort();
+  requirements.missing = requirements.expected.filter((key) => !requirements.covered.includes(key));
+  requirements.percentage = requirements.expected.length === 0 ? 100 : Math.round(requirements.covered.length / requirements.expected.length * 10000) / 100;
   for (const key of Object.keys(requirements.testsByRequirement)) if (!requirements.evidenceTypeByRequirement[key]) requirements.evidenceTypeByRequirement[key] = "automated";
   const mergedCoverage = mergeCoverage(coverage);
   for (const warning of warnings) {
     if (warning.sourcePath) warning.sourcePath = safeRelativePath(warning.sourcePath, inputRoot);
   }
-  const downloads = await copyRawArtifacts(artifacts, options.outputPath, inputRoot);
+  const officialArtifacts = artifacts.filter((artifact) => artifact.kind !== "manualResult" || officialManualResultPaths.has(artifact.path));
+  const downloads = await copyRawArtifacts(officialArtifacts, options.outputPath, inputRoot);
   const summary = buildSummary(dedupedTests, mergedCoverage, requirements, security);
-  const latest = new Map<string, ManualExecution["cases"][number]>();
-  for (const execution of manualExecutions)
-    for (const result of execution.cases) latest.set(result.caseId, result);
   const counts = { passed: 0, failed: 0, blocked: 0, skipped: 0, notRun: 0 };
-  for (const item of uniqueManualCases) {
+  for (const item of activeManualCases) {
     const status = latest.get(item.id)?.status ?? "not-run";
     counts[status === "not-run" ? "notRun" : status] += 1;
   }
-  const executed = uniqueManualCases.length - counts.notRun;
+  const executed = activeManualCases.length - counts.notRun;
   summary.manual = {
-    cases: uniqueManualCases.length,
+    cases: activeManualCases.length,
     executed,
     ...counts,
-    completionPercentage: uniqueManualCases.length
-      ? Math.round((executed / uniqueManualCases.length) * 10000) / 100
+    completionPercentage: activeManualCases.length
+      ? Math.round((executed / activeManualCases.length) * 10000) / 100
       : 100,
-    missingEvidence: manualExecutions
-      .flatMap((execution) => execution.cases)
-      .filter((result) =>
-        result.evidence.some(
-          (name) =>
-            !artifacts.some(
-              (artifact) =>
-                artifact.kind === "manualEvidence" &&
-                path.basename(artifact.path) === path.basename(name)
-            )
-        )
-      ).length
+    missingEvidence: [...new Set(officialManualExecutions.flatMap((execution) => execution.cases).flatMap((result) => [...result.evidence, ...result.steps.flatMap((step) => step.evidence)]).filter((name) => !artifacts.some((artifact) => artifact.kind === "manualEvidence" && (artifactDisplayPath(options.inputPath, artifact.path) === name.replace(/\\/g, "/") || path.basename(artifact.path) === path.basename(name)))))].length
   };
   const qualityGate = evaluateQualityGate(options.config, summary, warnings);
   const meta = metadata(options.config, options);
@@ -751,7 +755,7 @@ export async function buildReport(options: GenerateOptions): Promise<NormalizedR
     },
     warnings,
     manualCases: uniqueManualCases,
-    manualExecutions,
+    manualExecutions: officialManualExecutions,
     identityDiagnostics: calculateIdentityDiagnostics(dedupedTests, warnings)
   });
 
