@@ -1,51 +1,119 @@
 <template>
   <div v-if="manifest">
     <PageHeader title="Tests" :subtitle="`${filtered.length} of ${tests.length} tests shown`">
-      <v-chip :color="manifest.summary.tests.failed || manifest.summary.tests.broken ? 'error' : 'success'" label>
+      <v-chip
+        :color="
+          manifest.summary.tests.failed || manifest.summary.tests.broken ? 'error' : 'success'
+        "
+        label
+      >
         {{ manifest.summary.tests.failed + manifest.summary.tests.broken }} attention
       </v-chip>
     </PageHeader>
     <div class="tab-strip" role="tablist" aria-label="Test result filters">
-      <v-btn v-for="tab in tabs" :key="tab.value" :variant="view === tab.value ? 'flat' : 'outlined'" :color="view === tab.value ? tab.color : undefined" size="small" @click="view = tab.value">
+      <v-btn
+        v-for="tab in tabs"
+        :key="tab.value"
+        :variant="view === tab.value ? 'flat' : 'outlined'"
+        :color="view === tab.value ? tab.color : undefined"
+        size="small"
+        @click="view = tab.value"
+      >
         {{ tab.label }} {{ tab.count }}
       </v-btn>
     </div>
     <div class="toolbar toolbar-4">
-      <v-text-field v-model="search" label="Search tests" density="compact" hide-details prepend-inner-icon="mdi-magnify" />
+      <v-text-field
+        v-model="search"
+        label="Search tests"
+        density="compact"
+        hide-details
+        prepend-inner-icon="mdi-magnify"
+      />
       <v-select v-model="status" :items="statuses" label="Status" density="compact" hide-details />
       <v-select v-model="layer" :items="layers" label="Layer" density="compact" hide-details />
-      <v-select v-model="framework" :items="frameworks" label="Framework" density="compact" hide-details />
+      <v-select
+        v-model="framework"
+        :items="frameworks"
+        label="Framework"
+        density="compact"
+        hide-details
+      />
     </div>
     <EmptyState v-if="!filtered.length" message="No tests match the current filters." />
     <v-table v-else density="compact" fixed-header height="650" class="data-table">
       <thead>
         <tr>
           <th v-for="column in columns" :key="column.key" :aria-sort="ariaSort(column.key)">
-            <button v-if="column.sortable" class="th-sort" type="button" @click="setSort(column.key)">
+            <button
+              v-if="column.sortable"
+              class="th-sort"
+              type="button"
+              @click="setSort(column.key)"
+            >
               {{ column.label }}
-              <v-icon v-if="sortKey === column.key" size="x-small" :icon="sortDir === 1 ? 'mdi-arrow-up' : 'mdi-arrow-down'" />
+              <v-icon
+                v-if="sortKey === column.key"
+                size="x-small"
+                :icon="sortDir === 1 ? 'mdi-arrow-up' : 'mdi-arrow-down'"
+              />
             </button>
             <template v-else>{{ column.label }}</template>
           </th>
         </tr>
       </thead>
       <tbody>
-        <tr v-for="test in filtered" :key="test.id" :class="{ 'failed-row': test.status === 'failed', 'broken-row': test.status === 'broken' }">
+        <tr
+          v-for="test in filtered"
+          :key="test.id"
+          :class="{
+            'failed-row': test.status === 'failed',
+            'broken-row': test.status === 'broken'
+          }"
+        >
           <td><StatusChip :status="test.status" /></td>
-          <td><router-link :to="`/tests/${test.id}`">{{ test.fullName ?? test.name }}</router-link></td>
-          <td><v-chip size="small" variant="tonal" label>{{ test.layer }}</v-chip></td>
-          <td><v-chip size="small" variant="outlined" label>{{ test.framework }}</v-chip></td>
           <td>
-            <span class="mono cell-truncate" :title="sourceLocation(test)">{{ sourceLocation(test) }}</span>
+            <router-link :to="`/tests/${test.id}`">{{ test.fullName ?? test.name }}</router-link>
+            <div class="mono text-caption text-medium-emphasis">
+              {{ test.identity?.canonicalId ?? test.id }}
+            </div>
+          </td>
+          <td>
+            <v-chip size="small" variant="tonal" label>{{ test.layer }}</v-chip>
+          </td>
+          <td>
+            <v-chip size="small" variant="outlined" label>{{ test.framework }}</v-chip>
+          </td>
+          <td>
+            <span class="mono cell-truncate" :title="sourceLocation(test)">{{
+              sourceLocation(test)
+            }}</span>
           </td>
           <td class="mono">{{ formatDuration(test.durationMs) }}</td>
           <td>
-            <v-chip v-for="key in test.requirements.slice(0, 3)" :key="key" size="x-small" class="mr-1 mono" label :to="`/requirements#requirement-${key}`">{{ key }}</v-chip>
-            <span v-if="test.requirements.length > 3" class="text-medium-emphasis">+{{ test.requirements.length - 3 }}</span>
+            <v-chip
+              v-for="key in test.requirements.slice(0, 3)"
+              :key="key"
+              size="x-small"
+              class="mr-1 mono"
+              label
+              :to="`/requirements#requirement-${key}`"
+              >{{ key }}</v-chip
+            >
+            <span v-if="test.requirements.length > 3" class="text-medium-emphasis"
+              >+{{ test.requirements.length - 3 }}</span
+            >
             <span v-if="!test.requirements.length" class="text-medium-emphasis">none</span>
           </td>
           <td>
-            <v-chip v-if="test.retries > 0" size="x-small" color="warning" prepend-icon="mdi-repeat" label>{{ test.retries }}</v-chip>
+            <v-chip
+              v-if="test.retries > 0"
+              size="x-small"
+              color="warning"
+              prepend-icon="mdi-repeat"
+              label
+              >{{ test.retries }}</v-chip
+            >
             <span v-else class="text-medium-emphasis">—</span>
           </td>
         </tr>
@@ -84,25 +152,56 @@ const columns: Array<{ key: SortKey | "requirements"; label: string; sortable: b
   { key: "requirements", label: "Requirements", sortable: false },
   { key: "retries", label: "Retries", sortable: true }
 ];
-const statusRank: Record<string, number> = { failed: 0, broken: 1, skipped: 2, unknown: 3, passed: 4 };
+const statusRank: Record<string, number> = {
+  failed: 0,
+  broken: 1,
+  skipped: 2,
+  unknown: 3,
+  passed: 4
+};
 
 const tabs = computed(() => [
   { value: "all", label: "All", count: props.tests.length, color: "primary" },
-  { value: "failed", label: "Failed", count: props.tests.filter((test) => test.status === "failed").length, color: "error" },
-  { value: "broken", label: "Broken", count: props.tests.filter((test) => test.status === "broken").length, color: "deep-purple" },
-  { value: "skipped", label: "Skipped", count: props.tests.filter((test) => test.status === "skipped").length, color: "warning" },
+  {
+    value: "failed",
+    label: "Failed",
+    count: props.tests.filter((test) => test.status === "failed").length,
+    color: "error"
+  },
+  {
+    value: "broken",
+    label: "Broken",
+    count: props.tests.filter((test) => test.status === "broken").length,
+    color: "deep-purple"
+  },
+  {
+    value: "skipped",
+    label: "Skipped",
+    count: props.tests.filter((test) => test.status === "skipped").length,
+    color: "warning"
+  },
   { value: "slowest", label: "Slowest", count: Math.min(props.tests.length, 50), color: "primary" },
-  { value: "flaky", label: "Retried", count: props.tests.filter((test) => test.retries > 0).length, color: "warning" }
+  {
+    value: "flaky",
+    label: "Retried",
+    count: props.tests.filter((test) => test.retries > 0).length,
+    color: "warning"
+  }
 ]);
 
 const filtered = computed(() => {
   const rows = props.tests
-    .filter((test) => view.value === "all" || view.value === "slowest" || (view.value === "flaky" ? test.retries > 0 : test.status === view.value))
+    .filter(
+      (test) =>
+        view.value === "all" ||
+        view.value === "slowest" ||
+        (view.value === "flaky" ? test.retries > 0 : test.status === view.value)
+    )
     .filter((test) => status.value === "all" || test.status === status.value)
     .filter((test) => layer.value === "all" || test.layer === layer.value)
     .filter((test) => framework.value === "all" || test.framework === framework.value)
     .filter((test) =>
-      `${test.fullName ?? ""} ${test.name} ${test.file ?? ""} ${test.suite ?? ""} ${test.requirements.join(" ")}`
+      `${test.fullName ?? ""} ${test.name} ${test.identity?.canonicalId ?? test.id} ${test.file ?? ""} ${test.suite ?? ""} ${test.requirements.join(" ")}`
         .toLowerCase()
         .includes(search.value.toLowerCase())
     );

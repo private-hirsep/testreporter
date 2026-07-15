@@ -312,6 +312,64 @@ describe("report generator", () => {
     expect(generatedText).not.toContain("/mnt/");
     expect(generatedText).not.toContain("file://");
   });
+
+  it("applies the most-specific external test mapping and warns on ambiguity", async () => {
+    const temp = await mkdtemp(path.join(os.tmpdir(), "quality-report-mapping-"));
+    const input = path.join(temp, "input");
+    const output = path.join(temp, "output");
+    await mkdir(path.join(input, "tests"), { recursive: true });
+    await writeFile(
+      path.join(input, "tests", "results.xml"),
+      '<testsuite><testcase classname="Suite" name="mapped" file="mapped.ts"/><testcase classname="Suite" name="ambiguous"/></testsuite>'
+    );
+    await writeFile(
+      path.join(input, "tests", "mapping.json"),
+      JSON.stringify([
+        {
+          match: { title: "mapped" },
+          canonicalId: "APP-TC-1",
+          requirements: ["REQ-1"],
+          defects: ["BUG-1"],
+          tags: ["audit"]
+        },
+        {
+          match: { framework: "junit", title: "mapped" },
+          canonicalId: "APP-TC-2",
+          requirements: ["REQ-2"],
+          defects: ["BUG-2"],
+          tags: ["critical"]
+        },
+        { match: { title: "ambiguous" }, canonicalId: "APP-TC-3" },
+        { match: { title: "ambiguous" }, canonicalId: "APP-TC-4" }
+      ])
+    );
+    const config = loadConfigFromObject({
+      project: { name: "Mapping" },
+      artifacts: {
+        tests: { mapping: "tests/mapping.json", backend: { junit: "tests/results.xml" } }
+      },
+      requirements: { keyPattern: "REQ-[0-9]+" }
+    });
+    const report = await buildReport({
+      config,
+      configPath: "quality-report.yml",
+      inputPath: input,
+      outputPath: output
+    });
+    const mapped = report.tests.find((item) => item.name === "mapped")!;
+    expect(mapped.identity).toMatchObject({
+      canonicalId: "APP-TC-2",
+      source: "mapping",
+      stable: true
+    });
+    expect(mapped.requirements).toEqual(["REQ-2"]);
+    expect(mapped.defects).toEqual(["BUG-2"]);
+    expect(mapped.tags).toEqual(["critical"]);
+    expect(report.warnings.some((warning) => warning.code === "identity.mapping.ambiguous")).toBe(
+      true
+    );
+    expect(report.identityDiagnostics.ambiguousMappings).toBe(1);
+  });
 });
 
 function loadConfigFromObject(value: unknown) {

@@ -14,7 +14,11 @@ import {
 const context = {
   sourcePath: "sample",
   layer: "backend" as const,
-  requirementPattern: /[A-Z]+-[0-9]+/g
+  requirementPattern: /[A-Z]+-[0-9]+/g,
+  identityPattern: /[A-Z]+-TC-[0-9]+/,
+  titleTokenPattern: /\[([A-Z]+-TC-[0-9]+)\]/,
+  annotationAliases: ["testCase", "case"],
+  defectPattern: /BUG-[0-9]+/g
 };
 
 describe("adapters", () => {
@@ -110,6 +114,58 @@ describe("adapters", () => {
     expect(result.items[1]?.status).toBe("skipped");
     expect(parsePlaywrightJson("{", context).warnings[0]?.code).toBe("playwright.malformed");
     expect(parsePlaywrightJson("{}", context).warnings[0]?.code).toBe("playwright.no-tests");
+  });
+
+  it("extracts explicit aliases, title tokens, defects, and generated fallback identities", () => {
+    const result = parsePlaywrightJson(
+      JSON.stringify({
+        suites: [
+          {
+            title: "suite",
+            tests: [
+              {
+                title: "renamable BUG-7",
+                annotations: [{ type: "case", description: "SHOP-TC-42" }],
+                results: [{ status: "passed" }]
+              },
+              { title: "[SHOP-TC-43] portable", results: [{ status: "passed" }] },
+              { title: "no metadata", results: [{ status: "passed" }] },
+              {
+                title: "invalid",
+                annotations: [{ type: "testCase", description: "not-an-id" }],
+                results: [{ status: "passed" }]
+              }
+            ]
+          }
+        ]
+      }),
+      context
+    );
+    expect(result.items[0]?.identity).toMatchObject({
+      canonicalId: "SHOP-TC-42",
+      source: "explicit",
+      stable: true
+    });
+    expect(result.items[0]?.defects).toEqual(["BUG-7"]);
+    expect(result.items[1]?.identity).toMatchObject({
+      canonicalId: "SHOP-TC-43",
+      source: "title-token"
+    });
+    expect(result.items[2]?.identity?.source).toBe("generated");
+    expect(result.items[2]?.identity?.canonicalId).toBe(result.items[2]?.id);
+    expect(result.items[3]?.labels.__identityMalformed).toEqual(["not-an-id"]);
+  });
+
+  it("supports title-token identity in JUnit-compatible output", () => {
+    const result = parseJUnitXml(
+      '<testsuite><testcase classname="A" name="[SHOP-TC-9] persists draft" /></testsuite>',
+      context
+    );
+    expect(result.items[0]?.identity).toMatchObject({
+      canonicalId: "SHOP-TC-9",
+      source: "title-token",
+      stable: true
+    });
   });
 
   it("parses Vitest JSON and warns for unexpected shapes", () => {

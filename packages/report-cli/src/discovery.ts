@@ -15,6 +15,7 @@ export type ArtifactKind =
   | "zapJson"
   | "expectedRequirements"
   | "requirementMapping"
+  | "testMapping"
   | "rawHtml";
 
 export type DiscoveredArtifact = {
@@ -39,10 +40,12 @@ export async function discoverArtifacts(
   const cwd = rel(inputPath);
   const artifacts: DiscoveredArtifact[] = [];
   const add = async (kind: ArtifactKind, patterns: string[], layer?: TestLayer) => {
-    for (const file of await expand(patterns, cwd)) artifacts.push({ kind, path: file, ...(layer ? { layer } : {}) });
+    for (const file of await expand(patterns, cwd))
+      artifacts.push({ kind, path: file, ...(layer ? { layer } : {}) });
   };
 
   await add("junit", asArray(config.artifacts.tests?.backend?.junit), "backend");
+  await add("testMapping", asArray(config.artifacts.tests?.mapping));
   await add("junit", asArray(config.artifacts.tests?.backend?.pytestJunit), "backend");
   await add("junit", asArray(config.artifacts.tests?.frontend?.junit), "frontend");
   await add("vitestJson", asArray(config.artifacts.tests?.frontend?.vitestJson), "frontend");
@@ -59,7 +62,11 @@ export async function discoverArtifacts(
   await add("jacocoXml", asArray(config.artifacts.coverage?.frontend?.jacocoXml), "frontend");
   await add("coberturaXml", asArray(config.artifacts.coverage?.frontend?.coberturaXml), "frontend");
   await add("lcov", asArray(config.artifacts.coverage?.frontend?.lcov), "frontend");
-  await add("istanbulSummary", asArray(config.artifacts.coverage?.frontend?.summaryJson), "frontend");
+  await add(
+    "istanbulSummary",
+    asArray(config.artifacts.coverage?.frontend?.summaryJson),
+    "frontend"
+  );
   await add("rawHtml", asArray(config.artifacts.coverage?.frontend?.html), "frontend");
 
   await add("expectedRequirements", asArray(config.artifacts.requirements?.expectedKeys));

@@ -11,6 +11,20 @@ export type TestCase = {
   durationMs?: number;
   retries: number;
   requirements: string[];
+  identity?: {
+    canonicalId: string;
+    technicalId: string;
+    source: "explicit" | "title-token" | "mapping" | "generated";
+    stable: boolean;
+  };
+  defects?: string[];
+  tags?: string[];
+  links?: Array<{
+    type: "requirement" | "defect" | "external";
+    key?: string;
+    label: string;
+    url: string;
+  }>;
   labels?: Record<string, string[]>;
   error?: { message?: string; trace?: string };
   attachments?: Array<{ name: string; path: string; contentType?: string }>;
@@ -118,7 +132,14 @@ export type Manifest = {
     status: string;
     profile?: string;
     enabled?: boolean;
-    checks: Array<{ id: string; label: string; status: string; actual: string | number; expected: string; message?: string }>;
+    checks: Array<{
+      id: string;
+      label: string;
+      status: string;
+      actual: string | number;
+      expected: string;
+      message?: string;
+    }>;
   };
   downloads: Download[];
   history: {
@@ -135,6 +156,17 @@ export type Manifest = {
     }>;
   };
   warnings: Array<{ code: string; message: string; sourcePath?: string }>;
+  identityDiagnostics?: {
+    total: number;
+    explicit: number;
+    titleToken: number;
+    mapping: number;
+    generated: number;
+    duplicateCanonicalIds: string[];
+    duplicateExplicitIds: string[];
+    malformedExplicitIds: number;
+    ambiguousMappings: number;
+  };
   chunks: { tests: string[] };
 };
 

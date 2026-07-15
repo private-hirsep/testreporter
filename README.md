@@ -1,5 +1,7 @@
 # Quality Report Platform
 
+Stable test identity and traceability are documented in [docs/test-identity.md](docs/test-identity.md). Explicit IDs are optional; all automated results remain imported automatically.
+
 Quality Report Platform generates a static CI Quality Portal from artifacts your workflow already produced.
 
 Your CI runs tests however it wants. Your CI uploads standard artifacts. The Quality Portal workflow downloads those artifacts, generates a static report, optionally uploads a report ZIP, deploys GitHub Pages, comments on pull requests, and fails on quality gates.

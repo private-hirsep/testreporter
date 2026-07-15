@@ -62,6 +62,10 @@ export function buildTestCase(input: {
   labels?: Record<string, string[]> | undefined;
   attachments?: Array<{ name: string; path: string; contentType?: string | undefined }> | undefined;
   requirementPattern: RegExp;
+  identityPattern?: RegExp | undefined;
+  titleTokenPattern?: RegExp | undefined;
+  annotationAliases?: string[] | undefined;
+  defectPattern?: RegExp | undefined;
   sourcePath: string;
 }): NormalizedTestCase {
   const search = [
@@ -80,6 +84,31 @@ export function buildTestCase(input: {
     input.line
   ]);
   const file = safeDisplayPath(input.file);
+  const aliases = input.annotationAliases ?? ["testCase", "test-case", "testCaseId", "case"];
+  const explicitValue = aliases.flatMap((alias) => input.labels?.[alias] ?? []).find(Boolean);
+  const validExplicit =
+    explicitValue &&
+    (!input.identityPattern ||
+      new RegExp(input.identityPattern.source, input.identityPattern.flags.replace("g", "")).test(
+        explicitValue
+      ));
+  const titleMatch = input.titleTokenPattern
+    ? new RegExp(
+        input.titleTokenPattern.source,
+        input.titleTokenPattern.flags.replace("g", "")
+      ).exec(input.name)
+    : undefined;
+  const titleId = titleMatch?.[1] ?? titleMatch?.[0]?.replace(/^\[|\]$/g, "");
+  const canonicalId = validExplicit ? explicitValue : (titleId ?? id);
+  const source = validExplicit
+    ? ("explicit" as const)
+    : titleId
+      ? ("title-token" as const)
+      : ("generated" as const);
+  const defects = input.defectPattern ? extractRequirementKeys(search, input.defectPattern) : [];
+  const tags = [...new Set([...(input.labels?.tag ?? []), ...(input.labels?.tags ?? [])])];
+  const labels = { ...(input.labels ?? {}) };
+  if (explicitValue && !validExplicit) labels.__identityMalformed = [explicitValue];
   return {
     id,
     name: redactSecrets(input.name) ?? input.name,
@@ -93,7 +122,11 @@ export function buildTestCase(input: {
     ...(input.durationMs !== undefined ? { durationMs: input.durationMs } : {}),
     retries: input.retries ?? 0,
     requirements,
-    labels: input.labels ?? {},
+    identity: { canonicalId, technicalId: id, source, stable: source !== "generated" },
+    defects,
+    tags,
+    links: [],
+    labels,
     ...(input.message || input.trace
       ? {
           error: {

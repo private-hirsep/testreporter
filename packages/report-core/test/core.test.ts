@@ -17,6 +17,8 @@ import {
   resolvePublishMode,
   resolveQualityProfile,
   testIdentity,
+  calculateIdentityDiagnostics,
+  NormalizedReportSchema,
   QualityReportConfigSchema,
   type QualityGateConfig,
   type NormalizedReport,
@@ -57,6 +59,43 @@ describe("core normalization and gates", () => {
     expect(result[0]?.requirements).toEqual(["JIRA-1", "JIRA-2"]);
     expect(result[0]?.attachments).toHaveLength(1);
     expect(result[0]?.id).toBe(testIdentity(result[0]!));
+  });
+
+  it("reports duplicate canonical IDs without deduplicating distinct technical tests", () => {
+    const tests = [
+      test({
+        name: "one",
+        file: "one.ts",
+        identity: { canonicalId: "APP-TC-1", technicalId: "a", source: "explicit", stable: true }
+      }),
+      test({
+        name: "two",
+        file: "two.ts",
+        identity: { canonicalId: "APP-TC-1", technicalId: "b", source: "explicit", stable: true }
+      })
+    ];
+    const deduped = deduplicateTests(tests);
+    expect(deduped).toHaveLength(2);
+    expect(calculateIdentityDiagnostics(deduped).duplicateExplicitIds).toEqual(["APP-TC-1"]);
+  });
+
+  it("parses legacy schema 1.0 reports with defaulted identity diagnostics", () => {
+    const requirements = calculateRequirementCoverage([], []);
+    const config = QualityReportConfigSchema.parse({ project: { name: "legacy" } });
+    const summary = buildSummary([], [], requirements, []);
+    const parsed = NormalizedReportSchema.parse({
+      schemaVersion: "1.0",
+      metadata: { projectName: "legacy", generatedAt: new Date(0).toISOString() },
+      summary,
+      tests: [],
+      coverage: [],
+      requirements,
+      security: [],
+      qualityGate: evaluateQualityGate(config, summary),
+      downloads: [],
+      warnings: []
+    });
+    expect(parsed.identityDiagnostics.total).toBe(0);
   });
 
   it("extracts and calculates requirement coverage deterministically", () => {

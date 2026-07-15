@@ -50,6 +50,7 @@ export const QualityReportConfigSchema = z.object({
     .object({
       tests: z
         .object({
+          mapping: MaybeGlobSchema,
           backend: z
             .object({
               junit: MaybeGlobSchema,
@@ -126,6 +127,56 @@ export const QualityReportConfigSchema = z.object({
         .default("[A-Z]+-[0-9]+")
     })
     .default({ keyPattern: "[A-Z]+-[0-9]+" }),
+  identity: z
+    .object({
+      annotationAliases: z
+        .array(z.string().min(1))
+        .default(["testCase", "test-case", "testCaseId", "case"]),
+      idPattern: z
+        .string()
+        .refine((value) => {
+          try {
+            new RegExp(value);
+            return true;
+          } catch {
+            return false;
+          }
+        }, "identity.idPattern must be a valid regular expression")
+        .default("[A-Z][A-Z0-9_-]*-TC-[0-9]+"),
+      titleTokenPattern: z
+        .string()
+        .refine((value) => {
+          try {
+            new RegExp(value);
+            return true;
+          } catch {
+            return false;
+          }
+        }, "identity.titleTokenPattern must be a valid regular expression")
+        .default("\\[([A-Z][A-Z0-9_-]*-TC-[0-9]+)\\]")
+    })
+    .default({}),
+  defects: z
+    .object({
+      keyPattern: z
+        .string()
+        .refine((value) => {
+          try {
+            new RegExp(value);
+            return true;
+          } catch {
+            return false;
+          }
+        }, "defects.keyPattern must be a valid regular expression")
+        .default("(?:BUG|DEFECT)-[0-9]+")
+    })
+    .default({}),
+  links: z
+    .object({
+      requirement: z.object({ baseUrl: z.string().url() }).optional(),
+      defect: z.object({ baseUrl: z.string().url() }).optional()
+    })
+    .default({}),
   qualityGates: QualityGateConfigSchema,
   qualityGateProfiles: z.record(QualityGateConfigSchema).default({})
 });

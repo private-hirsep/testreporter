@@ -35,10 +35,14 @@ test("test filters and detail page make failures visible and safe", async ({ pag
   await expect(page.getByText("rejects duplicate email JIRA-102")).toBeVisible();
   await expect(page.getByText("creates user account JIRA-101")).toBeHidden();
   await page.getByRole("link", { name: /rejects duplicate email JIRA-102/ }).click();
-  await expect(page.getByRole("heading", { name: "rejects duplicate email JIRA-102" })).toBeVisible();
+  await expect(
+    page.getByRole("heading", { name: "rejects duplicate email JIRA-102" })
+  ).toBeVisible();
   await expect(page.getByRole("cell", { name: "UserServiceTest.java:67" })).toBeVisible();
   await expect(page.getByText("Parsed Stack Frames")).toBeVisible();
-  await expect(page.locator(".trace-block")).toHaveText(/Expected duplicate email validation error/);
+  await expect(page.locator(".trace-block")).toHaveText(
+    /Expected duplicate email validation error/
+  );
 });
 
 test("requirement links connect requirements and tests", async ({ page }) => {
@@ -53,10 +57,14 @@ test("requirement links connect requirements and tests", async ({ page }) => {
   await expect(page.getByRole("heading", { name: /JIRA-101/ })).toBeVisible();
 });
 
-test("test detail shows multiple requirements, retry metadata, and attachments", async ({ page }) => {
+test("test detail shows multiple requirements, retry metadata, and attachments", async ({
+  page
+}) => {
   await page.goto("/#/tests");
   await page.getByText("locks account after suspicious signup JIRA-101 JIRA-401").click();
-  await expect(page.getByRole("heading", { name: "locks account after suspicious signup JIRA-101 JIRA-401" })).toBeVisible();
+  await expect(
+    page.getByRole("heading", { name: "locks account after suspicious signup JIRA-101 JIRA-401" })
+  ).toBeVisible();
   await expect(page.locator(".test-detail")).toContainText("JIRA-101");
   await expect(page.locator(".test-detail")).toContainText("JIRA-401");
   await page.getByRole("link", { name: "Tests" }).first().click();
@@ -67,6 +75,18 @@ test("test detail shows multiple requirements, retry metadata, and attachments",
   await expect(page.getByText("attachments/payment-decline-retry-trace.zip")).toBeVisible();
   await expect(page.locator(".test-detail")).toContainText("Retries");
   await expect(page.locator(".test-detail .detail-section").first()).toContainText("1");
+});
+
+test("test detail and diagnostics show identity and traceability", async ({ page }) => {
+  await page.goto("/#/tests");
+  await page.getByText("buyer can complete checkout JIRA-301 JIRA-501").click();
+  await expect(page.locator(".test-detail")).toContainText("SHOP-TC-0042");
+  await expect(page.locator(".test-detail")).toContainText("explicit");
+  await expect(page.locator(".test-detail")).toContainText("BUG-17");
+  await expect(page.locator(".test-detail")).toContainText("critical");
+  await page.goto("/#/diagnostics");
+  await expect(page.getByRole("heading", { name: "Identity Health" })).toBeVisible();
+  await expect(page.getByText("Generated IDs")).toBeVisible();
 });
 
 test("security details render enriched fields defensively", async ({ page }) => {
@@ -83,14 +103,18 @@ test("downloads listed in manifest resolve from static output", async ({ page, r
   const manifest = (await (await request.get("/data/manifest.json")).json()) as {
     downloads: Array<{ name: string; path: string }>;
   };
-  expect(manifest.downloads.some((download) => download.name === "Full generated report ZIP")).toBeTruthy();
+  expect(
+    manifest.downloads.some((download) => download.name === "Full generated report ZIP")
+  ).toBeTruthy();
   for (const download of manifest.downloads) {
     const response = await request.get(`/${download.path}`);
     expect(response.ok(), `${download.path} should resolve`).toBeTruthy();
   }
   await page.goto("/#/downloads");
   await expect(page.getByText("Full report")).toBeVisible();
-  const hasHorizontalOverflow = await page.locator(".data-table").evaluate((element) => element.scrollWidth > element.clientWidth + 1);
+  const hasHorizontalOverflow = await page
+    .locator(".data-table")
+    .evaluate((element) => element.scrollWidth > element.clientWidth + 1);
   expect(hasHorizontalOverflow).toBeFalsy();
 });
 
@@ -101,7 +125,10 @@ test("coverage highlights low coverage files", async ({ page }) => {
   await expect(lowPanel).toBeVisible();
   await expect(lowPanel).toContainText("src/components/SecurityBanner.ts");
   await page.getByText("frontend coverage").click();
-  const securityBannerRow = page.locator(".v-expansion-panel").getByRole("row").filter({ hasText: "src/components/SecurityBanner.ts" });
+  const securityBannerRow = page
+    .locator(".v-expansion-panel")
+    .getByRole("row")
+    .filter({ hasText: "src/components/SecurityBanner.ts" });
   await expect(securityBannerRow).toBeVisible();
   await expect(securityBannerRow).toContainText("25%");
 });
