@@ -30,3 +30,41 @@ export function deduplicateTests(tests: NormalizedTestCase[]): NormalizedTestCas
     };
   });
 }
+
+export function calculateIdentityDiagnostics(
+  tests: NormalizedTestCase[],
+  warnings: Array<{ code: string }> = []
+) {
+  const counts = { explicit: 0, "title-token": 0, mapping: 0, generated: 0 };
+  const ids = new Map<string, NormalizedTestCase[]>();
+  for (const test of tests) {
+    const source = test.identity?.source ?? "generated";
+    counts[source] += 1;
+    const canonical = test.identity?.canonicalId ?? test.id;
+    ids.set(canonical, [...(ids.get(canonical) ?? []), test]);
+  }
+  const duplicateCanonicalIds = [...ids]
+    .filter(([, values]) => values.length > 1)
+    .map(([id]) => id)
+    .sort();
+  const duplicateExplicitIds = [...ids]
+    .filter(
+      ([, values]) => values.filter((test) => test.identity?.source === "explicit").length > 1
+    )
+    .map(([id]) => id)
+    .sort();
+  return {
+    total: tests.length,
+    explicit: counts.explicit,
+    titleToken: counts["title-token"],
+    mapping: counts.mapping,
+    generated: counts.generated,
+    duplicateCanonicalIds,
+    duplicateExplicitIds,
+    malformedExplicitIds: warnings.filter(
+      (warning) => warning.code === "identity.explicit.malformed"
+    ).length,
+    ambiguousMappings: warnings.filter((warning) => warning.code === "identity.mapping.ambiguous")
+      .length
+  };
+}

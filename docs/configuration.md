@@ -11,6 +11,7 @@ project:
 
 artifacts:
   tests:
+    mapping: "tests/test-mapping.json"
     backend:
       junit: "tests/backend/junit/**/*.xml"
       pytestJunit: "tests/backend/pytest/**/*.xml"
@@ -45,6 +46,18 @@ artifacts:
 
 requirements:
   keyPattern: "[A-Z]+-[0-9]+"
+
+identity:
+  annotationAliases: [testCase, test-case, testCaseId, case]
+  idPattern: "[A-Z][A-Z0-9_-]*-TC-[0-9]+"
+  titleTokenPattern: "\\[([A-Z][A-Z0-9_-]*-TC-[0-9]+)\\]"
+
+defects:
+  keyPattern: "(?:BUG|DEFECT)-[0-9]+"
+
+links:
+  requirement: { baseUrl: "https://example.atlassian.net/browse/" }
+  defect: { baseUrl: "https://example.atlassian.net/browse/" }
 
 qualityGates:
   tests:

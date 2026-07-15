@@ -12,6 +12,10 @@ export type ParseContext = {
   layer?: TestLayer | undefined;
   framework?: TestFramework | undefined;
   requirementPattern: RegExp;
+  identityPattern?: RegExp;
+  titleTokenPattern?: RegExp;
+  annotationAliases?: string[];
+  defectPattern?: RegExp;
 };
 
 export type ParseResult<T> = {

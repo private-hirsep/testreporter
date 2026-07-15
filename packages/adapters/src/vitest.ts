@@ -49,6 +49,10 @@ function visit(
           : undefined,
       labels: {},
       requirementPattern: context.requirementPattern,
+      identityPattern: context.identityPattern,
+      titleTokenPattern: context.titleTokenPattern,
+      annotationAliases: context.annotationAliases,
+      defectPattern: context.defectPattern,
       sourcePath: context.sourcePath
     })
   ];

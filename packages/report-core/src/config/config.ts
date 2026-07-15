@@ -1,6 +1,19 @@
 ﻿import { z } from "zod";
 
 const MaybeGlobSchema = z.union([z.string(), z.array(z.string())]).optional();
+const ExternalLinkConfigSchema = z.object({
+  baseUrl: z
+    .string()
+    .url()
+    .refine((value) => ["http:", "https:"].includes(new URL(value).protocol), {
+      message: "external link baseUrl must use http or https"
+    })
+    .transform((value) => {
+      const url = new URL(value);
+      url.pathname = `${url.pathname.replace(/\/+$/, "")}/`;
+      return url.toString();
+    })
+});
 export const QualityGateConfigSchema = z
   .object({
     enabled: z.boolean().default(true),
@@ -50,6 +63,7 @@ export const QualityReportConfigSchema = z.object({
     .object({
       tests: z
         .object({
+          mapping: MaybeGlobSchema,
           backend: z
             .object({
               junit: MaybeGlobSchema,
@@ -126,6 +140,56 @@ export const QualityReportConfigSchema = z.object({
         .default("[A-Z]+-[0-9]+")
     })
     .default({ keyPattern: "[A-Z]+-[0-9]+" }),
+  identity: z
+    .object({
+      annotationAliases: z
+        .array(z.string().min(1))
+        .default(["testCase", "test-case", "testCaseId", "case"]),
+      idPattern: z
+        .string()
+        .refine((value) => {
+          try {
+            new RegExp(value);
+            return true;
+          } catch {
+            return false;
+          }
+        }, "identity.idPattern must be a valid regular expression")
+        .default("[A-Z][A-Z0-9_-]*-TC-[0-9]+"),
+      titleTokenPattern: z
+        .string()
+        .refine((value) => {
+          try {
+            new RegExp(value);
+            return true;
+          } catch {
+            return false;
+          }
+        }, "identity.titleTokenPattern must be a valid regular expression")
+        .default("\\[([A-Z][A-Z0-9_-]*-TC-[0-9]+)\\]")
+    })
+    .default({}),
+  defects: z
+    .object({
+      keyPattern: z
+        .string()
+        .refine((value) => {
+          try {
+            new RegExp(value);
+            return true;
+          } catch {
+            return false;
+          }
+        }, "defects.keyPattern must be a valid regular expression")
+        .default("(?:BUG|DEFECT)-[0-9]+")
+    })
+    .default({}),
+  links: z
+    .object({
+      requirement: ExternalLinkConfigSchema.optional(),
+      defect: ExternalLinkConfigSchema.optional()
+    })
+    .default({}),
   qualityGates: QualityGateConfigSchema,
   qualityGateProfiles: z.record(QualityGateConfigSchema).default({})
 });

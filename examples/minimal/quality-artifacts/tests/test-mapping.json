@@ -1,0 +1,10 @@
+[
+  {
+    "match": { "framework": "playwright", "title": "mobile checkout preserves cart JIRA-301" },
+    "canonicalId": "SHOP-TC-0044",
+    "requirements": ["JIRA-301"],
+    "defects": ["BUG-23"],
+    "tags": ["mobile"],
+    "links": [{ "label": "Checkout test notes", "url": "https://example.com/tests/SHOP-TC-0044" }]
+  }
+]

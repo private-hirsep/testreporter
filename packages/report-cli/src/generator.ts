@@ -6,6 +6,7 @@ import archiver from "archiver";
 import fs from "fs-extra";
 import {
   buildSummary,
+  calculateIdentityDiagnostics,
   calculateRequirementCoverage,
   deduplicateTests,
   evaluateQualityGate,
@@ -186,6 +187,182 @@ async function applyRequirementMappings(
   }
 }
 
+type TestMapping = {
+  match: { framework?: string; file?: string; suite?: string; fullName?: string; title?: string };
+  canonicalId?: string;
+  requirements?: string[];
+  defects?: string[];
+  tags?: string[];
+  links?: Array<{ label: string; url: string }>;
+};
+
+const TEST_MAPPING_SELECTORS = ["framework", "file", "suite", "fullName", "title"] as const;
+
+function exactPatternMatch(pattern: RegExp, value: string): boolean {
+  return new RegExp(`^(?:${pattern.source})$`, pattern.flags.replace("g", "").replace("y", "")).test(value);
+}
+
+function parseStringArray(value: unknown, field: string): string[] | undefined {
+  if (value === undefined) return undefined;
+  if (!Array.isArray(value) || value.some((item) => typeof item !== "string" || !item))
+    throw new Error(`${field} must be an array of non-empty strings.`);
+  return [...new Set(value)];
+}
+
+function parseTestMapping(value: unknown, index: number, identityPattern: RegExp): TestMapping {
+  if (!value || typeof value !== "object" || Array.isArray(value))
+    throw new Error(`Entry ${index} must be an object.`);
+  const entry = value as Record<string, unknown>;
+  if (!entry.match || typeof entry.match !== "object" || Array.isArray(entry.match))
+    throw new Error(`Entry ${index}.match must be an object.`);
+  const rawMatch = entry.match as Record<string, unknown>;
+  const match: TestMapping["match"] = {};
+  for (const selector of TEST_MAPPING_SELECTORS) {
+    const selectorValue = rawMatch[selector];
+    if (selectorValue !== undefined) {
+      if (typeof selectorValue !== "string" || !selectorValue.trim())
+        throw new Error(`Entry ${index}.match.${selector} must be a non-empty string.`);
+      match[selector] = selectorValue;
+    }
+  }
+  if (Object.keys(match).length === 0)
+    throw new Error(`Entry ${index}.match must contain at least one selector.`);
+  if (entry.canonicalId !== undefined && (typeof entry.canonicalId !== "string" || !exactPatternMatch(identityPattern, entry.canonicalId)))
+    throw new Error(`Entry ${index}.canonicalId does not exactly match identity.idPattern.`);
+  let links: TestMapping["links"];
+  if (entry.links !== undefined) {
+    if (!Array.isArray(entry.links)) throw new Error(`Entry ${index}.links must be an array.`);
+    links = entry.links.map((link, linkIndex) => {
+      if (!link || typeof link !== "object" || Array.isArray(link))
+        throw new Error(`Entry ${index}.links[${linkIndex}] must be an object.`);
+      const item = link as Record<string, unknown>;
+      if (typeof item.label !== "string" || !item.label) throw new Error(`Entry ${index}.links[${linkIndex}].label must be a non-empty string.`);
+      if (typeof item.url !== "string") throw new Error(`Entry ${index}.links[${linkIndex}].url must be a URL.`);
+      try {
+        const url = new URL(item.url);
+        if (!["http:", "https:"].includes(url.protocol)) throw new Error("unsafe protocol");
+      } catch {
+        throw new Error(`Entry ${index}.links[${linkIndex}].url must be a valid HTTP(S) URL.`);
+      }
+      return { label: item.label, url: item.url };
+    });
+  }
+  const requirements = parseStringArray(entry.requirements, `Entry ${index}.requirements`);
+  const defects = parseStringArray(entry.defects, `Entry ${index}.defects`);
+  const tags = parseStringArray(entry.tags, `Entry ${index}.tags`);
+  return {
+    match,
+    ...(typeof entry.canonicalId === "string" ? { canonicalId: entry.canonicalId } : {}),
+    ...(requirements ? { requirements } : {}),
+    ...(defects ? { defects } : {}),
+    ...(tags ? { tags } : {}),
+    ...(links ? { links } : {})
+  };
+}
+
+function matchesTest(test: NormalizedTestCase, match: TestMapping["match"]): boolean {
+  return (
+    (!match.framework || test.framework === match.framework) &&
+    (!match.file || test.file === match.file) &&
+    (!match.suite || test.suite === match.suite) &&
+    (!match.fullName || test.fullName === match.fullName) &&
+    (!match.title || test.name === match.title)
+  );
+}
+
+async function applyTestMappings(
+  tests: NormalizedTestCase[],
+  artifacts: DiscoveredArtifact[],
+  warnings: ParserWarning[],
+  inputPath: string,
+  identityPattern: RegExp
+) {
+  const mappings: TestMapping[] = [];
+  for (const artifact of artifacts.filter((item) => item.kind === "testMapping")) {
+    const display = artifactDisplayPath(inputPath, artifact.path);
+    const content = await safeRead(artifact.path, warnings, display);
+    if (!content) continue;
+    try {
+      const parsed = JSON.parse(content) as unknown;
+      if (!Array.isArray(parsed)) throw new Error("Test mapping must be a JSON array.");
+      for (const [index, entry] of parsed.entries()) {
+        try {
+          mappings.push(parseTestMapping(entry, index, identityPattern));
+        } catch (error) {
+          warnings.push({ sourcePath: display, code: "identity.mapping.invalid-entry", message: error instanceof Error ? error.message : `Invalid mapping entry ${index}.` });
+        }
+      }
+    } catch (error) {
+      warnings.push({
+        sourcePath: display,
+        code: "identity.mapping.parse-failed",
+        message: error instanceof Error ? error.message : "Malformed test mapping JSON."
+      });
+    }
+  }
+  for (const test of tests) {
+    const candidates = mappings.filter(
+      (mapping) => mapping.match && matchesTest(test, mapping.match)
+    );
+    if (!candidates.length) continue;
+    const specificity = Math.max(
+      ...candidates.map((mapping) => Object.values(mapping.match).filter(Boolean).length)
+    );
+    const selected = candidates.filter(
+      (mapping) => Object.values(mapping.match).filter(Boolean).length === specificity
+    );
+    if (selected.length !== 1) {
+      warnings.push({
+        sourcePath: test.sourcePath,
+        code: "identity.mapping.ambiguous",
+        message: `Ambiguous test mapping for ${test.fullName ?? test.name}; ${selected.length} equally specific entries matched.`
+      });
+      continue;
+    }
+    const mapping = selected[0]!;
+    if (mapping.canonicalId && test.identity?.source === "generated")
+      test.identity = {
+        ...test.identity,
+        canonicalId: mapping.canonicalId,
+        source: "mapping",
+        stable: true
+      };
+    test.requirements = [...new Set([...test.requirements, ...(mapping.requirements ?? [])])];
+    test.defects = [...new Set([...test.defects, ...(mapping.defects ?? [])])];
+    test.tags = [...new Set([...test.tags, ...(mapping.tags ?? [])])];
+    test.links = [
+      ...test.links,
+      ...(mapping.links ?? []).map((link) => ({ type: "external" as const, ...link }))
+    ];
+  }
+}
+
+function addConfiguredLinks(tests: NormalizedTestCase[], config: QualityReportConfig) {
+  for (const test of tests) {
+    const requirement = config.links.requirement?.baseUrl;
+    const defect = config.links.defect?.baseUrl;
+    test.links = [
+      ...test.links,
+      ...(requirement
+        ? test.requirements.map((key) => ({
+            type: "requirement" as const,
+            key,
+            label: key,
+            url: new URL(encodeURIComponent(key), requirement).toString()
+          }))
+        : []),
+      ...(defect
+        ? test.defects.map((key) => ({
+            type: "defect" as const,
+            key,
+            label: key,
+            url: new URL(encodeURIComponent(key), defect).toString()
+          }))
+        : [])
+    ];
+  }
+}
+
 async function copyRawArtifacts(
   artifacts: DiscoveredArtifact[],
   outputPath: string,
@@ -210,7 +387,9 @@ async function copyRawArtifacts(
               artifact.kind === "istanbulSummary" ||
               artifact.kind === "coberturaXml"
             ? "coverage"
-            : artifact.kind === "expectedRequirements" || artifact.kind === "requirementMapping"
+            : artifact.kind === "expectedRequirements" ||
+                artifact.kind === "requirementMapping" ||
+                artifact.kind === "testMapping"
               ? "requirements"
               : artifact.kind === "rawHtml"
                 ? "raw"
@@ -274,6 +453,7 @@ async function writeData(outputPath: string, report: NormalizedReport) {
     qualityGate: report.qualityGate,
     downloads: report.downloads,
     warnings: report.warnings,
+    identityDiagnostics: report.identityDiagnostics,
     history: report.history,
     chunks: { tests: testChunks }
   };
@@ -386,7 +566,12 @@ export async function buildReport(options: GenerateOptions): Promise<NormalizedR
   const requirementPattern = new RegExp(options.config.requirements.keyPattern, "g");
 
   for (const artifact of artifacts) {
-    if (["expectedRequirements", "requirementMapping", "rawHtml"].includes(artifact.kind)) continue;
+    if (
+      ["expectedRequirements", "requirementMapping", "testMapping", "rawHtml"].includes(
+        artifact.kind
+      )
+    )
+      continue;
     const displayPath = artifactDisplayPath(options.inputPath, artifact.path);
     const content = await safeRead(artifact.path, warnings, displayPath);
     if (content === undefined) continue;
@@ -394,7 +579,11 @@ export async function buildReport(options: GenerateOptions): Promise<NormalizedR
       const context = {
         sourcePath: displayPath,
         ...(artifact.layer ? { layer: artifact.layer } : {}),
-        requirementPattern
+        requirementPattern,
+        identityPattern: new RegExp(options.config.identity.idPattern),
+        titleTokenPattern: new RegExp(options.config.identity.titleTokenPattern),
+        annotationAliases: options.config.identity.annotationAliases,
+        defectPattern: new RegExp(options.config.defects.keyPattern, "g")
       };
       if (artifact.kind === "junit")
         collectParseResult(tests, parseJUnitXml(content, context), warnings);
@@ -426,7 +615,25 @@ export async function buildReport(options: GenerateOptions): Promise<NormalizedR
   }
 
   const dedupedTests = deduplicateTests(tests);
+  for (const test of dedupedTests) {
+    const malformed = test.labels.__identityMalformed;
+    if (malformed?.length)
+      warnings.push({
+        sourcePath: test.sourcePath,
+        code: "identity.explicit.malformed",
+        message: `Malformed explicit test ID: ${malformed.join(", ")}`
+      });
+    delete test.labels.__identityMalformed;
+  }
+  await applyTestMappings(
+    dedupedTests,
+    artifacts,
+    warnings,
+    options.inputPath,
+    new RegExp(options.config.identity.idPattern)
+  );
   await applyRequirementMappings(dedupedTests, artifacts, warnings, options.inputPath);
+  addConfiguredLinks(dedupedTests, options.config);
   const expected = await readExpectedRequirements(artifacts, warnings, options.inputPath);
   const requirements = calculateRequirementCoverage(expected, dedupedTests);
   const mergedCoverage = mergeCoverage(coverage);
@@ -462,7 +669,8 @@ export async function buildReport(options: GenerateOptions): Promise<NormalizedR
         }
       ]
     },
-    warnings
+    warnings,
+    identityDiagnostics: calculateIdentityDiagnostics(dedupedTests, warnings)
   });
 
   await copyUi(options.outputPath);

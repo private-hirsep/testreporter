@@ -12,6 +12,20 @@ export const NormalizedAttachmentSchema = z.object({
   contentType: z.string().optional()
 });
 
+export const TestIdentitySchema = z.object({
+  canonicalId: z.string(),
+  technicalId: z.string(),
+  source: z.enum(["explicit", "title-token", "mapping", "generated"]),
+  stable: z.boolean()
+});
+
+export const TraceabilityLinkSchema = z.object({
+  type: z.enum(["requirement", "defect", "external"]),
+  key: z.string().optional(),
+  label: z.string(),
+  url: z.string().url()
+});
+
 export const NormalizedTestCaseSchema = z.object({
   id: z.string(),
   name: z.string(),
@@ -25,6 +39,10 @@ export const NormalizedTestCaseSchema = z.object({
   durationMs: z.number().nonnegative().optional(),
   retries: z.number().int().nonnegative().default(0),
   requirements: z.array(z.string()).default([]),
+  identity: TestIdentitySchema.optional(),
+  defects: z.array(z.string()).default([]),
+  tags: z.array(z.string()).default([]),
+  links: z.array(TraceabilityLinkSchema).default([]),
   labels: z.record(z.array(z.string())).default({}),
   error: z
     .object({
@@ -175,6 +193,18 @@ export const ReportSummarySchema = z.object({
   requirements: RequirementCoverageSchema
 });
 
+export const IdentityDiagnosticsSchema = z.object({
+  total: z.number().int().nonnegative(),
+  explicit: z.number().int().nonnegative(),
+  titleToken: z.number().int().nonnegative(),
+  mapping: z.number().int().nonnegative(),
+  generated: z.number().int().nonnegative(),
+  duplicateCanonicalIds: z.array(z.string()).default([]),
+  duplicateExplicitIds: z.array(z.string()).default([]),
+  malformedExplicitIds: z.number().int().nonnegative().default(0),
+  ambiguousMappings: z.number().int().nonnegative().default(0)
+});
+
 export const NormalizedReportSchema = z.object({
   schemaVersion: z.literal("1.0"),
   metadata: RunMetadataSchema,
@@ -186,7 +216,18 @@ export const NormalizedReportSchema = z.object({
   qualityGate: QualityGateResultSchema,
   downloads: z.array(DownloadableArtifactSchema),
   history: z.object({ runs: z.array(HistoryRunSchema).default([]) }).default({ runs: [] }),
-  warnings: z.array(ParserWarningSchema)
+  warnings: z.array(ParserWarningSchema),
+  identityDiagnostics: IdentityDiagnosticsSchema.default({
+    total: 0,
+    explicit: 0,
+    titleToken: 0,
+    mapping: 0,
+    generated: 0,
+    duplicateCanonicalIds: [],
+    duplicateExplicitIds: [],
+    malformedExplicitIds: 0,
+    ambiguousMappings: 0
+  })
 });
 
 export type TestStatus = z.infer<typeof TestStatusSchema>;
@@ -194,6 +235,8 @@ export type TestLayer = z.infer<typeof TestLayerSchema>;
 export type TestFramework = z.infer<typeof TestFrameworkSchema>;
 export type Severity = z.infer<typeof SeveritySchema>;
 export type NormalizedTestCase = z.infer<typeof NormalizedTestCaseSchema>;
+export type TestIdentity = z.infer<typeof TestIdentitySchema>;
+export type IdentityDiagnostics = z.infer<typeof IdentityDiagnosticsSchema>;
 export type CoverageMetric = z.infer<typeof CoverageMetricSchema>;
 export type CoverageSummary = z.infer<typeof CoverageSummarySchema>;
 export type RequirementCoverage = z.infer<typeof RequirementCoverageSchema>;

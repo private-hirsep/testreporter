@@ -98,6 +98,10 @@ export function parseJUnitXml(xml: string, context: ParseContext): TestParseResu
         trace: failure.trace ?? error.trace,
         labels,
         requirementPattern: context.requirementPattern,
+        identityPattern: context.identityPattern,
+        titleTokenPattern: context.titleTokenPattern,
+        annotationAliases: context.annotationAliases,
+        defectPattern: context.defectPattern,
         sourcePath: context.sourcePath
       });
     });

@@ -47,6 +47,11 @@ export function metric(covered: number, missed: number): CoverageMetric {
   return { covered, missed, total, percentage: pct(covered, total) };
 }
 
+function matchesEntireValue(pattern: RegExp, value: string): boolean {
+  const flags = pattern.flags.replace("g", "").replace("y", "");
+  return new RegExp(`^(?:${pattern.source})$`, flags).test(value);
+}
+
 export function buildTestCase(input: {
   name: string;
   suite?: string | undefined;
@@ -62,6 +67,10 @@ export function buildTestCase(input: {
   labels?: Record<string, string[]> | undefined;
   attachments?: Array<{ name: string; path: string; contentType?: string | undefined }> | undefined;
   requirementPattern: RegExp;
+  identityPattern?: RegExp | undefined;
+  titleTokenPattern?: RegExp | undefined;
+  annotationAliases?: string[] | undefined;
+  defectPattern?: RegExp | undefined;
   sourcePath: string;
 }): NormalizedTestCase {
   const search = [
@@ -80,6 +89,28 @@ export function buildTestCase(input: {
     input.line
   ]);
   const file = safeDisplayPath(input.file);
+  const aliases = input.annotationAliases ?? ["testCase", "test-case", "testCaseId", "case"];
+  const explicitValue = aliases.flatMap((alias) => input.labels?.[alias] ?? []).find(Boolean);
+  const validExplicit =
+    explicitValue &&
+    (!input.identityPattern || matchesEntireValue(input.identityPattern, explicitValue));
+  const titleMatch = input.titleTokenPattern
+    ? new RegExp(
+        input.titleTokenPattern.source,
+        input.titleTokenPattern.flags.replace("g", "")
+      ).exec(input.name)
+    : undefined;
+  const titleId = titleMatch?.[1] ?? titleMatch?.[0]?.replace(/^\[|\]$/g, "");
+  const canonicalId = validExplicit ? explicitValue : (titleId ?? id);
+  const source = validExplicit
+    ? ("explicit" as const)
+    : titleId
+      ? ("title-token" as const)
+      : ("generated" as const);
+  const defects = input.defectPattern ? extractRequirementKeys(search, input.defectPattern) : [];
+  const tags = [...new Set([...(input.labels?.tag ?? []), ...(input.labels?.tags ?? [])])];
+  const labels = { ...(input.labels ?? {}) };
+  if (explicitValue && !validExplicit) labels.__identityMalformed = [explicitValue];
   return {
     id,
     name: redactSecrets(input.name) ?? input.name,
@@ -93,7 +124,11 @@ export function buildTestCase(input: {
     ...(input.durationMs !== undefined ? { durationMs: input.durationMs } : {}),
     retries: input.retries ?? 0,
     requirements,
-    labels: input.labels ?? {},
+    identity: { canonicalId, technicalId: id, source, stable: source !== "generated" },
+    defects,
+    tags,
+    links: [],
+    labels,
     ...(input.message || input.trace
       ? {
           error: {
