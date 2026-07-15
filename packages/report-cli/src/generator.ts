@@ -679,7 +679,11 @@ export async function buildReport(options: GenerateOptions): Promise<NormalizedR
       for (const message of issues) warnings.push({ code: "manual.execution.definition-mismatch", sourcePath: manualExecutionPaths.get(execution.executionId), message });
       return issues.length === 0;
     })
-    .sort((left, right) => left.completedAt!.localeCompare(right.completedAt!));
+    .sort(
+      (left, right) =>
+        left.completedAt!.localeCompare(right.completedAt!) ||
+        left.executionId.localeCompare(right.executionId)
+    );
   const officialManualResultPaths = new Set(officialManualExecutions.map((execution) => manualExecutionPaths.get(execution.executionId)).filter((value): value is string => Boolean(value)));
   const latest = new Map<string, { completedAt: string; executionId: string; result: ManualExecution["cases"][number] }>();
   for (const execution of officialManualExecutions)
@@ -708,11 +712,29 @@ export async function buildReport(options: GenerateOptions): Promise<NormalizedR
   for (const manualCase of activeManualCases) {
     for (const key of manualCase.requirements) {
       requirements.manualCasesByRequirement[key] = [...new Set([...(requirements.manualCasesByRequirement[key] ?? []), manualCase.id])].sort();
-      const latestRequirementResult = requirements.manualCasesByRequirement[key]!.map((id) => latest.get(id)).filter((value): value is NonNullable<typeof value> => Boolean(value)).sort((left, right) => left.completedAt.localeCompare(right.completedAt) || left.executionId.localeCompare(right.executionId) || left.result.caseId.localeCompare(right.result.caseId)).at(-1);
-      const manualResult = latestRequirementResult?.result.status ?? "not-run";
+      const latestCaseResults = requirements.manualCasesByRequirement[key]!
+        .map((id) => latest.get(id)?.result.status ?? "not-run");
+      const manualResult = latestCaseResults.includes("failed")
+        ? "failed"
+        : latestCaseResults.includes("blocked")
+          ? "blocked"
+          : latestCaseResults.includes("not-run")
+            ? "not-run"
+            : latestCaseResults.includes("passed")
+              ? "passed"
+              : latestCaseResults.includes("skipped")
+                ? "skipped"
+                : "not-run";
       requirements.latestManualResultByRequirement[key] = manualResult;
       const automated = Boolean(requirements.testsByRequirement[key]?.length);
-      requirements.evidenceTypeByRequirement[key] = automated ? "both" : manualResult === "not-run" ? "manual-defined" : "manual-executed";
+      const hasManualEvidence = latestCaseResults.some((status) => status !== "not-run");
+      requirements.evidenceTypeByRequirement[key] = automated && hasManualEvidence
+        ? "both"
+        : automated
+          ? "automated"
+          : hasManualEvidence
+            ? "manual-executed"
+            : "manual-defined";
     }
   }
   const successfulManualRequirements = Object.entries(requirements.latestManualResultByRequirement).filter(([, status]) => status === "passed").map(([key]) => key);
