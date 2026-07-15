@@ -370,6 +370,37 @@ describe("report generator", () => {
     );
     expect(report.identityDiagnostics.ambiguousMappings).toBe(1);
   });
+
+  it("rejects invalid mapping entries without affecting valid entries", async () => {
+    const temp = await mkdtemp(path.join(os.tmpdir(), "quality-report-invalid-mapping-"));
+    const input = path.join(temp, "input");
+    const output = path.join(temp, "output");
+    await mkdir(path.join(input, "tests"), { recursive: true });
+    await writeFile(path.join(input, "tests", "results.xml"), '<testsuite><testcase classname="Suite" name="valid"/><testcase classname="Suite" name="invalid"/></testsuite>');
+    await writeFile(path.join(input, "tests", "mapping.json"), JSON.stringify([
+      { match: { title: "valid" }, canonicalId: "APP-TC-7", requirements: ["REQ-7"], links: [{ label: "Notes", url: "https://example.test/note" }] },
+      { match: {}, canonicalId: "APP-TC-8" },
+      { match: { title: "invalid" }, canonicalId: "prefix-APP-TC-8-suffix" },
+      { match: { title: "invalid" }, requirements: "REQ-8" },
+      { match: { title: "invalid" }, defects: ["BUG-8", 9] },
+      { match: { title: "invalid" }, tags: null },
+      { match: { title: "invalid" }, links: "not-an-array" },
+      { match: { title: "invalid" }, links: [{ label: "Unsafe", url: "javascript:alert(1)" }] }
+    ]));
+    const config = loadConfigFromObject({
+      project: { name: "Invalid mapping" },
+      artifacts: { tests: { mapping: "tests/mapping.json", backend: { junit: "tests/results.xml" } } },
+      identity: { idPattern: "APP-TC-[0-9]+" },
+      requirements: { keyPattern: "REQ-[0-9]+" },
+      links: { requirement: { baseUrl: "https://example.test/browse" } }
+    });
+    const report = await buildReport({ config, configPath: "quality-report.yml", inputPath: input, outputPath: output });
+    const valid = report.tests.find((item) => item.name === "valid")!;
+    expect(valid.identity).toMatchObject({ canonicalId: "APP-TC-7", source: "mapping" });
+    expect(valid.links.map((link) => link.url)).toEqual(["https://example.test/note", "https://example.test/browse/REQ-7"]);
+    expect(report.tests.find((item) => item.name === "invalid")?.identity?.source).toBe("generated");
+    expect(report.warnings.filter((warning) => warning.code === "identity.mapping.invalid-entry")).toHaveLength(7);
+  });
 });
 
 function loadConfigFromObject(value: unknown) {

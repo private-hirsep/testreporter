@@ -134,6 +134,11 @@ describe("adapters", () => {
                 title: "invalid",
                 annotations: [{ type: "testCase", description: "not-an-id" }],
                 results: [{ status: "passed" }]
+              },
+              {
+                title: "substring identity",
+                annotations: [{ type: "testCase", description: "prefix-SHOP-TC-44-suffix" }],
+                results: [{ status: "passed" }]
               }
             ]
           }
@@ -154,6 +159,8 @@ describe("adapters", () => {
     expect(result.items[2]?.identity?.source).toBe("generated");
     expect(result.items[2]?.identity?.canonicalId).toBe(result.items[2]?.id);
     expect(result.items[3]?.labels.__identityMalformed).toEqual(["not-an-id"]);
+    expect(result.items[4]?.identity?.source).toBe("generated");
+    expect(result.items[4]?.labels.__identityMalformed).toEqual(["prefix-SHOP-TC-44-suffix"]);
   });
 
   it("supports title-token identity in JUnit-compatible output", () => {

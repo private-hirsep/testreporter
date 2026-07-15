@@ -49,6 +49,16 @@ describe("CLI config and discovery", () => {
     await expect(loadConfig(invalidRegex)).rejects.toThrow(/valid regular expression/);
   });
 
+  it("normalizes external link bases and rejects unsafe URL protocols", async () => {
+    const dir = await mkdtemp(path.join(os.tmpdir(), "quality-config-links-"));
+    const valid = path.join(dir, "valid.yml");
+    const invalid = path.join(dir, "invalid.yml");
+    await writeFile(valid, "project:\n  name: Links\nlinks:\n  requirement:\n    baseUrl: https://example.test/browse\n");
+    await writeFile(invalid, "project:\n  name: Links\nlinks:\n  defect:\n    baseUrl: javascript:alert(1)\n");
+    expect((await loadConfig(valid)).links.requirement?.baseUrl).toBe("https://example.test/browse/");
+    await expect(loadConfig(invalid)).rejects.toThrow(/http or https/);
+  });
+
   it("loads bare external quality gate files with extended fields", async () => {
     const dir = await mkdtemp(path.join(os.tmpdir(), "quality-config-gates-"));
     const configPath = path.join(dir, "quality-report.yml");

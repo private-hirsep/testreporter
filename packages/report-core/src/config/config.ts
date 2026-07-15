@@ -1,6 +1,19 @@
 ﻿import { z } from "zod";
 
 const MaybeGlobSchema = z.union([z.string(), z.array(z.string())]).optional();
+const ExternalLinkConfigSchema = z.object({
+  baseUrl: z
+    .string()
+    .url()
+    .refine((value) => ["http:", "https:"].includes(new URL(value).protocol), {
+      message: "external link baseUrl must use http or https"
+    })
+    .transform((value) => {
+      const url = new URL(value);
+      url.pathname = `${url.pathname.replace(/\/+$/, "")}/`;
+      return url.toString();
+    })
+});
 export const QualityGateConfigSchema = z
   .object({
     enabled: z.boolean().default(true),
@@ -173,8 +186,8 @@ export const QualityReportConfigSchema = z.object({
     .default({}),
   links: z
     .object({
-      requirement: z.object({ baseUrl: z.string().url() }).optional(),
-      defect: z.object({ baseUrl: z.string().url() }).optional()
+      requirement: ExternalLinkConfigSchema.optional(),
+      defect: ExternalLinkConfigSchema.optional()
     })
     .default({}),
   qualityGates: QualityGateConfigSchema,

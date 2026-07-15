@@ -196,6 +196,70 @@ type TestMapping = {
   links?: Array<{ label: string; url: string }>;
 };
 
+const TEST_MAPPING_SELECTORS = ["framework", "file", "suite", "fullName", "title"] as const;
+
+function exactPatternMatch(pattern: RegExp, value: string): boolean {
+  return new RegExp(`^(?:${pattern.source})$`, pattern.flags.replace("g", "").replace("y", "")).test(value);
+}
+
+function parseStringArray(value: unknown, field: string): string[] | undefined {
+  if (value === undefined) return undefined;
+  if (!Array.isArray(value) || value.some((item) => typeof item !== "string" || !item))
+    throw new Error(`${field} must be an array of non-empty strings.`);
+  return [...new Set(value)];
+}
+
+function parseTestMapping(value: unknown, index: number, identityPattern: RegExp): TestMapping {
+  if (!value || typeof value !== "object" || Array.isArray(value))
+    throw new Error(`Entry ${index} must be an object.`);
+  const entry = value as Record<string, unknown>;
+  if (!entry.match || typeof entry.match !== "object" || Array.isArray(entry.match))
+    throw new Error(`Entry ${index}.match must be an object.`);
+  const rawMatch = entry.match as Record<string, unknown>;
+  const match: TestMapping["match"] = {};
+  for (const selector of TEST_MAPPING_SELECTORS) {
+    const selectorValue = rawMatch[selector];
+    if (selectorValue !== undefined) {
+      if (typeof selectorValue !== "string" || !selectorValue.trim())
+        throw new Error(`Entry ${index}.match.${selector} must be a non-empty string.`);
+      match[selector] = selectorValue;
+    }
+  }
+  if (Object.keys(match).length === 0)
+    throw new Error(`Entry ${index}.match must contain at least one selector.`);
+  if (entry.canonicalId !== undefined && (typeof entry.canonicalId !== "string" || !exactPatternMatch(identityPattern, entry.canonicalId)))
+    throw new Error(`Entry ${index}.canonicalId does not exactly match identity.idPattern.`);
+  let links: TestMapping["links"];
+  if (entry.links !== undefined) {
+    if (!Array.isArray(entry.links)) throw new Error(`Entry ${index}.links must be an array.`);
+    links = entry.links.map((link, linkIndex) => {
+      if (!link || typeof link !== "object" || Array.isArray(link))
+        throw new Error(`Entry ${index}.links[${linkIndex}] must be an object.`);
+      const item = link as Record<string, unknown>;
+      if (typeof item.label !== "string" || !item.label) throw new Error(`Entry ${index}.links[${linkIndex}].label must be a non-empty string.`);
+      if (typeof item.url !== "string") throw new Error(`Entry ${index}.links[${linkIndex}].url must be a URL.`);
+      try {
+        const url = new URL(item.url);
+        if (!["http:", "https:"].includes(url.protocol)) throw new Error("unsafe protocol");
+      } catch {
+        throw new Error(`Entry ${index}.links[${linkIndex}].url must be a valid HTTP(S) URL.`);
+      }
+      return { label: item.label, url: item.url };
+    });
+  }
+  const requirements = parseStringArray(entry.requirements, `Entry ${index}.requirements`);
+  const defects = parseStringArray(entry.defects, `Entry ${index}.defects`);
+  const tags = parseStringArray(entry.tags, `Entry ${index}.tags`);
+  return {
+    match,
+    ...(typeof entry.canonicalId === "string" ? { canonicalId: entry.canonicalId } : {}),
+    ...(requirements ? { requirements } : {}),
+    ...(defects ? { defects } : {}),
+    ...(tags ? { tags } : {}),
+    ...(links ? { links } : {})
+  };
+}
+
 function matchesTest(test: NormalizedTestCase, match: TestMapping["match"]): boolean {
   return (
     (!match.framework || test.framework === match.framework) &&
@@ -210,7 +274,8 @@ async function applyTestMappings(
   tests: NormalizedTestCase[],
   artifacts: DiscoveredArtifact[],
   warnings: ParserWarning[],
-  inputPath: string
+  inputPath: string,
+  identityPattern: RegExp
 ) {
   const mappings: TestMapping[] = [];
   for (const artifact of artifacts.filter((item) => item.kind === "testMapping")) {
@@ -220,7 +285,13 @@ async function applyTestMappings(
     try {
       const parsed = JSON.parse(content) as unknown;
       if (!Array.isArray(parsed)) throw new Error("Test mapping must be a JSON array.");
-      mappings.push(...(parsed as TestMapping[]));
+      for (const [index, entry] of parsed.entries()) {
+        try {
+          mappings.push(parseTestMapping(entry, index, identityPattern));
+        } catch (error) {
+          warnings.push({ sourcePath: display, code: "identity.mapping.invalid-entry", message: error instanceof Error ? error.message : `Invalid mapping entry ${index}.` });
+        }
+      }
     } catch (error) {
       warnings.push({
         sourcePath: display,
@@ -554,7 +625,13 @@ export async function buildReport(options: GenerateOptions): Promise<NormalizedR
       });
     delete test.labels.__identityMalformed;
   }
-  await applyTestMappings(dedupedTests, artifacts, warnings, options.inputPath);
+  await applyTestMappings(
+    dedupedTests,
+    artifacts,
+    warnings,
+    options.inputPath,
+    new RegExp(options.config.identity.idPattern)
+  );
   await applyRequirementMappings(dedupedTests, artifacts, warnings, options.inputPath);
   addConfiguredLinks(dedupedTests, options.config);
   const expected = await readExpectedRequirements(artifacts, warnings, options.inputPath);

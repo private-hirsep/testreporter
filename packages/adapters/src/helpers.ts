@@ -47,6 +47,11 @@ export function metric(covered: number, missed: number): CoverageMetric {
   return { covered, missed, total, percentage: pct(covered, total) };
 }
 
+function matchesEntireValue(pattern: RegExp, value: string): boolean {
+  const flags = pattern.flags.replace("g", "").replace("y", "");
+  return new RegExp(`^(?:${pattern.source})$`, flags).test(value);
+}
+
 export function buildTestCase(input: {
   name: string;
   suite?: string | undefined;
@@ -88,10 +93,7 @@ export function buildTestCase(input: {
   const explicitValue = aliases.flatMap((alias) => input.labels?.[alias] ?? []).find(Boolean);
   const validExplicit =
     explicitValue &&
-    (!input.identityPattern ||
-      new RegExp(input.identityPattern.source, input.identityPattern.flags.replace("g", "")).test(
-        explicitValue
-      ));
+    (!input.identityPattern || matchesEntireValue(input.identityPattern, explicitValue));
   const titleMatch = input.titleTokenPattern
     ? new RegExp(
         input.titleTokenPattern.source,
