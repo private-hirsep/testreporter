@@ -6,7 +6,7 @@ import type { Manifest } from "../types";
 describe("project context header", () => {
   it("builds identity and provenance lines from complete metadata", () => {
     const context = buildProjectContext(makeManifest());
-    expect(context.projectName).toBe("RFL Tool");
+    expect(context.projectName).toBe("Demo Tool");
     expect(context.identityParts).toEqual(["Release 1.1.7", "main", "staging"]);
     expect(context.provenanceParts).toEqual([
       "Last tested 23 Jul 2026",

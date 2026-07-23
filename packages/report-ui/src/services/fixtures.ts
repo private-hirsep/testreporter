@@ -5,8 +5,8 @@ export function makeManifest(overrides: Partial<Manifest> = {}): Manifest {
   const base: Manifest = {
     schemaVersion: "1.0",
     metadata: {
-      projectName: "RFL Tool",
-      repository: "org/rfl-tool",
+      projectName: "Demo Tool",
+      repository: "org/demo-tool",
       generatedAt: "2026-07-23T10:15:00.000Z",
       branch: "main",
       commitSha: "8f91c2a4d21b9e77",
@@ -59,7 +59,7 @@ export function makeManifest(overrides: Partial<Manifest> = {}): Manifest {
         {
           severity: "blocker",
           type: "failed-test",
-          project: "RFL",
+          project: "DEMO",
           reference: "abc123",
           message: "Test abc123 failed.",
           href: "#/tests/abc123"
@@ -67,7 +67,7 @@ export function makeManifest(overrides: Partial<Manifest> = {}): Manifest {
         {
           severity: "warning",
           type: "manual-case",
-          project: "RFL",
+          project: "DEMO",
           reference: "MT-1",
           message: "Required manual case MT-1 is not-run."
         }

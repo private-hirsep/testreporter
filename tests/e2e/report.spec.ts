@@ -3,7 +3,7 @@ import { expect, test } from "@playwright/test";
 test("manual case runner restores progress and exports a validated result", async ({ page }) => {
   await page.goto("/#/manual");
   await expect(page.getByRole("heading", { name: "Manual testing" })).toBeVisible();
-  await expect(page.getByText("RFL-MT-0012 — Verify TOKAI draft usability")).toBeVisible();
+  await expect(page.getByText("DEMO-MT-0012 — Verify report draft usability")).toBeVisible();
   await page.getByRole("button", { name: "Run case" }).first().click();
   await expect(page.getByLabel("Execution ID")).toBeEditable();
   await page.getByLabel("Tester").fill("E2E Tester");

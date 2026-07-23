@@ -1,15 +1,15 @@
-id: RFL-MT-0012
-title: Verify TOKAI draft usability
+id: DEMO-MT-0012
+title: Verify report draft usability
 description: Confirm a saved reporting draft survives a page reload.
 status: approved
 priority: high
 risk: high
-requirements: [RFL-123]
-tags: [tokai, regression]
+requirements: [DEMO-123]
+tags: [reporting, regression]
 estimatedMinutes: 4
 preconditions: [User is authenticated, Reporting API is available]
 steps:
-  - action: Open the TOKAI report dialog
+  - action: Open the report dialog
     expected: The event type selection is displayed
   - action: Complete all mandatory fields
     expected: Save Draft becomes available
