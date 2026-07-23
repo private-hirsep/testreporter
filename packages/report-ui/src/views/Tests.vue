@@ -1,14 +1,13 @@
 <template>
   <div v-if="manifest">
-    <PageHeader title="Tests" :subtitle="`${filtered.length} of ${tests.length} tests shown`">
-      <v-chip
-        :color="
-          manifest.summary.tests.failed || manifest.summary.tests.broken ? 'error' : 'success'
-        "
-        label
-      >
-        {{ manifest.summary.tests.failed + manifest.summary.tests.broken }} attention
-      </v-chip>
+    <PageHeader
+      title="Test Cases"
+      :subtitle="`Automated tests imported from this run · ${filtered.length} of ${tests.length} shown`"
+    >
+      <StatusChip
+        :status="manifest.summary.tests.failed || manifest.summary.tests.broken ? 'failed' : 'passed'"
+        :label="`${manifest.summary.tests.failed + manifest.summary.tests.broken} need attention`"
+      />
     </PageHeader>
     <div class="tab-strip" role="tablist" aria-label="Test result filters">
       <v-btn
@@ -85,6 +84,20 @@
             <v-chip size="small" variant="outlined" label>{{ test.framework }}</v-chip>
           </td>
           <td>
+            <v-chip
+              v-if="test.identity"
+              size="x-small"
+              :color="test.identity.stable ? 'success' : 'warning'"
+              :prepend-icon="test.identity.stable ? 'mdi-anchor' : 'mdi-alert-outline'"
+              variant="tonal"
+              label
+              :title="`Identity source: ${test.identity.source}`"
+            >
+              {{ test.identity.stable ? "stable" : "unstable" }}
+            </v-chip>
+            <span v-else class="text-medium-emphasis">—</span>
+          </td>
+          <td>
             <span class="mono cell-truncate" :title="sourceLocation(test)">{{
               sourceLocation(test)
             }}</span>
@@ -142,11 +155,16 @@ const frameworks = computed(() => ["all", ...new Set(props.tests.map((test) => t
 type SortKey = "status" | "name" | "layer" | "framework" | "source" | "duration" | "retries";
 const sortKey = ref<SortKey>("status");
 const sortDir = ref<1 | -1>(1);
-const columns: Array<{ key: SortKey | "requirements"; label: string; sortable: boolean }> = [
+const columns: Array<{
+  key: SortKey | "requirements" | "identity";
+  label: string;
+  sortable: boolean;
+}> = [
   { key: "status", label: "Status", sortable: true },
   { key: "name", label: "Name", sortable: true },
   { key: "layer", label: "Layer", sortable: true },
   { key: "framework", label: "Framework", sortable: true },
+  { key: "identity", label: "Identity", sortable: false },
   { key: "source", label: "Suite / File", sortable: true },
   { key: "duration", label: "Duration", sortable: true },
   { key: "requirements", label: "Requirements", sortable: false },
@@ -238,8 +256,8 @@ function compare(a: TestCase, b: TestCase) {
   }
 }
 
-function setSort(key: SortKey | "requirements") {
-  if (key === "requirements") return;
+function setSort(key: SortKey | "requirements" | "identity") {
+  if (key === "requirements" || key === "identity") return;
   if (sortKey.value === key) {
     sortDir.value = sortDir.value === 1 ? -1 : 1;
   } else {
@@ -248,7 +266,7 @@ function setSort(key: SortKey | "requirements") {
   }
 }
 
-function ariaSort(key: SortKey | "requirements") {
+function ariaSort(key: SortKey | "requirements" | "identity") {
   if (key !== sortKey.value) return undefined;
   return sortDir.value === 1 ? "ascending" : "descending";
 }

@@ -1,103 +1,237 @@
 <template>
   <div>
     <PageHeader
-      title="Release readiness"
-      :subtitle="manifest?.metadata.release ?? 'No release selected'"
-    /><v-alert v-if="!readiness" type="warning" variant="tonal"
-      >This older report has no readiness data. Regenerate it with a release scope.</v-alert
-    ><template v-else
-      ><v-alert
-        :type="
-          readiness.status === 'blocked'
-            ? 'error'
-            : readiness.status === 'ready' || readiness.status === 'ready-with-accepted-risks'
-              ? 'success'
-              : 'warning'
-        "
-        variant="tonal"
+      title="Release Readiness"
+      :subtitle="
+        manifest?.metadata.release
+          ? `Readiness evaluation for release ${manifest.metadata.release}`
+          : 'Readiness evaluation for this report'
+      "
+    >
+      <StatusChip v-if="readiness" :status="readiness.status" size="default" />
+    </PageHeader>
+    <EmptyState
+      v-if="!readiness"
+      variant="unavailable"
+      title="No readiness data in this report"
+      message="This report was generated without a release scope. Add a release with scoped requirements and required manual cases to quality-report.yml, then regenerate."
+    />
+    <template v-else>
+      <SectionCard
+        title="Why this status"
+        description="Every reason contributing to the current readiness result"
         class="mb-4"
-        ><strong>{{ label(readiness.status) }}</strong> — {{ readiness.reasons.join(" ") }}</v-alert
+        :data-status="readiness.status"
       >
-      <div class="detail-grid">
-        <section class="portal-card detail-section">
-          <h2>Release metadata</h2>
-          <dl class="detail-list">
-            <dt>Release</dt>
-            <dd>{{ manifest?.metadata.release ?? "n/a" }}</dd>
-            <dt>Tested build</dt>
-            <dd>{{ manifest?.metadata.testedBuild ?? "n/a" }}</dd>
-            <dt>Commit</dt>
-            <dd class="mono">{{ manifest?.metadata.commitSha ?? "n/a" }}</dd>
-            <dt>Branch / environment</dt>
-            <dd>
-              {{ manifest?.metadata.branch ?? "n/a" }} /
-              {{ manifest?.metadata.environment ?? "n/a" }}
-            </dd>
-            <dt>Workflow run</dt>
-            <dd>{{ manifest?.metadata.workflowRun ?? manifest?.metadata.runId ?? "n/a" }}</dd>
-          </dl>
-        </section>
-        <section class="portal-card detail-section">
-          <h2>Execution and scope</h2>
-          <p>
-            Automated: {{ readiness.automated.passed }} passed,
-            {{ readiness.automated.failed }} failed, {{ readiness.automated.skipped }} skipped.
-          </p>
-          <p>
-            Required manual: {{ readiness.manual.passed }} passed,
-            {{ readiness.manual.failed }} failed, {{ readiness.manual.blocked }} blocked,
-            {{ readiness.manual.notRun }} not run.
-          </p>
-          <p>
-            Requirements: {{ readiness.requirements.covered }} covered,
-            {{ readiness.requirements.uncovered }} uncovered,
-            {{ readiness.requirements.excluded }} excluded.
-          </p>
-          <p>
-            Security blockers: {{ readiness.securityBlockers }} · Quality gate:
-            {{ readiness.qualityGateFailed ? "failed" : "passed" }}
-          </p>
-        </section>
-      </div>
-      <section class="portal-card detail-section mt-4">
-        <h2>Required QA actions</h2>
-        <v-list v-if="readiness.actions.length"
-          ><v-list-item
-            v-for="action in readiness.actions"
-            :key="`${action.type}-${action.reference}`"
-            :title="action.message"
-            :subtitle="`${action.severity} · ${action.type}`"
-            :href="action.href"
-        /></v-list>
-        <p v-else>No required actions.</p>
-      </section>
-      <section class="portal-card detail-section mt-4">
-        <h2>Audit evidence completeness</h2>
-        <p v-if="readiness.missingEvidence.length">
-          Missing: {{ readiness.missingEvidence.join(", ") }}
-        </p>
-        <p v-else>All declared evidence references are present.</p>
-        <h3>Accepted risks</h3>
-        <p v-if="!readiness.acceptedRisks.length">None.</p>
-        <ul>
-          <li v-for="risk in readiness.acceptedRisks" :key="risk.id">
-            <strong>{{ risk.id }}</strong
-            >: {{ risk.reason }} <span v-if="risk.reference">({{ risk.reference }})</span>
+        <ul v-if="readiness.reasons.length" class="reason-list">
+          <li v-for="reason in readiness.reasons" :key="reason">
+            {{ resolveTestIds(reason, tests ?? []) }}
           </li>
         </ul>
-      </section></template
-    >
+        <EmptyState
+          v-else
+          variant="positive"
+          message="All readiness criteria for this release are satisfied."
+        />
+      </SectionCard>
+
+      <SectionCard title="Required QA actions" class="mb-4">
+        <AttentionList v-if="sortedActions.length" :items="sortedActions" />
+        <EmptyState v-else variant="positive" message="No required actions." />
+      </SectionCard>
+
+      <div class="detail-grid">
+        <SectionCard title="Release metadata">
+          <MetadataList
+            :items="[
+              { label: 'Release', value: manifest?.metadata.release },
+              { label: 'Tested build', value: manifest?.metadata.testedBuild, mono: true },
+              { label: 'Commit', value: manifest?.metadata.commitSha, mono: true },
+              { label: 'Branch', value: manifest?.metadata.branch, mono: true },
+              { label: 'Environment', value: manifest?.metadata.environment },
+              {
+                label: 'Workflow run',
+                value: manifest?.metadata.workflowRun ?? manifest?.metadata.runId
+              },
+              { label: 'Release date', value: manifest?.metadata.releaseDate }
+            ]"
+            placeholder="not recorded"
+          />
+        </SectionCard>
+        <SectionCard title="Execution and scope">
+          <div class="metric-card-items">
+            <div>
+              <strong class="text-success">{{ readiness.automated.passed }}</strong
+              ><span>Automated passed</span>
+            </div>
+            <div>
+              <strong :class="readiness.automated.failed ? 'text-error' : ''">{{
+                readiness.automated.failed
+              }}</strong
+              ><span>Automated failed</span>
+            </div>
+            <div>
+              <strong>{{ readiness.automated.skipped }}</strong
+              ><span>Automated skipped</span>
+            </div>
+          </div>
+          <div class="metric-card-items">
+            <div>
+              <strong class="text-success">{{ readiness.manual.passed }}</strong
+              ><span>Manual passed</span>
+            </div>
+            <div>
+              <strong :class="readiness.manual.failed ? 'text-error' : ''">{{
+                readiness.manual.failed
+              }}</strong
+              ><span>Manual failed</span>
+            </div>
+            <div>
+              <strong :class="readiness.manual.blocked ? 'text-error' : ''">{{
+                readiness.manual.blocked
+              }}</strong
+              ><span>Manual blocked</span>
+            </div>
+            <div>
+              <strong :class="readiness.manual.notRun ? 'text-warning' : ''">{{
+                readiness.manual.notRun
+              }}</strong
+              ><span>Manual not run</span>
+            </div>
+          </div>
+          <div class="metric-card-items">
+            <div>
+              <strong class="text-success">{{ readiness.requirements.covered }}</strong
+              ><span>Requirements covered</span>
+            </div>
+            <div>
+              <strong :class="readiness.requirements.uncovered ? 'text-error' : ''">{{
+                readiness.requirements.uncovered
+              }}</strong
+              ><span>Uncovered</span>
+            </div>
+            <div>
+              <strong>{{ readiness.requirements.excluded }}</strong
+              ><span>Excluded</span>
+            </div>
+            <div>
+              <strong :class="readiness.securityBlockers ? 'text-error' : 'text-success'">{{
+                readiness.securityBlockers
+              }}</strong
+              ><span>Security blockers</span>
+            </div>
+          </div>
+          <p class="text-body-2 mt-2 mb-0">
+            Quality gate:
+            <StatusChip
+              :status="readiness.qualityGateFailed ? 'failed' : 'passed'"
+              size="x-small"
+            />
+            <template v-if="readiness.automated.missing">
+              · automated evidence is missing for this release scope.
+            </template>
+          </p>
+        </SectionCard>
+      </div>
+
+      <div class="detail-grid">
+        <SectionCard
+          title="Accepted risks"
+          description="Known issues consciously accepted for this release"
+        >
+          <ul v-if="readiness.acceptedRisks.length" class="risk-list">
+            <li v-for="risk in readiness.acceptedRisks" :key="risk.id">
+              <StatusChip status="accepted-risk" size="x-small" />
+              <div>
+                <strong class="mono">{{ risk.id }}</strong
+                >: {{ risk.reason }}
+                <span v-if="risk.reference" class="text-medium-emphasis"
+                  >({{ risk.reference }})</span
+                >
+              </div>
+            </li>
+          </ul>
+          <EmptyState v-else variant="positive" message="No accepted risks were declared." />
+        </SectionCard>
+        <SectionCard
+          title="Audit evidence completeness"
+          description="Declared evidence references checked against the generated report"
+        >
+          <template v-if="readiness.missingEvidence.length">
+            <EmptyState
+              variant="warning"
+              title="Missing evidence"
+              :message="readiness.missingEvidence.join(', ')"
+            />
+          </template>
+          <template v-else>
+            <EmptyState
+              variant="positive"
+              message="All declared evidence references are present."
+            />
+          </template>
+          <div class="mt-3">
+            <v-btn to="/downloads" size="small" variant="text" append-icon="mdi-arrow-right">
+              Open evidence
+            </v-btn>
+          </div>
+        </SectionCard>
+      </div>
+
+      <SectionCard
+        v-if="readiness.requirements.uncoveredIds.length || readiness.requirements.excludedIds.length"
+        title="Scoped requirements"
+        class="mb-4"
+      >
+        <p v-if="readiness.requirements.uncoveredIds.length" class="mb-2">
+          Uncovered:
+          <v-chip
+            v-for="key in readiness.requirements.uncoveredIds"
+            :key="key"
+            size="small"
+            class="mr-1 mb-1 mono"
+            label
+            :to="`/requirements#requirement-${key}`"
+            >{{ key }}</v-chip
+          >
+        </p>
+        <p v-if="readiness.requirements.excludedIds.length" class="mb-0">
+          Excluded:
+          <v-chip
+            v-for="key in readiness.requirements.excludedIds"
+            :key="key"
+            size="small"
+            class="mr-1 mb-1 mono"
+            variant="outlined"
+            label
+            >{{ key }}</v-chip
+          >
+        </p>
+      </SectionCard>
+    </template>
   </div>
 </template>
+
 <script setup lang="ts">
 import { computed } from "vue";
+import AttentionList from "../components/AttentionList.vue";
+import EmptyState from "../components/EmptyState.vue";
+import MetadataList from "../components/MetadataList.vue";
 import PageHeader from "../components/PageHeader.vue";
-import type { Manifest } from "../types";
-const props = defineProps<{ manifest?: Manifest }>();
+import SectionCard from "../components/SectionCard.vue";
+import StatusChip from "../components/StatusChip.vue";
+import { attentionItems, resolveTestIds } from "../services/overview";
+import type { Manifest, TestCase } from "../types";
+
+const props = defineProps<{
+  manifest?: Manifest | undefined;
+  tests?: TestCase[] | undefined;
+}>();
 const readiness = computed(() => props.manifest?.readiness);
-const label = (value: string) =>
-  value
-    .split("-")
-    .map((x) => x[0]?.toUpperCase() + x.slice(1))
-    .join(" ");
+const severityRank: Record<string, number> = { blocker: 0, critical: 0, warning: 1 };
+const sortedActions = computed(() =>
+  [...(props.manifest ? (attentionItems(props.manifest, props.tests ?? []) ?? []) : [])].sort(
+    (a, b) => (severityRank[a.severity] ?? 2) - (severityRank[b.severity] ?? 2)
+  )
+);
 </script>
