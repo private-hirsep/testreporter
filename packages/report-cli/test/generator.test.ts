@@ -1,5 +1,6 @@
 ﻿import { mkdir, mkdtemp, readFile, readdir, stat, writeFile } from "node:fs/promises";
 import os from "node:os";
+import { createHash } from "node:crypto";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
 import { QualityReportConfigSchema } from "@quality-report/report-core";
@@ -65,37 +66,155 @@ function zipEntries(buffer: Buffer) {
 describe("report generator", () => {
   it("uses completed chronological approved manual evidence and validates all evidence references", async () => {
     const temp = await mkdtemp(path.join(os.tmpdir(), "quality-report-manual-corrections-"));
-    const input = path.join(temp, "input"); const output = path.join(temp, "output");
-    await mkdir(path.join(input, "cases"), { recursive: true }); await mkdir(path.join(input, "results"), { recursive: true }); await mkdir(path.join(input, "evidence"), { recursive: true }); await mkdir(path.join(input, "requirements"), { recursive: true }); await mkdir(path.join(input,"tests"),{recursive:true});
-    await writeFile(path.join(input,"requirements","expected.csv"),"key\nREQ-1\nREQ-2\n");
-    await writeFile(path.join(input,"tests","results.xml"),'<testsuite><testcase classname="Automated" name="covers REQ-2" /></testsuite>');
-    await writeFile(path.join(input,"evidence","missing-step.png"),"same basename, different reference");
-    await writeFile(path.join(input,"cases","approved.yml"), "id: APP-MT-1\ntitle: Approved\nstatus: approved\nrequirements: [REQ-1]\nsteps:\n  - action: Act\n    expected: Observe\n");
-    await writeFile(path.join(input,"cases","approved-2.yml"), "id: APP-MT-3\ntitle: Approved later\nstatus: approved\nrequirements: [REQ-1]\nsteps:\n  - action: Act\n    expected: Observe\n");
-    await writeFile(path.join(input,"cases","approved-unexecuted.yml"), "id: APP-MT-4\ntitle: Approved unexecuted\nstatus: approved\nrequirements: [REQ-2]\nsteps:\n  - action: Act\n    expected: Observe\n");
-    await writeFile(path.join(input,"cases","draft.yml"), "id: APP-MT-2\ntitle: Draft\nstatus: draft\nrequirements: [REQ-1]\nsteps:\n  - action: Act\n    expected: Observe\n");
-    const result=(executionId:string,state:"draft"|"completed",completedAt:string|undefined,status:"passed"|"failed")=>({schemaVersion:"1.0",executionId,projectKey:"APP",testedBuild:"build",environment:"test",tester:"tester",startedAt:"2026-01-01T00:00:00.000Z",...(completedAt?{completedAt}:{}),state,cases:[{caseId:"APP-MT-1",status,steps:[{index:0,status,evidence:["missing-step.png"]}],defects:[],evidence:[]}]});
-    await writeFile(path.join(input,"results","newer.json"),JSON.stringify(result("newer","completed","2026-01-03T00:00:00.000Z","failed")));
-    await writeFile(path.join(input,"results","older.json"),JSON.stringify(result("older","completed","2026-01-02T00:00:00.000Z","passed")));
-    await writeFile(path.join(input,"results","draft.json"),JSON.stringify(result("draft","draft",undefined,"passed")));
-    const latest={...result("latest","completed","2026-01-04T00:00:00.000Z","passed"),cases:[{caseId:"APP-MT-3",status:"passed",steps:[{index:0,status:"passed",evidence:[]}],defects:[],evidence:[]}]};
-    const equalTimestamp={...result("aaa-equal","completed","2026-01-04T00:00:00.000Z","failed"),cases:[{caseId:"APP-MT-3",status:"failed",steps:[{index:0,status:"failed",evidence:[]}],defects:[],evidence:[]}]};
-    await writeFile(path.join(input,"results","equal.json"),JSON.stringify(equalTimestamp));
-    await writeFile(path.join(input,"results","latest.json"),JSON.stringify(latest));
-    const unknown={...result("unknown","completed","2026-01-05T00:00:00.000Z","passed"),cases:[{caseId:"APP-MT-404",status:"passed",steps:[{index:0,status:"passed",evidence:[]}],defects:[],evidence:[]}]};
-    await writeFile(path.join(input,"results","unknown.json"),JSON.stringify(unknown));
-    const config=loadConfigFromObject({project:{name:"APP"},artifacts:{tests:{backend:{junit:"tests/*.xml"}},manual:{cases:"cases/*.yml",results:"results/*.json",evidence:"evidence/*"},requirements:{expectedKeys:"requirements/expected.csv"}},requirements:{keyPattern:"REQ-[0-9]+"},qualityGates:{manual:{failOnFailed:true,requireCompleted:true}}});
-    const report=await buildReport({config,configPath:"quality-report.yml",inputPath:input,outputPath:output});
-    expect(report.manualExecutions.map((item)=>item.executionId)).toEqual(["older","newer","aaa-equal","latest"]);
-    expect(report.summary.manual).toMatchObject({cases:3,passed:1,failed:1,notRun:1,missingEvidence:1});
-    expect(report.requirements.manualCasesByRequirement["REQ-1"]).toEqual(["APP-MT-1","APP-MT-3"]);
+    const input = path.join(temp, "input");
+    const output = path.join(temp, "output");
+    await mkdir(path.join(input, "cases"), { recursive: true });
+    await mkdir(path.join(input, "results"), { recursive: true });
+    await mkdir(path.join(input, "evidence"), { recursive: true });
+    await mkdir(path.join(input, "requirements"), { recursive: true });
+    await mkdir(path.join(input, "tests"), { recursive: true });
+    await writeFile(path.join(input, "requirements", "expected.csv"), "key\nREQ-1\nREQ-2\n");
+    await writeFile(
+      path.join(input, "tests", "results.xml"),
+      '<testsuite><testcase classname="Automated" name="covers REQ-2" /></testsuite>'
+    );
+    await writeFile(
+      path.join(input, "evidence", "missing-step.png"),
+      "same basename, different reference"
+    );
+    await writeFile(
+      path.join(input, "cases", "approved.yml"),
+      "id: APP-MT-1\ntitle: Approved\nstatus: approved\nrequirements: [REQ-1]\nsteps:\n  - action: Act\n    expected: Observe\n"
+    );
+    await writeFile(
+      path.join(input, "cases", "approved-2.yml"),
+      "id: APP-MT-3\ntitle: Approved later\nstatus: approved\nrequirements: [REQ-1]\nsteps:\n  - action: Act\n    expected: Observe\n"
+    );
+    await writeFile(
+      path.join(input, "cases", "approved-unexecuted.yml"),
+      "id: APP-MT-4\ntitle: Approved unexecuted\nstatus: approved\nrequirements: [REQ-2]\nsteps:\n  - action: Act\n    expected: Observe\n"
+    );
+    await writeFile(
+      path.join(input, "cases", "draft.yml"),
+      "id: APP-MT-2\ntitle: Draft\nstatus: draft\nrequirements: [REQ-1]\nsteps:\n  - action: Act\n    expected: Observe\n"
+    );
+    const result = (
+      executionId: string,
+      state: "draft" | "completed",
+      completedAt: string | undefined,
+      status: "passed" | "failed"
+    ) => ({
+      schemaVersion: "1.0",
+      executionId,
+      projectKey: "APP",
+      testedBuild: "build",
+      environment: "test",
+      tester: "tester",
+      startedAt: "2026-01-01T00:00:00.000Z",
+      ...(completedAt ? { completedAt } : {}),
+      state,
+      cases: [
+        {
+          caseId: "APP-MT-1",
+          status,
+          steps: [{ index: 0, status, evidence: ["missing-step.png"] }],
+          defects: [],
+          evidence: []
+        }
+      ]
+    });
+    await writeFile(
+      path.join(input, "results", "newer.json"),
+      JSON.stringify(result("newer", "completed", "2026-01-03T00:00:00.000Z", "failed"))
+    );
+    await writeFile(
+      path.join(input, "results", "older.json"),
+      JSON.stringify(result("older", "completed", "2026-01-02T00:00:00.000Z", "passed"))
+    );
+    await writeFile(
+      path.join(input, "results", "draft.json"),
+      JSON.stringify(result("draft", "draft", undefined, "passed"))
+    );
+    const latest = {
+      ...result("latest", "completed", "2026-01-04T00:00:00.000Z", "passed"),
+      cases: [
+        {
+          caseId: "APP-MT-3",
+          status: "passed",
+          steps: [{ index: 0, status: "passed", evidence: [] }],
+          defects: [],
+          evidence: []
+        }
+      ]
+    };
+    const equalTimestamp = {
+      ...result("aaa-equal", "completed", "2026-01-04T00:00:00.000Z", "failed"),
+      cases: [
+        {
+          caseId: "APP-MT-3",
+          status: "failed",
+          steps: [{ index: 0, status: "failed", evidence: [] }],
+          defects: [],
+          evidence: []
+        }
+      ]
+    };
+    await writeFile(path.join(input, "results", "equal.json"), JSON.stringify(equalTimestamp));
+    await writeFile(path.join(input, "results", "latest.json"), JSON.stringify(latest));
+    const unknown = {
+      ...result("unknown", "completed", "2026-01-05T00:00:00.000Z", "passed"),
+      cases: [
+        {
+          caseId: "APP-MT-404",
+          status: "passed",
+          steps: [{ index: 0, status: "passed", evidence: [] }],
+          defects: [],
+          evidence: []
+        }
+      ]
+    };
+    await writeFile(path.join(input, "results", "unknown.json"), JSON.stringify(unknown));
+    const config = loadConfigFromObject({
+      project: { name: "APP" },
+      artifacts: {
+        tests: { backend: { junit: "tests/*.xml" } },
+        manual: { cases: "cases/*.yml", results: "results/*.json", evidence: "evidence/*" },
+        requirements: { expectedKeys: "requirements/expected.csv" }
+      },
+      requirements: { keyPattern: "REQ-[0-9]+" },
+      qualityGates: { manual: { failOnFailed: true, requireCompleted: true } }
+    });
+    const report = await buildReport({
+      config,
+      configPath: "quality-report.yml",
+      inputPath: input,
+      outputPath: output
+    });
+    expect(report.manualExecutions.map((item) => item.executionId)).toEqual([
+      "older",
+      "newer",
+      "aaa-equal",
+      "latest"
+    ]);
+    expect(report.summary.manual).toMatchObject({
+      cases: 3,
+      passed: 1,
+      failed: 1,
+      notRun: 1,
+      missingEvidence: 1
+    });
+    expect(report.requirements.manualCasesByRequirement["REQ-1"]).toEqual(["APP-MT-1", "APP-MT-3"]);
     expect(report.requirements.latestManualResultByRequirement["REQ-1"]).toBe("failed");
     expect(report.requirements.covered).not.toContain("REQ-1");
     expect(report.requirements.evidenceTypeByRequirement["REQ-2"]).toBe("automated");
-    expect(report.qualityGate.checks.find((check)=>check.id==="manual.failed")?.status).toBe("failed");
-    expect(report.downloads.some((item)=>item.name==="draft.json")).toBe(false);
-    expect(report.downloads.some((item)=>item.name==="unknown.json")).toBe(false);
-    expect(report.warnings.some((item)=>item.code==="manual.execution.definition-mismatch")).toBe(true);
+    expect(report.qualityGate.checks.find((check) => check.id === "manual.failed")?.status).toBe(
+      "failed"
+    );
+    expect(report.downloads.some((item) => item.name === "draft.json")).toBe(false);
+    expect(report.downloads.some((item) => item.name === "unknown.json")).toBe(false);
+    expect(
+      report.warnings.some((item) => item.code === "manual.execution.definition-mismatch")
+    ).toBe(true);
   });
   it("generates normalized report data from the minimal example", async () => {
     const root = path.resolve(import.meta.dirname, "../../..");
@@ -111,6 +230,7 @@ describe("report generator", () => {
       inputPath: path.join(root, "examples/minimal/quality-artifacts"),
       outputPath: output,
       zip: true,
+      release: "9.9.9",
       qualityProfile: "relaxed",
       publishMode: "artifact",
       prCommentMode: "minimal",
@@ -132,6 +252,12 @@ describe("report generator", () => {
       )
     ).toBe(true);
     expect(report.warnings.some((warning) => warning.code === "sarif.malformed")).toBe(true);
+    expect(
+      report.warnings.some((warning) => warning.code === "release-scope.release-mismatch")
+    ).toBe(true);
+    expect(
+      report.readiness?.actions.some((action) => action.type === "release-scope-mismatch")
+    ).toBe(true);
     expect(report.requirements.testsByRequirement["JIRA-101"]?.length).toBeGreaterThan(0);
     expect(report.security.some((finding) => finding.helpUri || finding.evidence)).toBe(true);
     await assertFullHtml(output);
@@ -161,10 +287,36 @@ describe("report generator", () => {
     expect(summary.prCommentMode).toBe("minimal");
     expect(minimalComment.startsWith("<!-- quality-report-platform:summary -->")).toBe(true);
     expect(fullComment.startsWith("<!-- quality-report-platform:summary -->")).toBe(true);
-    const evidence = JSON.parse(await readFile(path.join(output, "evidence-manifest.json"), "utf8")) as { includedEvidence: Array<{path:string;sha256:string}> };
+    const evidence = JSON.parse(
+      await readFile(path.join(output, "evidence-manifest.json"), "utf8")
+    ) as { includedEvidence: Array<{ path: string; sha256: string }> };
     expect(evidence.includedEvidence.length).toBeGreaterThan(0);
-    expect(evidence.includedEvidence.every((item)=>/^[a-f0-9]{64}$/.test(item.sha256))).toBe(true);
-    await expect(stat(path.join(output,"project-quality-summary.json"))).resolves.toBeTruthy();
+    expect(evidence.includedEvidence.every((item) => /^[a-f0-9]{64}$/.test(item.sha256))).toBe(
+      true
+    );
+    expect(evidence.includedEvidence.map((item) => item.path)).toEqual(
+      expect.arrayContaining(["index.html", "data/manifest.json", "normalized-report.json"])
+    );
+    const checksumLines = (await readFile(path.join(output, "checksums.sha256"), "utf8"))
+      .trim()
+      .split(/\r?\n/)
+      .map((line) => {
+        const match = line.match(/^([a-f0-9]{64}) {2}(.+)$/);
+        expect(match).not.toBeNull();
+        return { hash: match![1]!, file: match![2]! };
+      });
+    expect(checksumLines.map((item) => item.file)).toEqual(
+      [...evidence.includedEvidence.map((item) => item.path), "evidence-manifest.json"].sort(
+        (left, right) => left.localeCompare(right)
+      )
+    );
+    for (const item of checksumLines) {
+      const actual = createHash("sha256")
+        .update(await readFile(path.join(output, item.file)))
+        .digest("hex");
+      expect(actual, item.file).toBe(item.hash);
+    }
+    await expect(stat(path.join(output, "project-quality-summary.json"))).resolves.toBeTruthy();
   });
 
   it("keeps built-in profiles and custom quality-gate fields typed", async () => {

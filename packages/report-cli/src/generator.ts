@@ -55,7 +55,14 @@ export type GenerateOptions = {
   publishMode?: string | undefined;
   prCommentMode?: string | undefined;
   prCommentMarker?: string | undefined;
-  release?: string; testedBuild?: string; commitSha?: string; branch?: string; environment?: string; workflowRun?: string; releaseDate?: string; releaseScope?: string;
+  release?: string;
+  testedBuild?: string;
+  commitSha?: string;
+  branch?: string;
+  environment?: string;
+  workflowRun?: string;
+  releaseDate?: string;
+  releaseScope?: string;
 };
 
 const MAX_PARSE_BYTES = 50 * 1024 * 1024;
@@ -110,15 +117,36 @@ function metadata(config: QualityReportConfig, options: GenerateOptions) {
     projectName: config.project.name,
     ...(config.project.repository ? { repository: config.project.repository } : {}),
     generatedAt: new Date().toISOString(),
-    branch: redactSecrets(options.branch ?? process.env.QR_BRANCH ?? process.env.GITHUB_REF_NAME ?? config.release.branch),
-    commitSha: redactSecrets(options.commitSha ?? process.env.QR_COMMIT_SHA ?? process.env.GITHUB_SHA ?? config.release.commitSha),
+    branch: redactSecrets(
+      options.branch ??
+        process.env.QR_BRANCH ??
+        process.env.GITHUB_REF_NAME ??
+        config.release.branch
+    ),
+    commitSha: redactSecrets(
+      options.commitSha ??
+        process.env.QR_COMMIT_SHA ??
+        process.env.GITHUB_SHA ??
+        config.release.commitSha
+    ),
     runId: redactSecrets(process.env.GITHUB_RUN_ID),
     actor: redactSecrets(process.env.GITHUB_ACTOR),
     release: redactSecrets(options.release ?? process.env.QR_RELEASE ?? config.release.name),
-    testedBuild: redactSecrets(options.testedBuild ?? process.env.QR_TESTED_BUILD ?? config.release.testedBuild),
-    environment: redactSecrets(options.environment ?? process.env.QR_ENVIRONMENT ?? config.release.environment),
-    workflowRun: redactSecrets(options.workflowRun ?? process.env.QR_WORKFLOW_RUN ?? process.env.GITHUB_RUN_ID ?? config.release.workflowRun),
-    releaseDate: redactSecrets(options.releaseDate ?? process.env.QR_RELEASE_DATE ?? config.release.releaseDate),
+    testedBuild: redactSecrets(
+      options.testedBuild ?? process.env.QR_TESTED_BUILD ?? config.release.testedBuild
+    ),
+    environment: redactSecrets(
+      options.environment ?? process.env.QR_ENVIRONMENT ?? config.release.environment
+    ),
+    workflowRun: redactSecrets(
+      options.workflowRun ??
+        process.env.QR_WORKFLOW_RUN ??
+        process.env.GITHUB_RUN_ID ??
+        config.release.workflowRun
+    ),
+    releaseDate: redactSecrets(
+      options.releaseDate ?? process.env.QR_RELEASE_DATE ?? config.release.releaseDate
+    ),
     ...(options.qualityProfile ? { qualityProfile: options.qualityProfile } : {}),
     ...(options.publishMode ? { publishMode: options.publishMode } : {}),
     ...(options.prCommentMode ? { prCommentMode: options.prCommentMode } : {})
@@ -580,7 +608,11 @@ async function zipDirectory(source: string, target: string) {
     output.on("close", resolve);
     archive.on("error", reject);
     archive.pipe(output);
-    archive.glob("**/*", { cwd: source, ignore: ["quality-report*.zip"], nodir: true }, { date: new Date("1980-01-01T00:00:00.000Z") });
+    archive.glob(
+      "**/*",
+      { cwd: source, ignore: ["quality-report*.zip"], nodir: true },
+      { date: new Date("1980-01-01T00:00:00.000Z") }
+    );
     void archive.finalize();
   });
 }
@@ -652,7 +684,8 @@ export async function buildReport(options: GenerateOptions): Promise<NormalizedR
       if (artifact.kind === "manualResult") {
         const parsed = parseManualExecution(content, displayPath);
         collectParseResult(manualExecutions, parsed, warnings);
-        for (const execution of parsed.items) manualExecutionPaths.set(execution.executionId, artifact.path);
+        for (const execution of parsed.items)
+          manualExecutionPaths.set(execution.executionId, artifact.path);
       }
     } catch (error) {
       warnings.push({
@@ -677,21 +710,32 @@ export async function buildReport(options: GenerateOptions): Promise<NormalizedR
   );
   const activeManualCases = uniqueManualCases.filter((item) => item.status === "approved");
   const activeDefinitions = new Map(activeManualCases.map((item) => [item.id, item]));
-  const definitionIssues = (execution: ManualExecution) => execution.cases.flatMap((result) => {
-    const definition = activeDefinitions.get(result.caseId);
-    if (!definition) return [`${result.caseId} is not an approved manual case`];
-    const indices = result.steps.map((step) => step.index);
-    const expectedIndices = definition.steps.map((_, index) => index);
-    const issues: string[] = [];
-    if (indices.length !== expectedIndices.length || indices.some((value, index) => value !== expectedIndices[index])) issues.push(`${result.caseId} step indices do not match its definition`);
-    if (definition.revision && result.caseRevision !== definition.revision) issues.push(`${result.caseId} revision does not match its definition`);
-    return issues;
-  });
+  const definitionIssues = (execution: ManualExecution) =>
+    execution.cases.flatMap((result) => {
+      const definition = activeDefinitions.get(result.caseId);
+      if (!definition) return [`${result.caseId} is not an approved manual case`];
+      const indices = result.steps.map((step) => step.index);
+      const expectedIndices = definition.steps.map((_, index) => index);
+      const issues: string[] = [];
+      if (
+        indices.length !== expectedIndices.length ||
+        indices.some((value, index) => value !== expectedIndices[index])
+      )
+        issues.push(`${result.caseId} step indices do not match its definition`);
+      if (definition.revision && result.caseRevision !== definition.revision)
+        issues.push(`${result.caseId} revision does not match its definition`);
+      return issues;
+    });
   const officialManualExecutions = manualExecutions
     .filter((execution) => {
       if (execution.state !== "completed") return false;
       const issues = definitionIssues(execution);
-      for (const message of issues) warnings.push({ code: "manual.execution.definition-mismatch", sourcePath: manualExecutionPaths.get(execution.executionId), message });
+      for (const message of issues)
+        warnings.push({
+          code: "manual.execution.definition-mismatch",
+          sourcePath: manualExecutionPaths.get(execution.executionId),
+          message
+        });
       return issues.length === 0;
     })
     .sort(
@@ -699,10 +743,22 @@ export async function buildReport(options: GenerateOptions): Promise<NormalizedR
         left.completedAt!.localeCompare(right.completedAt!) ||
         left.executionId.localeCompare(right.executionId)
     );
-  const officialManualResultPaths = new Set(officialManualExecutions.map((execution) => manualExecutionPaths.get(execution.executionId)).filter((value): value is string => Boolean(value)));
-  const latest = new Map<string, { completedAt: string; executionId: string; result: ManualExecution["cases"][number] }>();
+  const officialManualResultPaths = new Set(
+    officialManualExecutions
+      .map((execution) => manualExecutionPaths.get(execution.executionId))
+      .filter((value): value is string => Boolean(value))
+  );
+  const latest = new Map<
+    string,
+    { completedAt: string; executionId: string; result: ManualExecution["cases"][number] }
+  >();
   for (const execution of officialManualExecutions)
-    for (const result of execution.cases) latest.set(result.caseId, { completedAt: execution.completedAt!, executionId: execution.executionId, result });
+    for (const result of execution.cases)
+      latest.set(result.caseId, {
+        completedAt: execution.completedAt!,
+        executionId: execution.executionId,
+        result
+      });
   for (const test of dedupedTests) {
     const malformed = test.labels.__identityMalformed;
     if (malformed?.length)
@@ -726,9 +782,12 @@ export async function buildReport(options: GenerateOptions): Promise<NormalizedR
   const requirements = calculateRequirementCoverage(expected, dedupedTests);
   for (const manualCase of activeManualCases) {
     for (const key of manualCase.requirements) {
-      requirements.manualCasesByRequirement[key] = [...new Set([...(requirements.manualCasesByRequirement[key] ?? []), manualCase.id])].sort();
-      const latestCaseResults = requirements.manualCasesByRequirement[key]!
-        .map((id) => latest.get(id)?.result.status ?? "not-run");
+      requirements.manualCasesByRequirement[key] = [
+        ...new Set([...(requirements.manualCasesByRequirement[key] ?? []), manualCase.id])
+      ].sort();
+      const latestCaseResults = requirements.manualCasesByRequirement[key]!.map(
+        (id) => latest.get(id)?.result.status ?? "not-run"
+      );
       const manualResult = latestCaseResults.includes("failed")
         ? "failed"
         : latestCaseResults.includes("blocked")
@@ -743,25 +802,40 @@ export async function buildReport(options: GenerateOptions): Promise<NormalizedR
       requirements.latestManualResultByRequirement[key] = manualResult;
       const automated = Boolean(requirements.testsByRequirement[key]?.length);
       const hasManualEvidence = latestCaseResults.some((status) => status !== "not-run");
-      requirements.evidenceTypeByRequirement[key] = automated && hasManualEvidence
-        ? "both"
-        : automated
-          ? "automated"
-          : hasManualEvidence
-            ? "manual-executed"
-            : "manual-defined";
+      requirements.evidenceTypeByRequirement[key] =
+        automated && hasManualEvidence
+          ? "both"
+          : automated
+            ? "automated"
+            : hasManualEvidence
+              ? "manual-executed"
+              : "manual-defined";
     }
   }
-  const successfulManualRequirements = Object.entries(requirements.latestManualResultByRequirement).filter(([, status]) => status === "passed").map(([key]) => key);
-  requirements.covered = [...new Set([...requirements.covered, ...successfulManualRequirements.filter((key) => requirements.expected.includes(key))])].sort();
+  const successfulManualRequirements = Object.entries(requirements.latestManualResultByRequirement)
+    .filter(([, status]) => status === "passed")
+    .map(([key]) => key);
+  requirements.covered = [
+    ...new Set([
+      ...requirements.covered,
+      ...successfulManualRequirements.filter((key) => requirements.expected.includes(key))
+    ])
+  ].sort();
   requirements.missing = requirements.expected.filter((key) => !requirements.covered.includes(key));
-  requirements.percentage = requirements.expected.length === 0 ? 100 : Math.round(requirements.covered.length / requirements.expected.length * 10000) / 100;
-  for (const key of Object.keys(requirements.testsByRequirement)) if (!requirements.evidenceTypeByRequirement[key]) requirements.evidenceTypeByRequirement[key] = "automated";
+  requirements.percentage =
+    requirements.expected.length === 0
+      ? 100
+      : Math.round((requirements.covered.length / requirements.expected.length) * 10000) / 100;
+  for (const key of Object.keys(requirements.testsByRequirement))
+    if (!requirements.evidenceTypeByRequirement[key])
+      requirements.evidenceTypeByRequirement[key] = "automated";
   const mergedCoverage = mergeCoverage(coverage);
   for (const warning of warnings) {
     if (warning.sourcePath) warning.sourcePath = safeRelativePath(warning.sourcePath, inputRoot);
   }
-  const officialArtifacts = artifacts.filter((artifact) => artifact.kind !== "manualResult" || officialManualResultPaths.has(artifact.path));
+  const officialArtifacts = artifacts.filter(
+    (artifact) => artifact.kind !== "manualResult" || officialManualResultPaths.has(artifact.path)
+  );
   const downloads = await copyRawArtifacts(officialArtifacts, options.outputPath, inputRoot);
   const summary = buildSummary(dedupedTests, mergedCoverage, requirements, security);
   const counts = { passed: 0, failed: 0, blocked: 0, skipped: 0, notRun: 0 };
@@ -778,10 +852,34 @@ export async function buildReport(options: GenerateOptions): Promise<NormalizedR
       ? Math.round((executed / activeManualCases.length) * 10000) / 100
       : 100,
     missingEvidence: (() => {
-      const available = new Set(artifacts.filter((artifact) => artifact.kind === "manualEvidence").map((artifact) => artifactDisplayPath(options.inputPath, artifact.path)));
-      const referenced = officialManualExecutions.flatMap((execution) => execution.cases).flatMap((result) => [...result.evidence, ...result.steps.flatMap((step) => step.evidence)]);
-      const missing = [...new Set(referenced.map((name) => name.replace(/\\/g, "/")).filter((name) => path.posix.isAbsolute(name) || path.posix.normalize(name).startsWith("../") || !available.has(path.posix.normalize(name))))];
-      for (const name of missing) warnings.push({ code: "manual.evidence.missing", message: `Manual evidence reference does not resolve exactly: ${name}` });
+      const available = new Set(
+        artifacts
+          .filter((artifact) => artifact.kind === "manualEvidence")
+          .map((artifact) => artifactDisplayPath(options.inputPath, artifact.path))
+      );
+      const referenced = officialManualExecutions
+        .flatMap((execution) => execution.cases)
+        .flatMap((result) => [
+          ...result.evidence,
+          ...result.steps.flatMap((step) => step.evidence)
+        ]);
+      const missing = [
+        ...new Set(
+          referenced
+            .map((name) => name.replace(/\\/g, "/"))
+            .filter(
+              (name) =>
+                path.posix.isAbsolute(name) ||
+                path.posix.normalize(name).startsWith("../") ||
+                !available.has(path.posix.normalize(name))
+            )
+        )
+      ];
+      for (const name of missing)
+        warnings.push({
+          code: "manual.evidence.missing",
+          message: `Manual evidence reference does not resolve exactly: ${name}`
+        });
       return missing.length;
     })()
   };
@@ -793,18 +891,88 @@ export async function buildReport(options: GenerateOptions): Promise<NormalizedR
     try {
       const absolute = path.resolve(path.dirname(options.configPath), scopePath);
       releaseScope = ReleaseScopeSchema.parse(parseYaml(await readFile(absolute, "utf8")));
-      const knownRequirements = new Set([...requirements.expected, ...requirements.covered, ...requirements.extra]);
+      const knownRequirements = new Set([
+        ...requirements.expected,
+        ...requirements.covered,
+        ...requirements.extra
+      ]);
       const knownManualCases = new Set(uniqueManualCases.map((item) => item.id));
-      for (const id of releaseScope.requirements.filter((id) => !knownRequirements.has(id))) warnings.push({ code: "release-scope.unknown-requirement", message: `Unknown requirement ID: ${id}` });
-      for (const id of releaseScope.requiredManualCases.filter((id) => !knownManualCases.has(id))) warnings.push({ code: "release-scope.unknown-manual-case", message: `Unknown manual case ID: ${id}` });
-    } catch (error) { warnings.push({ code: "release-scope.invalid", message: error instanceof Error ? error.message : "Invalid release scope" }); }
+      for (const id of releaseScope.requirements.filter((id) => !knownRequirements.has(id)))
+        warnings.push({
+          code: "release-scope.unknown-requirement",
+          message: `Unknown requirement ID: ${id}`
+        });
+      for (const id of releaseScope.requiredManualCases.filter((id) => !knownManualCases.has(id)))
+        warnings.push({
+          code: "release-scope.unknown-manual-case",
+          message: `Unknown manual case ID: ${id}`
+        });
+      if (meta.release && releaseScope.release !== meta.release)
+        warnings.push({
+          code: "release-scope.release-mismatch",
+          message: `Release scope ${releaseScope.release} does not match report release ${meta.release}.`
+        });
+    } catch (error) {
+      warnings.push({
+        code: "release-scope.invalid",
+        message: error instanceof Error ? error.message : "Invalid release scope"
+      });
+    }
   }
-  const manualStatuses = Object.fromEntries(activeManualCases.map((item) => [item.id, latest.get(item.id)?.result.status ?? "not-run"]));
-  const readiness = determineReadiness({ project: meta.projectKey ?? meta.projectName, ...(releaseScope ? { scope: releaseScope } : {}), tests: dedupedTests, manualStatuses, coveredRequirements: requirements.covered, security, qualityGateStatus: qualityGate.status, missingEvidence: summary.manual.missingEvidence ? [`${summary.manual.missingEvidence} manual evidence reference(s)`] : [] });
-  const manualHistoryTargets: NormalizedTestCase[] = uniqueManualCases.map((item) => ({ id: item.id, name: item.title, framework: "unknown", layer: "unknown", status: "unknown", retries: 0, requirements: item.requirements, defects: [], tags: item.tags, links: [], labels: {}, attachments: [], ...(item.sourcePath ? { file: item.sourcePath } : {}) }));
-  const gitResult = options.config.git.enabled ? await collectGitHistory(options.config.git.repositoryPath, [...dedupedTests, ...manualHistoryTargets], { maxRevisions: options.config.git.maxRevisions, ...(options.config.git.commitUrlTemplate ? { commitUrlTemplate: options.config.git.commitUrlTemplate } : {}) }) : undefined;
-  if (gitResult) for (const test of dedupedTests) test.definitionHistory = gitResult.histories.get(test.id);
-  if (gitResult) for (const item of uniqueManualCases) item.definitionHistory = gitResult.histories.get(item.id);
+  const manualStatuses = Object.fromEntries(
+    activeManualCases.map((item) => [item.id, latest.get(item.id)?.result.status ?? "not-run"])
+  );
+  const readiness = determineReadiness({
+    project: meta.projectKey ?? meta.projectName,
+    ...(releaseScope ? { scope: releaseScope } : {}),
+    ...(meta.release ? { reportRelease: meta.release } : {}),
+    tests: dedupedTests,
+    manualStatuses,
+    coveredRequirements: requirements.covered,
+    security,
+    qualityGateStatus: qualityGate.status,
+    qualityGateFailures: qualityGate.checks
+      .filter((check) => check.status === "failed")
+      .map((check) => ({
+        id: check.id,
+        label: check.label,
+        ...(check.message ? { message: check.message } : {})
+      })),
+    missingEvidence: summary.manual.missingEvidence
+      ? [`${summary.manual.missingEvidence} manual evidence reference(s)`]
+      : []
+  });
+  const manualHistoryTargets: NormalizedTestCase[] = uniqueManualCases.map((item) => ({
+    id: item.id,
+    name: item.title,
+    framework: "unknown",
+    layer: "unknown",
+    status: "unknown",
+    retries: 0,
+    requirements: item.requirements,
+    defects: [],
+    tags: item.tags,
+    links: [],
+    labels: {},
+    attachments: [],
+    ...(item.sourcePath ? { file: item.sourcePath } : {})
+  }));
+  const gitResult = options.config.git.enabled
+    ? await collectGitHistory(
+        options.config.git.repositoryPath,
+        [...dedupedTests, ...manualHistoryTargets],
+        {
+          maxRevisions: options.config.git.maxRevisions,
+          ...(options.config.git.commitUrlTemplate
+            ? { commitUrlTemplate: options.config.git.commitUrlTemplate }
+            : {})
+        }
+      )
+    : undefined;
+  if (gitResult)
+    for (const test of dedupedTests) test.definitionHistory = gitResult.histories.get(test.id);
+  if (gitResult)
+    for (const item of uniqueManualCases) item.definitionHistory = gitResult.histories.get(item.id);
   const report = NormalizedReportSchema.parse({
     schemaVersion: "1.0",
     metadata: meta,
@@ -841,8 +1009,25 @@ export async function buildReport(options: GenerateOptions): Promise<NormalizedR
 
   if (releaseScope) {
     const releaseScopeFile = "release-scope.json";
-    await writeFile(path.join(options.outputPath, releaseScopeFile), `${JSON.stringify(releaseScope, null, 2)}\n`);
-    report.downloads.push({ id: stableId(["download", "release-scope"]), name: "Normalized release scope", category: "requirements", path: releaseScopeFile, sizeBytes: (await stat(path.join(options.outputPath, releaseScopeFile))).size });
+    await writeFile(
+      path.join(options.outputPath, releaseScopeFile),
+      `${JSON.stringify(releaseScope, null, 2)}\n`
+    );
+    report.downloads.push({
+      id: stableId(["download", "release-scope"]),
+      name: "Normalized release scope",
+      category: "requirements",
+      path: releaseScopeFile,
+      sizeBytes: (await stat(path.join(options.outputPath, releaseScopeFile))).size
+    });
+  }
+  if (options.zip) {
+    report.downloads.push({
+      id: stableId(["download", "quality-report.zip"]),
+      name: "Full generated report ZIP",
+      category: "report",
+      path: "quality-report.zip"
+    });
   }
 
   await copyUi(options.outputPath);
@@ -850,23 +1035,16 @@ export async function buildReport(options: GenerateOptions): Promise<NormalizedR
   const prCommentMarker = options.prCommentMarker ?? DEFAULT_PR_COMMENT_MARKER;
   await writeMeta(options.outputPath, report, prCommentMarker);
   await writeProjectSummary(options.outputPath, report, options.config.project.reportUrl);
-  await writeFile(path.join(options.outputPath, "normalized-report.json"), `${JSON.stringify(report, null, 2)}\n`);
+  await writeFile(
+    path.join(options.outputPath, "normalized-report.json"),
+    `${JSON.stringify(report, null, 2)}\n`
+  );
   await writeEvidence(options.outputPath, report);
   if (options.zip) {
-    const zipFile = "quality-report.zip";
-    const zipPath = path.join(options.outputPath, zipFile);
+    const zipPath = path.join(options.outputPath, "quality-report.zip");
     const tmpZip = path.join(path.dirname(options.outputPath), `quality-report-${Date.now()}.zip`);
     await zipDirectory(options.outputPath, tmpZip);
     await rename(tmpZip, zipPath);
-    report.downloads.push({
-      id: stableId(["download", zipPath]),
-      name: "Full generated report ZIP",
-      category: "report",
-      path: zipFile,
-      sizeBytes: (await stat(zipPath)).size
-    });
-    await writeData(options.outputPath, report);
-    await writeMeta(options.outputPath, report, prCommentMarker);
   }
   return report;
 }

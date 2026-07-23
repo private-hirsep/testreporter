@@ -67,10 +67,35 @@ export const QualityReportConfigSchema = z.object({
     key: z.string().min(1).optional(),
     name: z.string().min(1),
     repository: z.string().optional(),
-    reportUrl: z.string().url().optional()
+    reportUrl: z
+      .string()
+      .url()
+      .refine(
+        (value) => ["http:", "https:"].includes(new URL(value).protocol),
+        "project.reportUrl must use HTTP or HTTPS"
+      )
+      .optional()
   }),
-  release: z.object({ name: z.string().optional(), testedBuild: z.string().optional(), commitSha: z.string().optional(), branch: z.string().optional(), environment: z.string().optional(), workflowRun: z.string().optional(), releaseDate: z.string().optional(), scope: z.string().optional() }).default({}),
-  git: z.object({ enabled: z.boolean().default(false), repositoryPath: z.string().default("."), commitUrlTemplate: z.string().optional(), maxRevisions: z.number().int().min(1).max(50).default(10) }).default({}),
+  release: z
+    .object({
+      name: z.string().optional(),
+      testedBuild: z.string().optional(),
+      commitSha: z.string().optional(),
+      branch: z.string().optional(),
+      environment: z.string().optional(),
+      workflowRun: z.string().optional(),
+      releaseDate: z.string().optional(),
+      scope: z.string().optional()
+    })
+    .default({}),
+  git: z
+    .object({
+      enabled: z.boolean().default(false),
+      repositoryPath: z.string().default("."),
+      commitUrlTemplate: z.string().optional(),
+      maxRevisions: z.number().int().min(1).max(50).default(10)
+    })
+    .default({}),
   portfolio: z.object({ staleDays: z.number().int().positive().default(7) }).default({}),
   artifacts: z
     .object({

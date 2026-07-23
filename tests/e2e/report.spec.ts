@@ -42,8 +42,8 @@ test("generated report loads dashboard and tests", async ({ page }) => {
 test("release readiness explains a blocker and links to its test", async ({ page }) => {
   await page.goto("/#/readiness");
   await expect(page.getByRole("heading", { name: "Release readiness" })).toBeVisible();
-  await expect(page.getByText(/release blocker/)).toBeVisible();
-  const failed = page.getByText(/Test .* failed\./).first();
+  await expect(page.locator(".v-alert").filter({ hasText: /Test .* failed\./ })).toBeVisible();
+  const failed = page.getByRole("link", { name: /Test .* failed\./ }).first();
   await expect(failed).toBeVisible();
   await failed.click();
   await expect(page.locator(".test-detail")).toBeVisible();

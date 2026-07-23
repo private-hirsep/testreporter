@@ -6,7 +6,7 @@ jobs:
     steps:
       - uses: actions/checkout@v5
       - uses: actions/download-artifact@v4
-        with: { pattern: project-quality-summary-*, path: summaries, merge-multiple: true }
+        with: { pattern: project-quality-summary-*, path: summaries, merge-multiple: false }
       - run: npm ci && npm run build
       - run: npm run quality-report -- portfolio --input summaries --output portfolio --stale-days 7
       - uses: actions/upload-pages-artifact@v3
