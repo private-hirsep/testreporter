@@ -1,0 +1,103 @@
+<template>
+  <div>
+    <PageHeader
+      title="Release readiness"
+      :subtitle="manifest?.metadata.release ?? 'No release selected'"
+    /><v-alert v-if="!readiness" type="warning" variant="tonal"
+      >This older report has no readiness data. Regenerate it with a release scope.</v-alert
+    ><template v-else
+      ><v-alert
+        :type="
+          readiness.status === 'blocked'
+            ? 'error'
+            : readiness.status === 'ready' || readiness.status === 'ready-with-accepted-risks'
+              ? 'success'
+              : 'warning'
+        "
+        variant="tonal"
+        class="mb-4"
+        ><strong>{{ label(readiness.status) }}</strong> — {{ readiness.reasons.join(" ") }}</v-alert
+      >
+      <div class="detail-grid">
+        <section class="portal-card detail-section">
+          <h2>Release metadata</h2>
+          <dl class="detail-list">
+            <dt>Release</dt>
+            <dd>{{ manifest?.metadata.release ?? "n/a" }}</dd>
+            <dt>Tested build</dt>
+            <dd>{{ manifest?.metadata.testedBuild ?? "n/a" }}</dd>
+            <dt>Commit</dt>
+            <dd class="mono">{{ manifest?.metadata.commitSha ?? "n/a" }}</dd>
+            <dt>Branch / environment</dt>
+            <dd>
+              {{ manifest?.metadata.branch ?? "n/a" }} /
+              {{ manifest?.metadata.environment ?? "n/a" }}
+            </dd>
+            <dt>Workflow run</dt>
+            <dd>{{ manifest?.metadata.workflowRun ?? manifest?.metadata.runId ?? "n/a" }}</dd>
+          </dl>
+        </section>
+        <section class="portal-card detail-section">
+          <h2>Execution and scope</h2>
+          <p>
+            Automated: {{ readiness.automated.passed }} passed,
+            {{ readiness.automated.failed }} failed, {{ readiness.automated.skipped }} skipped.
+          </p>
+          <p>
+            Required manual: {{ readiness.manual.passed }} passed,
+            {{ readiness.manual.failed }} failed, {{ readiness.manual.blocked }} blocked,
+            {{ readiness.manual.notRun }} not run.
+          </p>
+          <p>
+            Requirements: {{ readiness.requirements.covered }} covered,
+            {{ readiness.requirements.uncovered }} uncovered,
+            {{ readiness.requirements.excluded }} excluded.
+          </p>
+          <p>
+            Security blockers: {{ readiness.securityBlockers }} · Quality gate:
+            {{ readiness.qualityGateFailed ? "failed" : "passed" }}
+          </p>
+        </section>
+      </div>
+      <section class="portal-card detail-section mt-4">
+        <h2>Required QA actions</h2>
+        <v-list v-if="readiness.actions.length"
+          ><v-list-item
+            v-for="action in readiness.actions"
+            :key="`${action.type}-${action.reference}`"
+            :title="action.message"
+            :subtitle="`${action.severity} · ${action.type}`"
+            :href="action.href"
+        /></v-list>
+        <p v-else>No required actions.</p>
+      </section>
+      <section class="portal-card detail-section mt-4">
+        <h2>Audit evidence completeness</h2>
+        <p v-if="readiness.missingEvidence.length">
+          Missing: {{ readiness.missingEvidence.join(", ") }}
+        </p>
+        <p v-else>All declared evidence references are present.</p>
+        <h3>Accepted risks</h3>
+        <p v-if="!readiness.acceptedRisks.length">None.</p>
+        <ul>
+          <li v-for="risk in readiness.acceptedRisks" :key="risk.id">
+            <strong>{{ risk.id }}</strong
+            >: {{ risk.reason }} <span v-if="risk.reference">({{ risk.reference }})</span>
+          </li>
+        </ul>
+      </section></template
+    >
+  </div>
+</template>
+<script setup lang="ts">
+import { computed } from "vue";
+import PageHeader from "../components/PageHeader.vue";
+import type { Manifest } from "../types";
+const props = defineProps<{ manifest?: Manifest }>();
+const readiness = computed(() => props.manifest?.readiness);
+const label = (value: string) =>
+  value
+    .split("-")
+    .map((x) => x[0]?.toUpperCase() + x.slice(1))
+    .join(" ");
+</script>

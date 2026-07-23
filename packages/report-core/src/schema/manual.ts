@@ -18,6 +18,7 @@ export const ManualCaseSchema = z
     steps: z.array(z.object({ action: Text, expected: Text })).min(1),
     sourcePath: z.string().optional(),
     revision: z.string().optional()
+    ,definitionHistory: z.object({ confidence: z.enum(["exact-id", "source-range", "file-level", "unavailable"]), sourcePath: z.string().optional(), earliest: z.object({ hash:z.string(),author:z.string(),date:z.string(),message:z.string(),url:z.string().url().optional() }).optional(), latest: z.object({ hash:z.string(),author:z.string(),date:z.string(),message:z.string(),url:z.string().url().optional() }).optional(), revisions:z.array(z.object({ hash:z.string(),author:z.string(),date:z.string(),message:z.string(),url:z.string().url().optional() })).default([]) }).optional()
   })
   .strict();
 export const ManualStepResultSchema = z.object({

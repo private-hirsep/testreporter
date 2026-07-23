@@ -1,0 +1,1 @@
+{"schemaVersion":"1.0","projectKey":"ALPHA","projectName":"Alpha","release":"2.0","reportUrl":"https://example.invalid/alpha/","generatedAt":"2026-07-15T10:00:00.000Z","qualityGate":"failed","readiness":"blocked","passedTests":40,"failedTests":1,"newFailures":1,"manualRemaining":0,"uncoveredRequirements":0,"securityBlockers":0,"acceptedRisks":0,"recommendedActions":1}

@@ -1,6 +1,20 @@
 project:
+  key: MINIMAL
   name: Minimal Quality Example
   repository: your-org/example
+  reportUrl: https://example.invalid/quality-report/
+
+release:
+  name: 1.1.7
+  testedBuild: example-build-117
+  environment: staging
+  scope: release-scope.yml
+
+git:
+  enabled: false
+
+portfolio:
+  staleDays: 7
 
 artifacts:
   manual:

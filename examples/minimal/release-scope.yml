@@ -1,0 +1,8 @@
+release: 1.1.7
+requirements: [RFL-123, RFL-187]
+requiredManualCases: [RFL-MT-0012, RFL-MT-0013]
+acceptedRisks:
+  - id: RISK-004
+    reason: Low-severity dependency finding accepted for the example release
+    reference: EXAMPLE-456
+notes: [Example with one missing required manual check]
