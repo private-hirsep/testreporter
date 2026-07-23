@@ -1,119 +1,64 @@
 <template>
   <div v-if="manifest">
-    <PageHeader
-      title="Executions"
-      subtitle="Execution results recorded in this report — automated runs and imported manual executions"
-    >
-      <StatusChip :status="manifest.qualityGate.status" />
-    </PageHeader>
-    <v-alert v-if="runs.length <= 1" type="info" variant="tonal" class="mb-4">
-      Only the current run is available in this report. Historical execution trends are not merged
-      into static reports yet.
+    <PageHeader title="Executions" :subtitle="`${filtered.length} automated and manual execution(s) genuinely available in this static report`" />
+    <v-alert type="info" variant="tonal" class="mb-4">
+      This report contains the current automated execution and imported manual executions. Historical automated runs have not been merged yet.
     </v-alert>
-    <SectionCard title="Current automated run" class="mb-4">
-      <div class="metric-card-items">
-        <div>
-          <strong>{{ generatedDate }}</strong
-          ><span>Generated</span>
-        </div>
-        <div>
-          <strong>{{ manifest.summary.tests.total }}</strong
-          ><span>Tests</span>
-        </div>
-        <div>
-          <strong :class="manifest.summary.tests.failed ? 'text-error' : 'text-success'">{{
-            manifest.summary.tests.failed
-          }}</strong
-          ><span>Failed</span>
-        </div>
-        <div>
-          <strong>{{ formatPercent(manifest.summary.coverage.totalPercentage) }}</strong
-          ><span>Coverage</span>
-        </div>
-        <div>
-          <strong>{{ formatPercent(manifest.requirements.percentage) }}</strong
-          ><span>Requirements</span>
-        </div>
-        <div>
-          <strong :class="securityTotal ? 'text-error' : 'text-success'">{{ securityTotal }}</strong
-          ><span>Security findings</span>
-        </div>
-      </div>
-      <div class="mt-2">
-        <v-btn to="/tests" size="small" variant="text" append-icon="mdi-arrow-right"
-          >Open test cases</v-btn
-        >
-      </div>
-    </SectionCard>
-    <SectionCard
-      v-if="runs.length > 1"
-      title="Recorded runs"
-      description="Runs included in this report's history data"
-      class="mb-4"
-      flush
-    >
-      <v-table density="compact" class="data-table">
-        <thead>
-          <tr>
-            <th scope="col">Generated</th>
-            <th scope="col">Quality gate</th>
-            <th scope="col">Tests</th>
-            <th scope="col">Failed</th>
-            <th scope="col">Coverage</th>
-            <th scope="col">Requirements</th>
-            <th scope="col">Critical / high findings</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr v-for="run in runs" :key="run.id">
-            <td>{{ new Date(run.generatedAt).toLocaleString() }}</td>
-            <td><StatusChip :status="run.qualityGateStatus" size="x-small" /></td>
-            <td>{{ run.testsTotal }}</td>
-            <td :class="run.testsFailed ? 'text-error' : ''">{{ run.testsFailed }}</td>
-            <td>{{ formatPercent(run.coveragePercentage) }}</td>
-            <td>{{ formatPercent(run.requirementCoveragePercentage) }}</td>
-            <td>{{ run.criticalFindings + run.highFindings }}</td>
-          </tr>
-        </tbody>
-      </v-table>
-    </SectionCard>
-    <SectionCard
-      title="Imported manual executions"
-      description="Completed manual execution results imported as official report data"
-    >
-      <template #actions>
-        <v-btn to="/manual" size="small" variant="text" append-icon="mdi-arrow-right"
-          >Manual testing</v-btn
-        >
-      </template>
-      <ul v-if="manifest.manualExecutions.length" class="linked-list">
-        <li v-for="run in manifest.manualExecutions" :key="run.executionId">
-          <StatusChip :status="run.state" size="x-small" />
-          <span class="linked-list-label"
-            >{{ run.executionId }} — {{ run.tester }} · {{ run.environment }} · build
-            {{ run.testedBuild }} · {{ run.cases.length }} case result(s)</span
-          >
-        </li>
-      </ul>
-      <EmptyState v-else message="No completed manual executions were imported for this report." />
-    </SectionCard>
+    <v-alert v-if="!manifest.unifiedExecutions" type="info" variant="tonal" class="mb-4">
+      This older report does not contain unified execution summaries. Its legacy history remains readable, but case-level execution links are unavailable.
+    </v-alert>
+    <div class="toolbar execution-toolbar" role="search" aria-label="Filter executions">
+      <v-text-field v-model="search" label="Search executions" density="compact" hide-details prepend-inner-icon="mdi-magnify" />
+      <v-select v-model="type" :items="['all','automated','manual']" label="Type" density="compact" hide-details />
+      <v-select v-model="status" :items="statusOptions" label="Status" density="compact" hide-details />
+      <v-select v-model="release" :items="releaseOptions" label="Release" density="compact" hide-details />
+      <v-select v-model="environment" :items="environmentOptions" label="Environment" density="compact" hide-details />
+      <v-select v-model="failure" :items="['all','contains failures','no failures']" label="Failures" density="compact" hide-details />
+      <v-select v-model="evidence" :items="['all','complete','incomplete']" label="Evidence" density="compact" hide-details />
+      <v-select v-model="sort" :items="sortOptions" label="Sort" density="compact" hide-details />
+    </div>
+    <EmptyState v-if="!filtered.length" message="No unified executions match the current filters." />
+    <div v-else class="table-scroll"><v-table density="compact" class="data-table">
+      <thead><tr><th scope="col">Execution</th><th scope="col">Type</th><th scope="col">Status</th><th scope="col">Release / branch / environment</th><th scope="col">Commit</th><th scope="col">Completed</th><th scope="col">Duration</th><th scope="col">Counts</th><th scope="col">Cases / requirements</th><th scope="col">Evidence</th></tr></thead>
+      <tbody><tr v-for="execution in filtered" :key="execution.id">
+        <td><router-link :to="executionRoute(execution.id)" class="mono">{{ execution.id }}</router-link></td>
+        <td><v-chip size="small" variant="tonal" label>{{ execution.type }}</v-chip></td><td><StatusChip :status="execution.status" /></td>
+        <td>{{ execution.release ?? "n/a" }} / {{ execution.branch ?? "n/a" }} / {{ execution.environment ?? "n/a" }}</td>
+        <td class="mono cell-truncate" :title="execution.commit">{{ execution.commit?.slice(0, 12) ?? "n/a" }}</td>
+        <td>{{ formatDate(execution.completedAt ?? execution.startedAt) }}</td><td class="mono">{{ formatDuration(execution.durationMs) }}</td>
+        <td>{{ execution.counts.passed }} passed · {{ failed(execution) }} failed</td>
+        <td>{{ execution.testCaseIds.length }} / {{ execution.requirementIds.length }}</td>
+        <td>{{ execution.evidence?.complete ? "Complete" : "Incomplete" }} · {{ execution.evidence?.referenceCount ?? 0 }}</td>
+      </tr></tbody>
+    </v-table></div>
   </div>
 </template>
-
 <script setup lang="ts">
-import { computed } from "vue";
+import { computed, ref } from "vue";
 import EmptyState from "../components/EmptyState.vue";
 import PageHeader from "../components/PageHeader.vue";
-import SectionCard from "../components/SectionCard.vue";
 import StatusChip from "../components/StatusChip.vue";
-import { formatPercent } from "../format";
-import type { Manifest, TestCase } from "../types";
+import { formatDuration } from "../format";
+import { executionsFor } from "../services/catalogue";
+import { executionRoute } from "../services/routes";
+import type { Manifest, TestCase, UnifiedExecution } from "../types";
 const props = defineProps<{ manifest?: Manifest; tests: TestCase[] }>();
-const runs = computed(() => props.manifest?.history?.runs ?? []);
-const generatedDate = computed(() =>
-  props.manifest ? new Date(props.manifest.metadata.generatedAt).toLocaleDateString() : "n/a"
-);
-const securityTotal = computed(() =>
-  Object.values(props.manifest?.summary.security ?? {}).reduce((sum, value) => sum + value, 0)
-);
+const search = ref(""); const type = ref("all"); const status = ref("all"); const release = ref("all"); const environment = ref("all"); const failure = ref("all"); const evidence = ref("all"); const sort = ref("newest");
+const executions = computed(() => executionsFor(props.manifest));
+const options = (values: Array<string | undefined>) => ["all", ...new Set(values.filter((value): value is string => Boolean(value)).sort())];
+const statusOptions = ["all","passed","failed","blocked","incomplete","unknown"];
+const releaseOptions = computed(() => options(executions.value.map((item) => item.release)));
+const environmentOptions = computed(() => options(executions.value.map((item) => item.environment)));
+const sortOptions = [{title:"Newest first",value:"newest"},{title:"Oldest first",value:"oldest"},{title:"Status severity",value:"status"},{title:"Duration",value:"duration"},{title:"Failed count",value:"failed"}];
+const failed = (item: UnifiedExecution) => item.counts.failed + (item.counts.broken ?? 0) + (item.counts.blocked ?? 0);
+const severity: Record<string,number> = { failed:0, blocked:1, incomplete:2, unknown:3, passed:4 };
+const time = (item: UnifiedExecution) => Date.parse(item.completedAt ?? item.startedAt ?? "0") || 0;
+const filtered = computed(() => executions.value
+  .filter((item) => `${item.id} ${item.release ?? ""} ${item.branch ?? ""} ${item.environment ?? ""} ${item.commit ?? ""}`.toLowerCase().includes(search.value.toLowerCase()))
+  .filter((item) => type.value === "all" || item.type === type.value).filter((item) => status.value === "all" || item.status === status.value)
+  .filter((item) => release.value === "all" || item.release === release.value).filter((item) => environment.value === "all" || item.environment === environment.value)
+  .filter((item) => failure.value === "all" || (failure.value === "contains failures") === (failed(item) > 0))
+  .filter((item) => evidence.value === "all" || (evidence.value === "complete") === Boolean(item.evidence?.complete))
+  .sort((a,b) => sort.value === "oldest" ? time(a)-time(b) : sort.value === "status" ? (severity[a.status]??9)-(severity[b.status]??9) : sort.value === "duration" ? (b.durationMs??-1)-(a.durationMs??-1) : sort.value === "failed" ? failed(b)-failed(a) : time(b)-time(a) || a.id.localeCompare(b.id)));
+function formatDate(value?: string) { return value && Number.isFinite(Date.parse(value)) ? new Date(value).toLocaleString() : "Unknown"; }
 </script>

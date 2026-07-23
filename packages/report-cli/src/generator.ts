@@ -9,6 +9,8 @@ import {
   calculateIdentityDiagnostics,
   calculateRequirementCoverage,
   deduplicateTests,
+  deriveTestCaseCatalogue,
+  deriveUnifiedExecutions,
   determineReadiness,
   evaluateQualityGate,
   NormalizedReportSchema,
@@ -512,6 +514,8 @@ async function writeData(outputPath: string, report: NormalizedReport) {
     downloads: report.downloads,
     warnings: report.warnings,
     identityDiagnostics: report.identityDiagnostics,
+    testCaseCatalogue: report.testCaseCatalogue,
+    unifiedExecutions: report.unifiedExecutions,
     manualCases: report.manualCases,
     manualExecutions: report.manualExecutions,
     releaseScope: report.releaseScope,
@@ -974,6 +978,14 @@ export async function buildReport(options: GenerateOptions): Promise<NormalizedR
     for (const test of dedupedTests) test.definitionHistory = gitResult.histories.get(test.id);
   if (gitResult)
     for (const item of uniqueManualCases) item.definitionHistory = gitResult.histories.get(item.id);
+  const identityDiagnostics = calculateIdentityDiagnostics(dedupedTests, warnings);
+  const catalogueInput = {
+    tests: dedupedTests,
+    manualCases: uniqueManualCases,
+    manualExecutions: officialManualExecutions,
+    metadata: meta,
+    identityDiagnostics
+  };
   const report = NormalizedReportSchema.parse({
     schemaVersion: "1.0",
     metadata: meta,
@@ -1005,7 +1017,9 @@ export async function buildReport(options: GenerateOptions): Promise<NormalizedR
     releaseScope,
     readiness,
     git: gitResult?.repository,
-    identityDiagnostics: calculateIdentityDiagnostics(dedupedTests, warnings)
+    identityDiagnostics,
+    testCaseCatalogue: deriveTestCaseCatalogue(catalogueInput),
+    unifiedExecutions: deriveUnifiedExecutions(catalogueInput)
   });
 
   if (releaseScope) {

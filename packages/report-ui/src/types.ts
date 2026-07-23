@@ -215,6 +215,116 @@ export type Manifest = {
       href?: string;
     }>;
   };
+  testCaseCatalogue?: TestCaseCatalogueEntry[];
+  unifiedExecutions?: UnifiedExecution[];
+};
+
+export type CatalogueStatus =
+  | "broken"
+  | "failed"
+  | "blocked"
+  | "not-run"
+  | "skipped"
+  | "passed"
+  | "unknown";
+
+export type TestCaseImplementation = {
+  technicalId: string;
+  kind: "automated" | "manual";
+  title: string;
+  framework?: string;
+  layer?: string;
+  source?: { file?: string; line?: number };
+  suitePath?: string[];
+  variant?: Record<string, string>;
+  requirements: string[];
+  defects: string[];
+  tags: string[];
+  active: boolean;
+  latestResult?: {
+    status: CatalogueStatus;
+    executedAt?: string;
+    durationMs?: number;
+    executionId?: string;
+  };
+};
+
+export type TestCaseCatalogueEntry = {
+  id: string;
+  canonicalId: string;
+  displayId: string;
+  identity: {
+    source: "explicit" | "title-token" | "mapping" | "generated";
+    stable: boolean;
+    conflict: boolean;
+  };
+  title: string;
+  type: "automated" | "manual" | "hybrid";
+  lifecycleStatus?: "draft" | "approved" | "deprecated";
+  requirements: string[];
+  defects: string[];
+  tags: string[];
+  implementations: TestCaseImplementation[];
+  latestResult?: {
+    status: CatalogueStatus;
+    executedAt?: string;
+    durationMs?: number;
+    executionId?: string;
+    contributingStatuses: CatalogueStatus[];
+  };
+  lastExecutedAt?: string;
+  stability: {
+    available: boolean;
+    sampleSize: number;
+    passed: number;
+    failed: number;
+    flaky: number;
+    passRate?: number;
+    source: "current-report" | "available-history" | "insufficient-data";
+  };
+  duration?: {
+    sampleSize: number;
+    latestMs?: number;
+    averageMs?: number;
+    medianMs?: number;
+    minMs?: number;
+    maxMs?: number;
+    source: "automated" | "manual" | "mixed";
+  };
+  definitionHistory?: TestCase["definitionHistory"][];
+  evidence?: { attachmentCount: number; references: string[] };
+};
+
+export type UnifiedExecution = {
+  id: string;
+  type: "automated" | "manual";
+  project: string;
+  release?: string;
+  branch?: string;
+  environment?: string;
+  commit?: string;
+  workflowRun?: string;
+  startedAt?: string;
+  completedAt?: string;
+  status: "passed" | "failed" | "blocked" | "incomplete" | "unknown";
+  counts: {
+    total: number;
+    passed: number;
+    failed: number;
+    broken?: number;
+    blocked?: number;
+    skipped?: number;
+    notRun?: number;
+  };
+  durationMs?: number;
+  testCaseIds: string[];
+  requirementIds: string[];
+  defectIds: string[];
+  evidence?: { complete: boolean; referenceCount: number };
+  tester?: string;
+  testedBuild?: string;
+  notes?: string[];
+  sourceReport?: string;
 };
 
 export type RequirementCoverage = {

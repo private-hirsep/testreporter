@@ -238,6 +238,12 @@ describe("report generator", () => {
       prCommentMarker: "<!-- quality-report-platform:summary -->"
     });
     expect(report.tests.length).toBeGreaterThan(0);
+    expect(report.testCaseCatalogue?.length).toBeGreaterThan(0);
+    expect(report.testCaseCatalogue?.some((item) => item.type === "hybrid")).toBe(true);
+    expect(report.unifiedExecutions?.filter((item) => item.type === "automated")).toHaveLength(1);
+    expect(report.unifiedExecutions?.filter((item) => item.type === "manual").length).toBeGreaterThan(
+      1
+    );
     expect(report.summary.tests.byLayer.backend).toBeGreaterThan(0);
     expect(report.downloads.length).toBeGreaterThan(0);
     const serialized = JSON.stringify(report);

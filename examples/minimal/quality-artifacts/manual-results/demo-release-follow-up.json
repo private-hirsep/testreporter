@@ -1,0 +1,33 @@
+{
+  "schemaVersion": "1.0",
+  "executionId": "demo-release-17-follow-up",
+  "projectKey": "DEMO",
+  "release": "17",
+  "testedBuild": "fedcba9876543210",
+  "environment": "staging",
+  "tester": "Example Tester",
+  "startedAt": "2026-07-15T09:00:00.000Z",
+  "completedAt": "2026-07-15T09:12:00.000Z",
+  "sourceCommit": "fedcba9876543210",
+  "state": "completed",
+  "cases": [
+    {
+      "caseId": "DEMO-MT-0012",
+      "status": "passed",
+      "steps": [
+        { "index": 0, "status": "passed", "evidence": [] },
+        { "index": 1, "status": "passed", "evidence": [] },
+        {
+          "index": 2,
+          "status": "passed",
+          "actualResult": "Draft remained available after reload",
+          "evidence": ["manual-evidence/draft-reload.txt"]
+        }
+      ],
+      "actualResult": "Fix verified.",
+      "notes": "Regression verification after BUG-417.",
+      "defects": ["BUG-417"],
+      "evidence": ["manual-evidence/draft-reload.txt"]
+    }
+  ]
+}

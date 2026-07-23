@@ -1,239 +1,135 @@
 <template>
-  <div v-if="test" class="test-detail">
-    <v-btn to="/tests" variant="text" prepend-icon="mdi-arrow-left" class="mb-2"
-      >Back to tests</v-btn
-    >
-    <PageHeader :title="test.name" :subtitle="test.suite ?? 'No suite'">
-      <StatusChip :status="test.status" size="default" />
+  <div v-if="item" class="test-detail">
+    <v-btn to="/tests" variant="text" prepend-icon="mdi-arrow-left" class="mb-2">Back to Tests</v-btn>
+    <PageHeader :title="item.title" :subtitle="item.canonicalId">
+      <StatusChip :status="item.latestResult?.status ?? 'not-run'" size="default" />
     </PageHeader>
-    <div class="detail-grid">
-      <section class="portal-card detail-section">
-        <h2>Overview</h2>
-        <dl class="detail-list">
-          <dt>Full Name</dt>
-          <dd>{{ test.fullName ?? test.name }}</dd>
-          <dt>Canonical Test ID</dt>
-          <dd class="mono">{{ test.identity?.canonicalId ?? test.id }}</dd>
-          <dt>Identity Source</dt>
-          <dd>{{ test.identity?.source ?? "generated (legacy report)" }}</dd>
-          <dt>Stable Identity</dt>
-          <dd>{{ test.identity?.stable ? "yes" : "no" }}</dd>
-          <dt>Status</dt>
-          <dd><StatusChip :status="test.status" /></dd>
-          <dt>Framework</dt>
-          <dd>
-            <v-chip size="small" variant="outlined" label>{{ test.framework }}</v-chip>
-          </dd>
-          <dt>Layer</dt>
-          <dd>
-            <v-chip size="small" variant="tonal" label>{{ test.layer }}</v-chip>
-          </dd>
-          <dt>Duration</dt>
-          <dd class="mono">{{ formatDuration(test.durationMs) }}</dd>
-          <dt>Retries</dt>
-          <dd>
-            <v-chip
-              v-if="test.retries > 0"
-              size="small"
-              color="warning"
-              prepend-icon="mdi-repeat"
-              label
-              >{{ test.retries }}</v-chip
-            >
-            <span v-else>0</span>
-          </dd>
-        </dl>
-      </section>
-      <section class="portal-card detail-section">
-        <h2>Source &amp; Artifacts</h2>
-        <dl class="detail-list">
-          <dt>Test File</dt>
-          <dd class="mono">
-            {{ test.file ?? "n/a" }}<span v-if="test.line">:{{ test.line }}</span>
-          </dd>
-          <dt>Result Artifact</dt>
-          <dd>
-            <a
-              v-if="rawArtifact"
-              :href="rawArtifact.path"
-              target="_blank"
-              rel="noopener"
-              class="mono"
-              >{{ test.sourcePath }}</a
-            >
-            <span v-else class="mono">{{ test.sourcePath ?? "n/a" }}</span>
-          </dd>
-          <dt>Attachments</dt>
-          <dd>
-            <v-chip
-              v-for="attachment in test.attachments ?? []"
-              :key="`${attachment.name}-${attachment.path}`"
-              size="small"
-              class="mr-1 mb-1"
-              prepend-icon="mdi-paperclip"
-              label
-            >
-              {{ attachment.name }} · {{ attachment.path }}
-            </v-chip>
-            <span v-if="!test.attachments?.length">none</span>
-          </dd>
-          <dt>Per-Test Coverage</dt>
-          <dd>
-            Not available in this report. Enable per-test coverage collection to populate this
-            later.
-          </dd>
-        </dl>
-      </section>
-      <section class="portal-card detail-section">
-        <h2>Requirements &amp; Metadata</h2>
-        <dl class="detail-list">
-          <dt>Requirements</dt>
-          <dd>
-            <v-chip
-              v-for="key in test.requirements"
-              :key="key"
-              size="small"
-              class="mr-1 mb-1 mono"
-              label
-              :to="`/requirements#requirement-${key}`"
-              >{{ key }}</v-chip
-            >
-            <span v-if="!test.requirements.length">none</span>
-          </dd>
-          <dt>Defects</dt>
-          <dd>
-            <v-chip
-              v-for="key in test.defects ?? []"
-              :key="key"
-              size="small"
-              class="mr-1 mb-1 mono"
-              label
-              >{{ key }}</v-chip
-            ><span v-if="!test.defects?.length">none</span>
-          </dd>
-          <dt>Tags</dt>
-          <dd>
-            <v-chip
-              v-for="tag in test.tags ?? []"
-              :key="tag"
-              size="small"
-              class="mr-1 mb-1"
-              label
-              >{{ tag }}</v-chip
-            ><span v-if="!test.tags?.length">none</span>
-          </dd>
-          <dt>External Links</dt>
-          <dd>
-            <a
-              v-for="link in test.links ?? []"
-              :key="`${link.type}-${link.url}`"
-              :href="link.url"
-              target="_blank"
-              rel="noopener"
-              class="mr-3"
-              >{{ link.label }}</a
-            ><span v-if="!test.links?.length">none</span>
-          </dd>
-          <dt>Labels</dt>
-          <dd>
-            <v-chip
-              v-for="label in labels"
-              :key="label"
-              size="small"
-              class="mr-1 mb-1 mono"
-              variant="outlined"
-              label
-              >{{ label }}</v-chip
-            >
-            <span v-if="!labels.length">none</span>
-          </dd>
-        </dl>
-      </section>
-    </div>
-    <section v-if="test.error?.message || test.error?.trace" class="portal-card detail-section">
-      <div class="portal-card-title pa-0 mb-2">
-        <h2>Failure Details</h2>
-        <v-btn size="small" variant="text" prepend-icon="mdi-content-copy" @click="copyError">
-          {{ copied ? "Copied" : "Copy error text" }}
-        </v-btn>
-      </div>
-      <v-alert v-if="test.error?.message" type="error" variant="tonal" class="mb-3">{{
-        test.error.message
-      }}</v-alert>
-      <pre class="trace-block">{{ test.error.message }}{{ "\n" }}{{ test.error.trace }}</pre>
-      <template v-if="stackFrames.length">
-        <h2 class="mt-5 mb-2">Parsed Stack Frames</h2>
-        <v-table density="compact" class="data-table">
-          <thead>
-            <tr>
-              <th scope="col">Function</th>
-              <th scope="col">Location</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr v-for="frame in stackFrames" :key="`${frame.fn}-${frame.location}`">
-              <td class="mono">{{ frame.fn }}</td>
-              <td class="mono">{{ frame.location }}</td>
-            </tr>
-          </tbody>
-        </v-table>
-      </template>
-    </section>
-    <section class="portal-card detail-section mt-4"><h2>Execution History</h2><p>This report records the current execution. Cross-run execution trends remain available under History.</p></section>
-    <section class="portal-card detail-section mt-4"><h2>Definition History</h2><p>Confidence: <strong>{{ test.definitionHistory?.confidence ?? 'unavailable' }}</strong><span v-if="test.definitionHistory?.sourcePath"> · {{ test.definitionHistory.sourcePath }}</span></p><v-table v-if="test.definitionHistory?.revisions.length" density="compact"><thead><tr><th scope="col">Date</th><th scope="col">Author</th><th scope="col">Commit</th><th scope="col">Message</th></tr></thead><tbody><tr v-for="item in test.definitionHistory.revisions" :key="item.hash"><td>{{ item.date }}</td><td>{{ item.author }}</td><td class="mono"><a v-if="item.url" :href="item.url" target="_blank" rel="noopener">{{ item.hash.slice(0,8) }}</a><span v-else>{{ item.hash.slice(0,8) }}</span></td><td>{{ item.message }}</td></tr></tbody></v-table><p v-else>Definition history was not collected or is unavailable.</p></section>
+    <v-alert v-if="item.identity.conflict" type="error" variant="tonal" prominent class="mb-4">
+      <strong>Conflicted canonical identity.</strong> Every implementation is preserved, but reliable long-term continuity cannot be claimed.
+      <v-btn to="/diagnostics" variant="text" size="small">Open diagnostics</v-btn>
+    </v-alert>
+    <v-alert v-else-if="!item.identity.stable" type="warning" variant="tonal" class="mb-4">
+      Generated identity: this case is usable in the current report but may not remain stable after renames or source moves.
+    </v-alert>
+    <v-tabs v-model="tab" class="detail-tabs" aria-label="Test case detail sections">
+      <v-tab value="overview">Overview</v-tab><v-tab value="implementations">Implementations</v-tab>
+      <v-tab value="executions">Executions</v-tab><v-tab value="traceability">Traceability</v-tab>
+      <v-tab value="history">Definition history</v-tab><v-tab value="evidence">Evidence</v-tab>
+    </v-tabs>
+    <v-window v-model="tab" class="mt-4">
+      <v-window-item value="overview">
+        <section class="portal-card detail-section"><h2>Logical test case</h2>
+          <dl class="detail-list">
+            <dt>Canonical ID</dt><dd class="mono">{{ item.canonicalId }}</dd>
+            <dt>Type</dt><dd><v-chip size="small" variant="tonal" label>{{ item.type }}</v-chip></dd>
+            <dt>Identity</dt><dd>{{ item.identity.source }} · {{ item.identity.stable ? "stable" : "unstable" }}{{ item.identity.conflict ? " · conflicted" : "" }}</dd>
+            <dt>Lifecycle</dt><dd>{{ item.lifecycleStatus ?? "not defined" }}</dd>
+            <dt>Current result</dt><dd><StatusChip :status="item.latestResult?.status ?? 'not-run'" /> <span class="text-medium-emphasis">{{ item.latestResult?.contributingStatuses.join(", ") }}</span></dd>
+            <dt>Last executed</dt><dd>{{ formatDate(item.lastExecutedAt) }}</dd>
+            <dt>Stability</dt><dd>{{ stabilityLabel }}</dd>
+            <dt>Duration</dt><dd>{{ formatDuration(item.duration?.latestMs) }}<span v-if="item.duration"> · {{ item.duration.sampleSize }} {{ item.duration.source }} sample(s), average {{ formatDuration(item.duration.averageMs) }}</span></dd>
+            <dt>Requirements</dt><dd>{{ item.requirements.join(", ") || "none" }}</dd>
+            <dt>Defects</dt><dd>{{ item.defects.join(", ") || "none" }}</dd>
+            <dt>Retries</dt><dd>{{ item.stability.flaky ? `${item.stability.flaky} retried passing result(s)` : "0" }}</dd>
+            <dt>Attachments</dt><dd>{{ item.evidence?.references.join(", ") || "none" }}</dd>
+            <dt>Tags</dt><dd>{{ item.tags.join(", ") || "none" }}</dd>
+            <dt>Variants</dt><dd>{{ item.implementations.map((implementation) => variant(implementation.variant)).filter((value) => value !== "n/a").join(" · ") || "none" }}</dd>
+          </dl>
+        </section>
+        <section v-if="errorTest" class="portal-card detail-section mt-4">
+          <h2>Failure Details</h2>
+          <v-alert type="error" variant="tonal" class="mb-3">{{ errorTest.error?.message }}</v-alert>
+          <pre class="trace-block">{{ errorTest.error?.message }}{{ "\n" }}{{ errorTest.error?.trace }}</pre>
+          <h2 v-if="stackFrames.length" class="mt-5">Parsed Stack Frames</h2>
+          <v-table v-if="stackFrames.length" density="compact">
+            <thead><tr><th scope="col">Function</th><th scope="col">Location</th></tr></thead>
+            <tbody><tr v-for="frame in stackFrames" :key="`${frame.fn}-${frame.location}`"><td class="mono">{{ frame.fn }}</td><td class="mono">{{ frame.location }}</td></tr></tbody>
+          </v-table>
+        </section>
+        <section class="portal-card detail-section mt-4">
+          <h2>Execution History</h2>
+          <p>This report contains {{ executions.length }} current or imported execution(s) for this case. Open the Executions tab for details.</p>
+        </section>
+        <section class="portal-card detail-section mt-4">
+          <h2>Definition History</h2>
+          <p>Confidence: <strong>{{ item.definitionHistory?.[0]?.confidence ?? "unavailable" }}</strong>. Open the Definition history tab for revisions.</p>
+        </section>
+      </v-window-item>
+      <v-window-item value="implementations">
+        <section class="portal-card detail-section"><h2>Implementations and variants</h2>
+          <div class="table-scroll"><v-table density="compact" class="data-table"><thead><tr><th scope="col">Technical ID</th><th scope="col">Kind</th><th scope="col">Framework / layer</th><th scope="col">Source / suite</th><th scope="col">Variant</th><th scope="col">Current result</th><th scope="col">Duration</th></tr></thead>
+            <tbody><tr v-for="implementation in item.implementations" :key="implementation.technicalId">
+              <td class="mono">{{ implementation.technicalId }}</td><td>{{ implementation.kind }}<span v-if="!implementation.active"> · inactive</span></td>
+              <td>{{ implementation.framework ?? "n/a" }} / {{ implementation.layer ?? "n/a" }}</td>
+              <td class="mono">{{ source(implementation) }}<div>{{ implementation.suitePath?.join(" › ") }}</div></td>
+              <td>{{ variant(implementation.variant) }}</td><td><StatusChip :status="implementation.latestResult?.status ?? 'not-run'" /></td>
+              <td class="mono">{{ formatDuration(implementation.latestResult?.durationMs) }}</td>
+            </tr></tbody></v-table></div>
+        </section>
+      </v-window-item>
+      <v-window-item value="executions">
+        <section class="portal-card detail-section"><h2>Available executions</h2>
+          <EmptyState v-if="!executions.length" message="No unified execution in this report contains this case." />
+          <v-table v-else density="compact"><thead><tr><th scope="col">Execution</th><th scope="col">Type</th><th scope="col">Result</th><th scope="col">Release / environment</th><th scope="col">Time</th><th scope="col">Duration</th></tr></thead>
+            <tbody><tr v-for="execution in executions" :key="execution.id"><td><router-link :to="executionRoute(execution.id)" class="mono">{{ execution.id }}</router-link></td><td>{{ execution.type }}</td><td><StatusChip :status="execution.status" /></td><td>{{ execution.release ?? "n/a" }} / {{ execution.environment ?? "n/a" }}</td><td>{{ formatDate(execution.completedAt ?? execution.startedAt) }}</td><td>{{ formatDuration(execution.durationMs) }}</td></tr></tbody></v-table>
+        </section>
+      </v-window-item>
+      <v-window-item value="traceability">
+        <section class="portal-card detail-section"><h2>Traceability</h2>
+          <h3>Requirements</h3><div class="chip-row"><router-link v-for="key in item.requirements" :key="key" :to="requirementRoute(key)" class="trace-link mono">{{ key }}</router-link><span v-if="!item.requirements.length">none</span></div>
+          <h3 class="mt-4">Defects</h3><div class="chip-row"><v-chip v-for="key in item.defects" :key="key" color="error" size="small" variant="outlined" label>{{ key }}</v-chip><span v-if="!item.defects.length">none</span></div>
+          <h3 class="mt-4">Participation</h3><p>{{ item.type }} verification across {{ item.implementations.length }} implementation(s).</p>
+        </section>
+      </v-window-item>
+      <v-window-item value="history">
+        <section class="portal-card detail-section"><h2>Definition history</h2>
+          <EmptyState v-if="!item.definitionHistory?.length" message="Definition history was not collected or is unavailable." />
+          <div v-for="(history, index) in item.definitionHistory ?? []" :key="index" class="mb-4"><p>Confidence: <strong>{{ history?.confidence }}</strong> · {{ history?.sourcePath ?? "source unavailable" }}</p>
+            <v-table v-if="history?.revisions.length" density="compact"><thead><tr><th scope="col">Date</th><th scope="col">Author</th><th scope="col">Commit</th><th scope="col">Message</th></tr></thead><tbody><tr v-for="revision in history.revisions" :key="revision.hash"><td>{{ revision.date }}</td><td>{{ revision.author }}</td><td class="mono">{{ revision.hash.slice(0, 8) }}</td><td>{{ revision.message }}</td></tr></tbody></v-table>
+          </div>
+        </section>
+      </v-window-item>
+      <v-window-item value="evidence">
+        <section class="portal-card detail-section"><h2>Evidence</h2>
+          <p>{{ item.evidence?.attachmentCount ?? 0 }} evidence reference(s) belong to this case.</p>
+          <ul v-if="item.evidence?.references.length"><li v-for="reference in item.evidence.references" :key="reference" class="mono">{{ reference }}</li></ul>
+          <v-btn :to="evidenceRoute(item.canonicalId)" variant="text" append-icon="mdi-arrow-right">Open Evidence</v-btn>
+        </section>
+      </v-window-item>
+    </v-window>
   </div>
-  <v-alert v-else type="warning" variant="tonal"
-    >Test case was not found in the loaded chunks.</v-alert
-  >
+  <v-alert v-else type="warning" variant="tonal">Logical test case was not found. The link may target a newer report or an unavailable legacy result.</v-alert>
 </template>
 
 <script setup lang="ts">
 import { computed, ref } from "vue";
 import { useRoute } from "vue-router";
+import EmptyState from "../components/EmptyState.vue";
 import PageHeader from "../components/PageHeader.vue";
 import StatusChip from "../components/StatusChip.vue";
 import { formatDuration } from "../format";
-import type { Manifest, TestCase } from "../types";
+import { catalogueFor, executionsFor } from "../services/catalogue";
+import { evidenceRoute, executionRoute, requirementRoute } from "../services/routes";
+import type { Manifest, TestCase, TestCaseImplementation } from "../types";
 const props = defineProps<{ manifest?: Manifest; tests: TestCase[] }>();
 const route = useRoute();
-const copied = ref(false);
-const test = computed(() => props.tests.find((item) => item.id === route.params.id));
-const rawArtifact = computed(() =>
-  props.manifest?.downloads.find(
-    (download) => download.category === "tests" && download.sourcePath === test.value?.sourcePath
-  )
-);
-const labels = computed(() =>
-  Object.entries(test.value?.labels ?? {}).flatMap(([name, values]) =>
-    values.map((value) => `${name}: ${value}`)
-  )
-);
-const stackFrames = computed(() => {
-  const trace = test.value?.error?.trace ?? "";
-  return trace
-    .split(/\r?\n/)
-    .map((line) => line.trim())
-    .map((line) => {
-      const nodeFrame = line.match(/^at\s+(.+?)\s+\((.+:\d+:\d+)\)$/);
-      if (nodeFrame) return { fn: nodeFrame[1] ?? "anonymous", location: nodeFrame[2] ?? "" };
-      const javaFrame = line.match(/^at\s+(.+)\((.+:\d+)\)$/);
-      if (javaFrame) return { fn: javaFrame[1] ?? "anonymous", location: javaFrame[2] ?? "" };
-      const pythonFrame = line.match(/^File "(.+)", line (\d+), in (.+)$/);
-      if (pythonFrame)
-        return { fn: pythonFrame[3] ?? "module", location: `${pythonFrame[1]}:${pythonFrame[2]}` };
-      return undefined;
-    })
-    .filter((frame): frame is { fn: string; location: string } => Boolean(frame));
-});
-
-async function copyError() {
-  const text = [test.value?.error?.message, test.value?.error?.trace].filter(Boolean).join("\n");
-  try {
-    await navigator.clipboard.writeText(text);
-    copied.value = true;
-    setTimeout(() => (copied.value = false), 2000);
-  } catch {
-    // Clipboard access can be unavailable in insecure contexts; the trace stays selectable.
-  }
-}
+const tab = ref("overview");
+const catalogue = computed(() => catalogueFor(props.manifest, props.tests));
+const routeId = computed(() => String(route.params.id ?? ""));
+const item = computed(() => catalogue.value.find((entry) => entry.canonicalId === routeId.value || entry.id === routeId.value || entry.implementations.some((implementation) => implementation.technicalId === routeId.value)));
+const executions = computed(() => executionsFor(props.manifest).filter((execution) => item.value && execution.testCaseIds.includes(item.value.canonicalId)));
+const technicalTests = computed(() => props.tests.filter((test) => item.value?.implementations.some((implementation) => implementation.technicalId === (test.identity?.technicalId ?? test.id))));
+const errorTest = computed(() => technicalTests.value.find((test) => test.error?.message || test.error?.trace));
+const stackFrames = computed(() => (errorTest.value?.error?.trace ?? "").split(/\r?\n/).map((line) => line.trim()).map((line) => {
+  const node = line.match(/^at\s+(.+?)\s+\((.+:\d+:\d+)\)$/);
+  if (node) return { fn: node[1] ?? "anonymous", location: node[2] ?? "" };
+  const java = line.match(/^at\s+(.+)\((.+:\d+)\)$/);
+  if (java) return { fn: java[1] ?? "anonymous", location: java[2] ?? "" };
+  const python = line.match(/^File "(.+)", line (\d+), in (.+)$/);
+  return python ? { fn: python[3] ?? "module", location: `${python[1]}:${python[2]}` } : undefined;
+}).filter((frame): frame is { fn: string; location: string } => Boolean(frame)));
+const stabilityLabel = computed(() => item.value?.stability.available ? `${item.value.stability.passRate}% pass rate · ${item.value.stability.sampleSize} executions` : `Insufficient history · ${item.value?.stability.sampleSize ?? 0} execution(s)`);
+function formatDate(value?: string) { return value && Number.isFinite(Date.parse(value)) ? new Date(value).toLocaleString() : "Not executed"; }
+function source(implementation: TestCaseImplementation) { return implementation.source?.file ? `${implementation.source.file}${implementation.source.line ? `:${implementation.source.line}` : ""}` : "n/a"; }
+function variant(value?: Record<string, string>) { return value ? Object.entries(value).map(([key, item]) => `${key}: ${item}`).join(", ") : "n/a"; }
 </script>

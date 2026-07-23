@@ -2,6 +2,10 @@
 
 import { ManualCaseSchema, ManualExecutionSchema } from "./manual.js";
 import { ReadinessSchema, ReleaseScopeSchema } from "../release/readiness.js";
+import {
+  TestCaseCatalogueEntrySchema,
+  UnifiedExecutionSchema
+} from "../catalogue/derive.js";
 
 export const TestStatusSchema = z.enum(["passed", "failed", "broken", "skipped", "unknown"]);
 export const TestLayerSchema = z.enum(["backend", "frontend", "e2e", "unknown"]);
@@ -274,7 +278,9 @@ export const NormalizedReportSchema = z.object({
     duplicateExplicitIds: [],
     malformedExplicitIds: 0,
     ambiguousMappings: 0
-  })
+  }),
+  testCaseCatalogue: z.array(TestCaseCatalogueEntrySchema).optional(),
+  unifiedExecutions: z.array(UnifiedExecutionSchema).optional()
 });
 
 export type TestStatus = z.infer<typeof TestStatusSchema>;

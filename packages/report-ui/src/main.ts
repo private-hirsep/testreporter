@@ -18,6 +18,7 @@ import TestDetail from "./views/TestDetail.vue";
 import Tests from "./views/Tests.vue";
 import Manual from "./views/Manual.vue";
 import Readiness from "./views/Readiness.vue";
+import ExecutionDetail from "./views/ExecutionDetail.vue";
 import { navItems } from "./services/navigation";
 
 const router = createRouter({
@@ -25,7 +26,7 @@ const router = createRouter({
   routes: [
     { path: "/", component: Dashboard, alias: ["/overview"] },
     { path: "/tests", component: Tests, alias: ["/test-cases"] },
-    { path: "/tests/:id", component: TestDetail },
+    { path: "/tests/:id", name: "test-case", component: TestDetail },
     { path: "/manual", component: Manual },
     { path: "/readiness", component: Readiness },
     { path: "/coverage", component: Coverage },
@@ -33,7 +34,8 @@ const router = createRouter({
     { path: "/security", component: Security },
     { path: "/downloads", component: Downloads, alias: ["/evidence"] },
     { path: "/diagnostics", component: Diagnostics },
-    { path: "/history", component: History, alias: ["/executions"] }
+    { path: "/history", component: History, alias: ["/executions"] },
+    { path: "/executions/:id", name: "execution", component: ExecutionDetail }
   ],
   scrollBehavior(to, _from, savedPosition) {
     if (savedPosition) return savedPosition;

@@ -155,7 +155,7 @@
                 <tbody>
                   <tr v-for="linked in linkedTestsFor(key)" :key="linked.id">
                     <td>
-                      <router-link :to="`/tests/${linked.id}`">{{
+                      <router-link :to="testCaseRoute(linked.identity?.canonicalId ?? linked.id)">{{
                         linked.fullName ?? linked.name
                       }}</router-link>
                     </td>
@@ -194,6 +194,7 @@ import EmptyState from "../components/EmptyState.vue";
 import PageHeader from "../components/PageHeader.vue";
 import StatusChip from "../components/StatusChip.vue";
 import { formatDuration, formatPercent } from "../format";
+import { testCaseRoute } from "../services/routes";
 import type { Manifest, TestCase } from "../types";
 const props = defineProps<{ manifest?: Manifest; tests: TestCase[] }>();
 const search = ref("");
