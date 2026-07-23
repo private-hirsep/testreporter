@@ -14,7 +14,7 @@
     <v-tabs v-model="tab" class="detail-tabs" aria-label="Test case detail sections">
       <v-tab value="overview">Overview</v-tab><v-tab value="implementations">Implementations</v-tab>
       <v-tab value="executions">Executions</v-tab><v-tab value="traceability">Traceability</v-tab>
-      <v-tab value="history">Definition history</v-tab><v-tab value="evidence">Evidence</v-tab>
+      <v-tab value="history">History</v-tab><v-tab value="definition-history">Definition history</v-tab><v-tab value="evidence">Evidence</v-tab>
     </v-tabs>
     <v-window v-model="tab" class="mt-4">
       <v-window-item value="overview">
@@ -85,6 +85,27 @@
         </section>
       </v-window-item>
       <v-window-item value="history">
+        <section class="portal-card detail-section"><h2>Historical execution summaries</h2>
+          <v-alert v-if="historical?.identityConfidence === 'conflicted'" type="error" variant="tonal" class="mb-3">Identity conflict — stability unavailable. Raw records are shown as untrusted.</v-alert>
+          <v-alert v-else-if="historical?.identityConfidence === 'generated-low'" type="warning" variant="tonal" class="mb-3">Generated identity — continuity has lower confidence; a rename is not inferred to be the same test.</v-alert>
+          <EmptyState v-if="!historical" message="Historical execution summaries have not been imported for this case." />
+          <template v-else>
+            <div class="metric-card-items mb-4">
+              <div><strong>{{ historical.sampleSize }}</strong><span>Execution samples</span></div>
+              <div><strong>{{ historical.passRate === undefined ? "n/a" : `${historical.passRate.toFixed(1)}%` }}</strong><span>Pass rate</span></div>
+              <div><strong>{{ historical.consecutiveFailures }}</strong><span>Consecutive failures</span></div>
+              <div><strong>{{ historical.stability }}</strong><span>Historical stability</span></div>
+              <div><strong>{{ formatDuration(historical.duration?.latestMs) }}</strong><span>Latest summed implementation time</span></div>
+              <div><strong>{{ formatDuration(historical.duration?.medianMs) }}</strong><span>Median summed implementation time</span></div>
+            </div>
+            <v-alert v-if="historical.duration?.slowRegression" type="warning" variant="tonal" class="mb-3">Duration regression: {{ historical.duration.percentageChange?.toFixed(1) }}% / {{ formatDuration(historical.duration.absoluteChangeMs) }} increase.</v-alert>
+            <div class="table-scroll"><v-table density="compact" aria-label="Historical case results"><thead><tr><th scope="col">Execution</th><th scope="col">Type</th><th scope="col">Result</th><th scope="col">Branch / environment</th><th scope="col">Observed</th><th scope="col">Case duration</th><th scope="col">Source report</th></tr></thead>
+              <tbody><tr v-for="sample in [...historical.samples].reverse()" :key="`${sample.type}-${sample.executionId}`"><td class="mono">{{ sample.executionId }}</td><td>{{ sample.type }}</td><td><StatusChip :status="sample.status" /></td><td>{{ sample.branch ?? "n/a" }} / {{ sample.environment ?? "n/a" }}</td><td>{{ formatDate(sample.at) }}</td><td>{{ formatDuration(sample.durationMs) }}</td><td><a v-if="safeHistoricalUrl(sample.sourceReport?.url)" :href="safeHistoricalUrl(sample.sourceReport?.url)" target="_blank" rel="noopener noreferrer">Open report</a><span v-else>Unavailable</span></td></tr></tbody>
+            </v-table></div>
+          </template>
+        </section>
+      </v-window-item>
+      <v-window-item value="definition-history">
         <section class="portal-card detail-section"><h2>Definition history</h2>
           <EmptyState v-if="!item.definitionHistory?.length" message="Definition history was not collected or is unavailable." />
           <div v-for="(history, index) in item.definitionHistory ?? []" :key="index" class="mb-4"><p>Confidence: <strong>{{ history?.confidence }}</strong> · {{ history?.sourcePath ?? "source unavailable" }}</p>
@@ -112,15 +133,17 @@ import PageHeader from "../components/PageHeader.vue";
 import StatusChip from "../components/StatusChip.vue";
 import { formatDuration } from "../format";
 import { catalogueFor, executionsFor } from "../services/catalogue";
+import { safeHistoricalUrl } from "../services/history";
 import type { ResolvedUnifiedExecution } from "../services/catalogue";
 import { evidenceRoute, executionRoute, requirementRoute } from "../services/routes";
-import type { Manifest, TestCase, TestCaseImplementation } from "../types";
-const props = defineProps<{ manifest?: Manifest; tests: TestCase[] }>();
+import type { HistoryArtifact, Manifest, TestCase, TestCaseImplementation } from "../types";
+const props = defineProps<{ manifest?: Manifest; tests: TestCase[]; historyData?: HistoryArtifact }>();
 const route = useRoute();
 const tab = ref("overview");
 const catalogue = computed(() => catalogueFor(props.manifest, props.tests));
 const routeId = computed(() => String(route.params.id ?? ""));
 const item = computed(() => catalogue.value.find((entry) => entry.canonicalId === routeId.value || entry.id === routeId.value || entry.implementations.some((implementation) => implementation.technicalId === routeId.value)));
+const historical = computed(() => props.historyData?.cases.find((entry) => entry.testCaseId === item.value?.canonicalId));
 const executions = computed(() =>
   executionsFor(props.manifest)
     .filter(

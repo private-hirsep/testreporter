@@ -80,15 +80,40 @@ function projectCard(item: PortfolioProject) {
     '<div class="project-metrics">',
     metric("Failed tests", item.failedTests, "negative"),
     metric("New failures", item.newFailures, "negative"),
+    metric("Persistent", item.history?.persistentFailures ?? 0, "negative"),
+    metric("Recovered", item.history?.recovered ?? 0, "neutral"),
     metric("Manual remaining", item.manualRemaining, "caution"),
     metric("Uncovered reqs", item.uncoveredRequirements, "caution"),
     metric("Security blockers", item.securityBlockers, "negative"),
+    metric("Unstable", item.history?.unstableCases ?? 0, "caution"),
+    metric("Slow regressions", item.history?.slowRegressions ?? 0, "caution"),
     metric("Accepted risks", item.acceptedRisks, "neutral"),
     metric("Required actions", item.recommendedActions, "caution"),
     "</div>",
     `<div class="project-foot"><span>Updated ${updated}</span>${item.reportUrl ? `<a href="${escape(item.reportUrl)}">Open full report →</a>` : '<span class="muted">No report link provided</span>'}</div>`,
     "</li>"
   ].join("");
+}
+
+function nextActions(projects: PortfolioProject[]) {
+  const actions: string[] = [];
+  for (const item of projects) {
+    const prefix = item.projectKey;
+    if ((item.history?.newFailures ?? item.newFailures) > 0)
+      actions.push(`${prefix}: Investigate ${item.history?.newFailures ?? item.newFailures} newly failing case(s)`);
+    if ((item.history?.persistentFailures ?? 0) > 0)
+      actions.push(`${prefix}: Review ${item.history!.persistentFailures} persistent failure(s)`);
+    if (item.manualRemaining > 0)
+      actions.push(`${prefix}: Execute ${item.manualRemaining} required manual check(s)`);
+    if (item.uncoveredRequirements > 0)
+      actions.push(`${prefix}: Review ${item.uncoveredRequirements} uncovered requirement(s)`);
+    if (item.securityBlockers > 0)
+      actions.push(`${prefix}: Resolve ${item.securityBlockers} security blocker(s)`);
+    if ((item.history?.slowRegressions ?? 0) > 0)
+      actions.push(`${prefix}: Investigate ${item.history!.slowRegressions} slow regression(s)`);
+    if (item.stale) actions.push(`${prefix}: History is stale`);
+  }
+  return actions;
 }
 
 const PORTFOLIO_CSS = `
@@ -186,7 +211,7 @@ export async function buildPortfolio(
     `${JSON.stringify({ schemaVersion: "1.0", generatedAt: now.toISOString(), staleDays, projects }, null, 2)}\n`
   );
   const body = projects.length
-    ? `<ol class="projects">${projects.map(projectCard).join("")}</ol>`
+    ? `<section class="actions"><h2>My next actions</h2><ol>${nextActions(projects).map((action) => `<li>${escape(action)}</li>`).join("") || "<li>No derived actions. Review healthy projects as scheduled.</li>"}</ol></section><ol class="projects">${projects.map(projectCard).join("")}</ol>`
     : '<div class="empty">No project summaries were found. Publish project-quality-summary.json files from your project reports to populate this portfolio.</div>';
   await writeFile(
     path.join(output, "index.html"),

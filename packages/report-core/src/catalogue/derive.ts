@@ -623,7 +623,9 @@ export function deriveUnifiedExecutions(input: CatalogueInput): UnifiedExecution
     const defects = sortedUnique(input.tests.flatMap((test) => test.defects));
     const id =
       input.metadata.runId ??
-      input.metadata.workflowRun ??
+      (input.metadata.workflowRun
+        ? `github-${input.metadata.workflowRun}-${input.metadata.workflowAttempt ?? 1}`
+        : undefined) ??
       `automated-${stableId([
         input.metadata.projectKey ?? input.metadata.projectName,
         input.metadata.generatedAt,

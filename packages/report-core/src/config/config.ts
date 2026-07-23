@@ -97,6 +97,27 @@ export const QualityReportConfigSchema = z.object({
     })
     .default({}),
   portfolio: z.object({ staleDays: z.number().int().positive().default(7) }).default({}),
+  history: z
+    .object({
+      enabled: z.boolean().default(true),
+      maxRuns: z.number().int().positive().default(50),
+      maxAgeDays: z.number().int().positive().default(180),
+      maxManualExecutions: z.number().int().positive().default(200),
+      stability: z
+        .object({
+          minimumSamples: z.number().int().min(2).default(5),
+          flakyTransitionThreshold: z.number().int().positive().default(2)
+        })
+        .default({}),
+      duration: z
+        .object({
+          minimumSamples: z.number().int().min(2).default(3),
+          regressionPercent: z.number().positive().default(30),
+          minimumIncreaseMs: z.number().nonnegative().default(500)
+        })
+        .default({})
+    })
+    .default({}),
   artifacts: z
     .object({
       tests: z

@@ -956,3 +956,4 @@ pre,
     overflow-x: auto;
   }
 }
+ .history-bars{display:grid;gap:8px;margin-bottom:16px}.history-bar{display:flex;align-items:center;gap:4px;min-height:28px}.history-bar-label{width:80px;overflow:hidden;text-overflow:ellipsis}.history-bar-passed,.history-bar-failed{min-width:48px;padding:4px 8px;font-size:.75rem}.history-bar-passed{background:#dff3e8;color:#12643e}.history-bar-failed{background:#fde7e4;color:#9d2016}@media(max-width:600px){.history-bars{display:none}}

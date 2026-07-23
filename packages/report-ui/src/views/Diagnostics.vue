@@ -9,6 +9,14 @@
         :label="`${manifest.warnings.length} warning(s)`"
       />
     </PageHeader>
+    <SectionCard v-if="historyError || historyData?.diagnostics.length" title="Historical data health" class="mb-4">
+      <v-alert v-if="historyError" type="warning" variant="tonal">{{ historyError }}</v-alert>
+      <ul v-if="historyData?.diagnostics.length" class="diagnostic-list">
+        <li v-for="(finding, index) in historyData.diagnostics" :key="`${finding.code}-${index}`">
+          <strong class="mono">{{ finding.code }}</strong>: {{ finding.message }}
+        </li>
+      </ul>
+    </SectionCard>
     <SectionCard
       title="Identity health"
       description="How reliably tests map to canonical, Git-stable identities"
@@ -116,8 +124,8 @@ import StatusChip from "../components/StatusChip.vue";
 import { catalogueFor } from "../services/catalogue";
 import { groupWarnings, identityIssues } from "../services/diagnostics";
 import { testCaseRoute } from "../services/routes";
-import type { Manifest, TestCase } from "../types";
-const props = defineProps<{ manifest?: Manifest; tests: TestCase[] }>();
+import type { HistoryArtifact, Manifest, TestCase } from "../types";
+const props = defineProps<{ manifest?: Manifest; tests: TestCase[]; historyData?: HistoryArtifact; historyError?: string }>();
 const diagnostics = computed(
   () =>
     props.manifest?.identityDiagnostics ?? {
