@@ -293,7 +293,14 @@ export function deriveTestCaseCatalogue(input: CatalogueInput): TestCaseCatalogu
         framework: test.framework,
         layer: test.layer,
         ...((test.file || test.line) ? { source: { ...(test.file ? { file: test.file } : {}), ...(test.line ? { line: test.line } : {}) } } : {}),
-        ...(test.suite ? { suitePath: test.suite.split(/(?:\s*>\s*|\/)/).filter(Boolean) } : {}),
+        ...(test.suite
+          ? {
+              suitePath: test.suite
+                .split(/[>/]/u)
+                .map((segment) => segment.trim())
+                .filter(Boolean)
+            }
+          : {}),
         ...(test.variant && Object.keys(test.variant).length ? { variant: test.variant } : {}),
         requirements: sortedUnique(test.requirements),
         defects: sortedUnique(test.defects),

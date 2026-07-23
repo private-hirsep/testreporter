@@ -118,6 +118,24 @@ describe("logical test case catalogue", () => {
     expect(entry.latestResult?.contributingStatuses).toEqual(["failed", "passed"]);
   });
 
+  it("splits suite paths without a repetition-dependent regular expression", () => {
+    const entry = deriveTestCaseCatalogue({
+      tests: [
+        automated("SUITE-1", "suite-technical", "passed", {
+          suite: "Checkout   >   Payment / Receipt"
+        })
+      ],
+      manualCases: [],
+      manualExecutions: [],
+      metadata
+    })[0]!;
+    expect(entry.implementations[0]?.suitePath).toEqual([
+      "Checkout",
+      "Payment",
+      "Receipt"
+    ]);
+  });
+
   it("marks generated identities unstable and explicit duplicate conflicts without losing implementations", () => {
     const generated = automated("generated-1", "generated-tech", "passed", {
       identity: { canonicalId: "generated-1", technicalId: "generated-tech", source: "generated", stable: false }
