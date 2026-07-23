@@ -30,6 +30,21 @@ describe("portfolio generator", () => {
     expect(html).toContain("Alpha");
     expect(html).toContain("Beta");
     expect(html).toContain("Gamma");
+    expect(html).toContain('data-priority="1"');
+    expect(html).toContain("Blocked");
+    expect(html).toContain("Stale report");
+    expect(html).toContain("Manual remaining");
+    expect(html).toContain('<a href="https://example.invalid/alpha/">Alpha</a>');
+    expect(html).toContain("Project quality portfolio");
+  });
+
+  it("renders an honest empty state without project summaries", async () => {
+    const input = await mkdtemp(path.join(os.tmpdir(), "qr-portfolio-empty-"));
+    const output = path.join(input, "output");
+    const projects = await buildPortfolio(input, output);
+    expect(projects).toHaveLength(0);
+    const html = await readFile(path.join(output, "index.html"), "utf8");
+    expect(html).toContain("No project summaries were found");
   });
 
   it("rejects duplicate project keys with source paths", async () => {

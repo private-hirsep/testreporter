@@ -23,26 +23,47 @@ test("manual case runner restores progress and exports a validated result", asyn
   expect((await download).suggestedFilename()).toMatch(/^manual-result-.*\.json$/);
 });
 
-test("generated report loads dashboard and tests", async ({ page }) => {
+test("overview prioritizes readiness, required actions, and the quality gate", async ({
+  page
+}) => {
   await page.goto("/");
-  await expect(page.locator(".gate-hero")).toBeVisible();
-  await expect(page.locator(".gate-title")).toHaveText("Quality Gate PASSED");
+  await expect(page.getByRole("heading", { name: "Overview" })).toBeVisible();
+  await expect(page.locator(".context-header")).toContainText("Minimal Quality Example");
+  await expect(page.locator(".context-header")).toContainText("Release 1.1.7");
+  await expect(page.locator(".context-header")).toContainText("staging");
+  await expect(page.locator(".context-header .status-chip")).toContainText("Blocked");
+  await expect(page.getByRole("heading", { name: "Required actions" })).toBeVisible();
+  expect(await page.locator(".attention-list li").count()).toBeGreaterThanOrEqual(5);
+  await expect(page.locator(".summary-cards .metric-card")).toHaveCount(4);
   expect(await page.locator(".gate-check").count()).toBeGreaterThanOrEqual(3);
   await expect(page.locator(".gate-check").filter({ hasText: "Total coverage" })).toBeVisible();
-  await expect(page.locator(".metrics")).toHaveCount(0);
-  await expect(page.locator(".quality-areas")).toHaveCount(0);
-  await expect(page.locator(".dashboard-overview .summary-panel")).toHaveCount(3);
-  await expect(page.getByText("Test Health")).toBeVisible();
-  await expect(page.getByText("Risk & Compliance")).toBeVisible();
-  await page.getByRole("link", { name: "Tests" }).first().click();
-  await expect(page.getByRole("heading", { name: "Tests" })).toBeVisible();
+  await expect(
+    page.getByText("Historical execution trends are not available in this report yet", {
+      exact: false
+    })
+  ).toBeVisible();
+  await page.getByRole("link", { name: "Test Cases" }).first().click();
+  await expect(page.getByRole("heading", { name: "Test Cases" })).toBeVisible();
   await expect(page.getByText("creates user account JIRA-101")).toBeVisible();
+});
+
+test("a readiness action on the overview leads to the affected test", async ({ page }) => {
+  await page.goto("/");
+  const action = page.locator(".attention-list a").first();
+  await expect(action).toContainText(/failed/);
+  await action.click();
+  await expect(page.locator(".test-detail")).toBeVisible();
 });
 
 test("release readiness explains a blocker and links to its test", async ({ page }) => {
   await page.goto("/#/readiness");
-  await expect(page.getByRole("heading", { name: "Release readiness" })).toBeVisible();
-  await expect(page.locator(".v-alert").filter({ hasText: /Test .* failed\./ })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Release Readiness" })).toBeVisible();
+  await expect(page.locator(".page-heading .status-chip")).toContainText("Blocked");
+  await expect(page.getByRole("heading", { name: "Why this status" })).toBeVisible();
+  await expect(page.locator(".reason-list li").filter({ hasText: /Test .* failed\./ }).first())
+    .toBeVisible();
+  await expect(page.getByRole("heading", { name: "Accepted risks" })).toBeVisible();
+  await expect(page.locator(".risk-list")).toContainText("RISK-004");
   const failed = page.getByRole("link", { name: /Test .* failed\./ }).first();
   await expect(failed).toBeVisible();
   await failed.click();
@@ -62,17 +83,38 @@ test("audit evidence manifest and checksums are inspectable", async ({ request }
   const checksums=await request.get("/checksums.sha256"); expect(checksums.ok()).toBeTruthy(); expect(await checksums.text()).toMatch(/[a-f0-9]{64}/);
 });
 
-test("navigation routes work with GitHub Pages hash fallback", async ({ page }) => {
+test("navigation reaches every major section with GitHub Pages hash fallback", async ({
+  page
+}) => {
   await page.goto("/404.html#/coverage");
   await expect(page.getByRole("heading", { name: "Coverage", exact: true })).toBeVisible();
-  await page.getByRole("link", { name: "Requirements" }).first().click();
-  await expect(page.getByRole("heading", { name: "Requirement Coverage" })).toBeVisible();
-  await page.getByRole("link", { name: "Security" }).first().click();
-  await expect(page.getByRole("heading", { name: "Security" })).toBeVisible();
-  await page.getByRole("link", { name: "Downloads" }).first().click();
-  await expect(page.getByRole("heading", { name: "Downloads" })).toBeVisible();
-  await page.getByRole("link", { name: "History" }).first().click();
-  await expect(page.getByRole("heading", { name: "History" })).toBeVisible();
+  const sections: Array<[string, string | RegExp]> = [
+    ["Overview", "Overview"],
+    ["Test Cases", "Test Cases"],
+    ["Executions", "Executions"],
+    ["Release Readiness", "Release Readiness"],
+    ["Requirements", "Requirements"],
+    ["Manual Testing", "Manual Testing"],
+    ["Coverage", "Coverage"],
+    ["Security", "Security"],
+    ["Evidence", "Evidence"],
+    ["Diagnostics", "Diagnostics"]
+  ];
+  for (const [link, heading] of sections) {
+    await page.getByRole("link", { name: link, exact: true }).first().click();
+    await expect(page.getByRole("heading", { name: heading, level: 1 })).toBeVisible();
+  }
+});
+
+test("legacy route paths keep working as aliases", async ({ page }) => {
+  await page.goto("/#/downloads");
+  await expect(page.getByRole("heading", { name: "Evidence" })).toBeVisible();
+  await page.goto("/#/evidence");
+  await expect(page.getByRole("heading", { name: "Evidence" })).toBeVisible();
+  await page.goto("/#/executions");
+  await expect(page.getByRole("heading", { name: "Executions", level: 1 })).toBeVisible();
+  await page.goto("/#/history");
+  await expect(page.getByRole("heading", { name: "Executions", level: 1 })).toBeVisible();
 });
 
 test("test filters and detail page make failures visible and safe", async ({ page }) => {
@@ -93,12 +135,12 @@ test("test filters and detail page make failures visible and safe", async ({ pag
 
 test("requirement links connect requirements and tests", async ({ page }) => {
   await page.goto("/#/requirements");
-  await expect(page.locator("#requirement-JIRA-999")).toContainText("missing");
+  await expect(page.locator("#requirement-JIRA-999")).toContainText(/missing/i);
   await page.getByRole("button", { name: "Toggle linked tests for JIRA-401" }).click();
   const details = page.locator("#requirement-JIRA-401-details");
   await expect(details).toBeVisible();
   expect(await details.getByRole("link").count()).toBeGreaterThanOrEqual(3);
-  await expect(details.getByRole("row").last()).toContainText(/passed|failed|broken|skipped/);
+  await expect(details.getByRole("row").last()).toContainText(/passed|failed|broken|skipped/i);
   await page.locator("#requirement-JIRA-101").getByRole("link").first().click();
   await expect(page.getByRole("heading", { name: /JIRA-101/ })).toBeVisible();
 });
@@ -157,11 +199,23 @@ test("downloads listed in manifest resolve from static output", async ({ page, r
     expect(response.ok(), `${download.path} should resolve`).toBeTruthy();
   }
   await page.goto("/#/downloads");
-  await expect(page.getByText("Full report")).toBeVisible();
-  const hasHorizontalOverflow = await page
+  await expect(page.getByRole("heading", { name: "Evidence", level: 1 })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Audit package" })).toBeVisible();
+  await expect(page.getByText("Full generated report ZIP")).toBeVisible();
+  const overflows = await page
     .locator(".data-table")
-    .evaluate((element) => element.scrollWidth > element.clientWidth + 1);
-  expect(hasHorizontalOverflow).toBeFalsy();
+    .evaluateAll((elements) =>
+      elements.map((element) => element.scrollWidth > element.clientWidth + 1)
+    );
+  expect(overflows.every((overflow) => !overflow)).toBeTruthy();
+});
+
+test("evidence page verifies audit integrity files", async ({ page }) => {
+  await page.goto("/#/downloads");
+  await expect(page.getByRole("heading", { name: "Audit integrity" })).toBeVisible();
+  await expect(page.getByRole("link", { name: "Evidence manifest" })).toBeVisible();
+  await expect(page.getByRole("link", { name: "Checksums" })).toBeVisible();
+  expect(await page.locator(".status-chip").filter({ hasText: "present" }).count()).toBe(2);
 });
 
 test("coverage highlights low coverage files", async ({ page }) => {
@@ -242,5 +296,32 @@ test("generated data does not leak absolute paths or embed raw html", async ({ r
 test("github pages fallback redirects clean paths to hash routes", async ({ page }) => {
   await page.goto("/tests");
   await expect(page).toHaveURL(/#\/tests$/);
-  await expect(page.getByRole("heading", { name: "Tests" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Test Cases" })).toBeVisible();
+});
+
+test("diagnostics groups warnings by category", async ({ page }) => {
+  await page.goto("/#/diagnostics");
+  await expect(page.getByRole("heading", { name: "Identity health" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: /Configuration \(2\)/ })).toBeVisible();
+  await expect(page.getByRole("heading", { name: /Data compatibility \(1\)/ })).toBeVisible();
+  await expect(page.getByText("Unexpected end of JSON input")).toBeVisible();
+});
+
+test("narrow viewports keep the workspace usable through the drawer", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto("/");
+  await expect(page.getByRole("heading", { name: "Overview" })).toBeVisible();
+  await expect(page.locator(".context-header")).toContainText("Release 1.1.7");
+  const toggle = page.getByRole("button", { name: "Open navigation" });
+  await expect(toggle).toBeVisible();
+  await toggle.click();
+  await page.getByRole("link", { name: "Manual Testing", exact: true }).click();
+  await expect(page.getByRole("heading", { name: "Manual Testing", level: 1 })).toBeVisible();
+  await toggle.click();
+  await page.getByRole("link", { name: "Test Cases", exact: true }).click();
+  await expect(page.getByRole("heading", { name: "Test Cases", level: 1 })).toBeVisible();
+  const bodyOverflow = await page.evaluate(
+    () => document.documentElement.scrollWidth > document.documentElement.clientWidth + 1
+  );
+  expect(bodyOverflow).toBeFalsy();
 });
