@@ -119,7 +119,7 @@ function sizeLabel(download: Download) {
   if (download.sizeBytes !== undefined) return formatBytes(download.sizeBytes);
   // Size is unrecorded for directories and for the ZIP (created after the
   // manifest); only paths without a file extension are actual directories.
-  return /\.[a-z0-9]+$/i.test(download.path) ? "—" : "directory";
+  return /\.[a-z0-9]+$/i.test(download.path) ? "size not recorded" : "directory";
 }
 
 function isJson(body: string) {

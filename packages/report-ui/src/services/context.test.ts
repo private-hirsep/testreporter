@@ -9,7 +9,7 @@ describe("project context header", () => {
     expect(context.projectName).toBe("Demo Tool");
     expect(context.identityParts).toEqual(["Release 1.1.7", "main", "staging"]);
     expect(context.provenanceParts).toEqual([
-      "Last tested 23 Jul 2026",
+      "Generated 23 Jul 2026",
       "build build-117",
       "commit 8f91c2a4d21b",
       "workflow #1842"
@@ -23,7 +23,7 @@ describe("project context header", () => {
     manifest.metadata = { projectName: "Bare", generatedAt: "2026-07-01T00:00:00.000Z" };
     const context = buildProjectContext(manifest);
     expect(context.identityParts).toEqual([]);
-    expect(context.provenanceParts).toEqual(["Last tested 01 Jul 2026"]);
+    expect(context.provenanceParts).toEqual(["Generated 01 Jul 2026"]);
     expect(context.provenanceParts.join(" ")).not.toContain("undefined");
   });
 

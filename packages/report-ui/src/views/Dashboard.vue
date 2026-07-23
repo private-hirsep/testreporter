@@ -79,6 +79,7 @@
           />
           <span>{{ check.label }}</span>
           <strong class="mono">{{ checkActual(check) }}</strong>
+          <span class="gate-check-expected mono">({{ check.expected }})</span>
         </div>
       </div>
     </SectionCard>

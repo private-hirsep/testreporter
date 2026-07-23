@@ -31,6 +31,8 @@ test("overview prioritizes readiness, required actions, and the quality gate", a
   await expect(page.locator(".context-header")).toContainText("Minimal Quality Example");
   await expect(page.locator(".context-header")).toContainText("Release 1.1.7");
   await expect(page.locator(".context-header")).toContainText("staging");
+  await expect(page.locator(".context-header")).toContainText(/Generated \d{2} \w{3} \d{4}/);
+  await expect(page.locator(".context-header")).not.toContainText("Last tested");
   await expect(page.locator(".context-header .status-chip")).toContainText("Blocked");
   await expect(page.getByRole("heading", { name: "Required actions" })).toBeVisible();
   expect(await page.locator(".attention-list li").count()).toBeGreaterThanOrEqual(5);
@@ -218,6 +220,53 @@ test("evidence page verifies audit integrity files", async ({ page }) => {
   await expect(page.getByRole("link", { name: "Evidence manifest" })).toBeVisible();
   await expect(page.getByRole("link", { name: "Checksums" })).toBeVisible();
   expect(await page.locator(".status-chip").filter({ hasText: "present" }).count()).toBe(2);
+  const zipRow = page.getByRole("row", { name: /Full generated report ZIP/ });
+  await expect(zipRow).toContainText("size not recorded");
+  await expect(zipRow).not.toContainText("directory");
+});
+
+test("quality gate checks show actual and expected values", async ({ page }) => {
+  await page.goto("/");
+  const coverageCheck = page.locator(".gate-check").filter({ hasText: "Total coverage" });
+  await expect(coverageCheck).toContainText("72.4%");
+  await expect(coverageCheck).toContainText("(>= 70%)");
+  const failedCheck = page.locator(".gate-check").filter({ hasText: "Failed tests" });
+  await expect(failedCheck).toContainText("(<= 3)");
+});
+
+test("test result filters expose their pressed state", async ({ page }) => {
+  await page.goto("/#/tests");
+  const all = page.getByRole("button", { name: /All 46/ });
+  const failed = page.getByRole("button", { name: /Failed 3/ });
+  await expect(all).toHaveAttribute("aria-pressed", "true");
+  await expect(failed).toHaveAttribute("aria-pressed", "false");
+  await failed.click();
+  await expect(failed).toHaveAttribute("aria-pressed", "true");
+  await expect(all).toHaveAttribute("aria-pressed", "false");
+});
+
+test("readiness explains an empty release scope instead of hiding it", async ({
+  page,
+  request
+}) => {
+  const manifest = await (await request.get("/data/manifest.json")).json();
+  await page.route("**/data/manifest.json", async (route) => {
+    await route.fulfill({
+      contentType: "application/json",
+      body: JSON.stringify({
+        ...manifest,
+        readiness: {
+          ...manifest.readiness,
+          requirements: { covered: 0, uncovered: 0, excluded: 0, uncoveredIds: [], excludedIds: [] }
+        }
+      })
+    });
+  });
+  await page.goto("/#/readiness");
+  await expect(page.getByRole("heading", { name: "Scoped requirements" })).toBeVisible();
+  await expect(
+    page.getByText("The release scope declares no requirements", { exact: false }).first()
+  ).toBeVisible();
 });
 
 test("coverage highlights low coverage files", async ({ page }) => {

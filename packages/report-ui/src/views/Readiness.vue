@@ -178,11 +178,20 @@
         </SectionCard>
       </div>
 
-      <SectionCard
-        v-if="readiness.requirements.uncoveredIds.length || readiness.requirements.excludedIds.length"
-        title="Scoped requirements"
-        class="mb-4"
-      >
+      <SectionCard title="Scoped requirements" class="mb-4">
+        <EmptyState
+          v-if="scopedTotal === 0"
+          variant="unavailable"
+          message="The release scope declares no requirements. Add requirement IDs to the release scope to track scoped coverage here."
+        />
+        <EmptyState
+          v-else-if="
+            !readiness.requirements.uncoveredIds.length &&
+            !readiness.requirements.excludedIds.length
+          "
+          variant="positive"
+          :message="`All ${readiness.requirements.covered} scoped requirements are covered.`"
+        />
         <p v-if="readiness.requirements.uncoveredIds.length" class="mb-2">
           Uncovered:
           <v-chip
@@ -243,4 +252,9 @@ const sortedActions = computed(() =>
 function scopedLink(key: string) {
   return props.manifest ? requirementLink(props.manifest, key) : undefined;
 }
+
+const scopedTotal = computed(() => {
+  const scoped = readiness.value?.requirements;
+  return scoped ? scoped.covered + scoped.uncovered + scoped.excluded : 0;
+});
 </script>

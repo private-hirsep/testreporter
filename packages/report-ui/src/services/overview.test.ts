@@ -45,6 +45,7 @@ describe("overview summary cards", () => {
     const requirements = buildSummaryCards(manifest)[2]!;
     expect(requirements.headline).toBe("No scoped requirements");
     expect(requirements.status.key).toBe("informational");
+    expect(requirements.note).toContain("declares no requirements");
   });
 
   it("falls back to overall requirement coverage without readiness", () => {

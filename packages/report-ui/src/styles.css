@@ -502,6 +502,11 @@ pre,
   background: rgba(180, 35, 24, 0.06);
 }
 
+.gate-check-expected {
+  color: var(--qp-muted);
+  font-size: 0.74rem;
+}
+
 /* -------------------------------------------------------------- metrics */
 
 .inline-metrics {

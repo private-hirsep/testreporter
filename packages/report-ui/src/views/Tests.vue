@@ -9,13 +9,14 @@
         :label="`${manifest.summary.tests.failed + manifest.summary.tests.broken} need attention`"
       />
     </PageHeader>
-    <div class="tab-strip" role="tablist" aria-label="Test result filters">
+    <div class="tab-strip" role="group" aria-label="Test result filters">
       <v-btn
         v-for="tab in tabs"
         :key="tab.value"
         :variant="view === tab.value ? 'flat' : 'outlined'"
         :color="view === tab.value ? tab.color : undefined"
         size="small"
+        :aria-pressed="view === tab.value ? 'true' : 'false'"
         @click="view = tab.value"
       >
         {{ tab.label }} {{ tab.count }}

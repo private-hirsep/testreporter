@@ -125,7 +125,11 @@ export function buildSummaryCards(manifest: Manifest): SummaryCard[] {
           }
         ],
     to: "/requirements",
-    linkLabel: "Open requirements"
+    linkLabel: "Open requirements",
+    note:
+      scoped && scopedTotal === 0
+        ? "The release scope declares no requirements, so scoped coverage cannot be evaluated."
+        : undefined
   });
 
   const manual = readiness?.manual;

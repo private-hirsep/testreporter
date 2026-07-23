@@ -48,8 +48,11 @@ function gateChip(item: PortfolioProject) {
   return chip(tone, GATE_LABELS[item.qualityGate] ?? item.qualityGate);
 }
 
-function metric(label: string, value: number, alert: boolean) {
-  return `<div class="metric"><strong class="${alert ? "metric-alert" : ""}">${value}</strong><span>${escape(label)}</span></div>`;
+type MetricTone = "negative" | "caution" | "neutral";
+
+function metric(label: string, value: number, tone: MetricTone) {
+  const applied = value > 0 ? tone : "neutral";
+  return `<div class="metric" data-tone="${applied}"><strong>${value}</strong><span>${escape(label)}</span></div>`;
 }
 
 function projectCard(item: PortfolioProject) {
@@ -62,13 +65,13 @@ function projectCard(item: PortfolioProject) {
     `<div class="project-head"><h2>${name}</h2><span class="project-release">${item.release ? `Release ${escape(item.release)}` : "No release recorded"}</span></div>`,
     `<div class="project-chips">${readinessChip(item)}${gateChip(item)}${item.stale ? chip("warn", "Stale report", "This summary is older than the configured freshness window") : ""}</div>`,
     '<div class="project-metrics">',
-    metric("Failed tests", item.failedTests, item.failedTests > 0),
-    metric("New failures", item.newFailures, item.newFailures > 0),
-    metric("Manual remaining", item.manualRemaining, item.manualRemaining > 0),
-    metric("Uncovered reqs", item.uncoveredRequirements, item.uncoveredRequirements > 0),
-    metric("Security blockers", item.securityBlockers, item.securityBlockers > 0),
-    metric("Accepted risks", item.acceptedRisks, false),
-    metric("Required actions", item.recommendedActions, item.recommendedActions > 0),
+    metric("Failed tests", item.failedTests, "negative"),
+    metric("New failures", item.newFailures, "negative"),
+    metric("Manual remaining", item.manualRemaining, "caution"),
+    metric("Uncovered reqs", item.uncoveredRequirements, "caution"),
+    metric("Security blockers", item.securityBlockers, "negative"),
+    metric("Accepted risks", item.acceptedRisks, "neutral"),
+    metric("Required actions", item.recommendedActions, "caution"),
     "</div>",
     `<div class="project-foot"><span>Updated ${updated}</span>${item.reportUrl ? `<a href="${escape(item.reportUrl)}">Open full report →</a>` : '<span class="muted">No report link provided</span>'}</div>`,
     "</li>"
@@ -112,7 +115,8 @@ font-size:.78rem;font-weight:650;border:1px solid var(--qp-border);background:va
 border-top:1px solid var(--qp-border);padding-top:12px}
 .metric{display:grid;gap:2px}
 .metric strong{font-size:1.2rem;line-height:1.1}
-.metric-alert{color:var(--qp-fail)}
+.metric[data-tone="negative"] strong{color:var(--qp-fail)}
+.metric[data-tone="caution"] strong{color:var(--qp-medium)}
 .metric span{color:var(--qp-muted);font-size:.75rem}
 .project-foot{display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;
 border-top:1px solid var(--qp-border);padding-top:10px;color:var(--qp-muted);font-size:.82rem;margin-top:auto}

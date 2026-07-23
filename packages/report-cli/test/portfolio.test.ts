@@ -36,6 +36,13 @@ describe("portfolio generator", () => {
     expect(html).toContain("Manual remaining");
     expect(html).toContain('<a href="https://example.invalid/alpha/">Alpha</a>');
     expect(html).toContain("Project quality portfolio");
+    // Metric tones are semantic: failures are negative, outstanding work is
+    // caution, accepted risks stay neutral, and zero values are never colored.
+    expect(html).toContain('data-tone="negative"><strong>1</strong><span>Failed tests');
+    expect(html).toContain('data-tone="caution"><strong>2</strong><span>Manual remaining');
+    expect(html).toContain('data-tone="neutral"><strong>1</strong><span>Accepted risks');
+    expect(html).toContain('data-tone="neutral"><strong>0</strong><span>Failed tests');
+    expect(html).not.toContain("metric-alert");
   });
 
   it("renders an honest empty state without project summaries", async () => {

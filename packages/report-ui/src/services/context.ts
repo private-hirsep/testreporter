@@ -45,8 +45,10 @@ export function buildProjectContext(manifest?: Manifest): ProjectContext {
   if (metadata?.environment) identityParts.push(metadata.environment);
 
   const provenanceParts: string[] = [];
-  const tested = formatContextDate(metadata?.generatedAt);
-  if (tested) provenanceParts.push(`Last tested ${tested}`);
+  // generatedAt is when the report was produced, not when tests ran; label it
+  // accordingly so the header never overstates test freshness.
+  const generated = formatContextDate(metadata?.generatedAt);
+  if (generated) provenanceParts.push(`Generated ${generated}`);
   if (metadata?.testedBuild) provenanceParts.push(`build ${metadata.testedBuild}`);
   if (metadata?.commitSha) provenanceParts.push(`commit ${shortSha(metadata.commitSha)}`);
   const run = metadata?.workflowRun ?? metadata?.runId;
