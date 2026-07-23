@@ -233,6 +233,34 @@ export function requirementGaps(manifest: Manifest, limit = 6): string[] {
   return gaps.slice(0, limit);
 }
 
+export function scopedRequirementTotal(manifest: Manifest): number | undefined {
+  const requirements = manifest.readiness?.requirements;
+  return requirements
+    ? requirements.covered + requirements.uncovered + requirements.excluded
+    : undefined;
+}
+
+/** Empty state shown on the Overview's Requirement gaps panel when there are no gaps to list. */
+export function requirementGapEmptyState(manifest: Manifest): {
+  variant: "unavailable" | "positive";
+  message: string;
+} {
+  if (!manifest.readiness)
+    return {
+      variant: "unavailable",
+      message: "Requirement-gap analysis is unavailable because no release scope was imported."
+    };
+  if (scopedRequirementTotal(manifest) === 0)
+    return {
+      variant: "unavailable",
+      message: "No requirements are included in this release scope."
+    };
+  return {
+    variant: "positive",
+    message: "Every active requirement in the release scope has evidence."
+  };
+}
+
 /**
  * Keys that actually have a row on the Requirements page. Scoped release
  * requirements can reference keys outside the traceability set; linking those

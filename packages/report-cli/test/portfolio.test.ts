@@ -43,6 +43,19 @@ describe("portfolio generator", () => {
     expect(html).toContain('data-tone="neutral"><strong>1</strong><span>Accepted risks');
     expect(html).toContain('data-tone="neutral"><strong>0</strong><span>Failed tests');
     expect(html).not.toContain("metric-alert");
+
+    // Card border tone is a distinct semantic signal from sort priority.
+    // GAMMA is stale (clamped into the top sort-priority band alongside
+    // genuine blockers) but is otherwise ready-with-accepted-risks, so its
+    // card must border as a warning, not as a failure.
+    const cardTones = new Map(
+      [...html.matchAll(/data-priority="(\d+)" data-tone="(\w+)">.*?<h2>(?:<a[^>]*>)?([A-Za-z]+)/gs)]
+        .map((match) => [match[3], match[2]])
+    );
+    expect(cardTones.get("Alpha")).toBe("fail");
+    expect(cardTones.get("Gamma")).toBe("warn");
+    expect(cardTones.get("Beta")).toBe("warn");
+    expect(html).not.toMatch(/data-priority="2" data-tone="fail"/);
   });
 
   it("renders an honest empty state without project summaries", async () => {

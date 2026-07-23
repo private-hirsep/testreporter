@@ -5,9 +5,11 @@ import {
   buildSummaryCards,
   hasHistoricalRuns,
   knownRequirementKeys,
+  requirementGapEmptyState,
   requirementGaps,
   requirementLink,
   resolveTestIds,
+  scopedRequirementTotal,
   securityBlockerCount,
   topFailingTests
 } from "./overview";
@@ -128,6 +130,38 @@ describe("overview attention and secondary panels", () => {
     expect(knownRequirementKeys(manifest)).toEqual(new Set(["REQ-1", "REQ-2", "REQ-3", "REQ-9"]));
     expect(requirementLink(manifest, "REQ-3")).toBe("/requirements#requirement-REQ-3");
     expect(requirementLink(manifest, "SCOPE-ONLY-1")).toBeUndefined();
+  });
+
+  it("distinguishes no-scope, empty-scope, and fully-covered scope on the Overview", () => {
+    const noScope = makeManifest();
+    delete (noScope as Partial<Manifest>).readiness;
+    expect(scopedRequirementTotal(noScope)).toBeUndefined();
+    expect(requirementGapEmptyState(noScope)).toEqual({
+      variant: "unavailable",
+      message: "Requirement-gap analysis is unavailable because no release scope was imported."
+    });
+
+    const emptyScope = makeManifest();
+    emptyScope.readiness = {
+      ...emptyScope.readiness!,
+      requirements: { covered: 0, uncovered: 0, excluded: 0, uncoveredIds: [], excludedIds: [] }
+    };
+    expect(scopedRequirementTotal(emptyScope)).toBe(0);
+    expect(requirementGapEmptyState(emptyScope)).toEqual({
+      variant: "unavailable",
+      message: "No requirements are included in this release scope."
+    });
+
+    const fullyCovered = makeManifest();
+    fullyCovered.readiness = {
+      ...fullyCovered.readiness!,
+      requirements: { covered: 2, uncovered: 0, excluded: 0, uncoveredIds: [], excludedIds: [] }
+    };
+    expect(scopedRequirementTotal(fullyCovered)).toBe(2);
+    expect(requirementGapEmptyState(fullyCovered)).toEqual({
+      variant: "positive",
+      message: "Every active requirement in the release scope has evidence."
+    });
   });
 
   it("treats a single recorded run as having no history", () => {

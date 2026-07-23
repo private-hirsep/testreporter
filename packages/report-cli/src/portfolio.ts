@@ -48,6 +48,19 @@ function gateChip(item: PortfolioProject) {
   return chip(tone, GATE_LABELS[item.qualityGate] ?? item.qualityGate);
 }
 
+/**
+ * Card-level tone, independent of sort priority. A stale-but-otherwise-ready
+ * project must read as a warning, not as a hard failure, so this cannot
+ * simply reuse `item.priority` (which clamps stale reports into the top
+ * failure band purely to keep them sorted first).
+ */
+function projectTone(item: PortfolioProject): "fail" | "warn" | "pass" | "neutral" {
+  if (item.readiness === "blocked" || item.qualityGate === "failed") return "fail";
+  if (item.stale || item.readiness === "warning" || item.readiness === "incomplete") return "warn";
+  if (item.readiness === "ready" || item.readiness === "ready-with-accepted-risks") return "pass";
+  return "neutral";
+}
+
 type MetricTone = "negative" | "caution" | "neutral";
 
 function metric(label: string, value: number, tone: MetricTone) {
@@ -61,7 +74,7 @@ function projectCard(item: PortfolioProject) {
     : escape(item.projectName);
   const updated = escape(item.generatedAt.slice(0, 10));
   return [
-    `<li class="project" data-priority="${item.priority}">`,
+    `<li class="project" data-priority="${item.priority}" data-tone="${projectTone(item)}">`,
     `<div class="project-head"><h2>${name}</h2><span class="project-release">${item.release ? `Release ${escape(item.release)}` : "No release recorded"}</span></div>`,
     `<div class="project-chips">${readinessChip(item)}${gateChip(item)}${item.stale ? chip("warn", "Stale report", "This summary is older than the configured freshness window") : ""}</div>`,
     '<div class="project-metrics">',
@@ -96,7 +109,9 @@ grid-template-columns:repeat(auto-fill,minmax(330px,1fr))}
 .project{background:var(--qp-surface);border:1px solid var(--qp-border);
 border-radius:var(--qp-radius);box-shadow:var(--qp-shadow);padding:16px 18px;
 display:flex;flex-direction:column;gap:12px}
-.project[data-priority="1"],.project[data-priority="2"]{border-left:4px solid var(--qp-fail)}
+.project[data-tone="fail"]{border-left:4px solid var(--qp-fail)}
+.project[data-tone="warn"]{border-left:4px solid var(--qp-medium)}
+.project[data-tone="pass"]{border-left:4px solid var(--qp-pass)}
 .project-head{display:flex;justify-content:space-between;align-items:baseline;gap:12px;flex-wrap:wrap}
 .project-head h2{margin:0;font-size:1.05rem;font-weight:720}
 .project-release{color:var(--qp-muted);font-size:.84rem}

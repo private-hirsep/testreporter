@@ -225,6 +225,29 @@ test("evidence page verifies audit integrity files", async ({ page }) => {
   await expect(zipRow).not.toContainText("directory");
 });
 
+test("an extensionless download with no recorded size is not mislabeled as a directory", async ({
+  page,
+  request
+}) => {
+  const manifest = await (await request.get("/data/manifest.json")).json();
+  await page.route("**/data/manifest.json", async (route) => {
+    await route.fulfill({
+      contentType: "application/json",
+      body: JSON.stringify({
+        ...manifest,
+        downloads: [
+          ...manifest.downloads,
+          { id: "synthetic-raw-dir", name: "raw-report", category: "raw", path: "raw/raw-report" }
+        ]
+      })
+    });
+  });
+  await page.goto("/#/downloads");
+  const row = page.getByRole("row", { name: /raw-report/ });
+  await expect(row).toContainText("size not recorded");
+  await expect(row).not.toContainText("directory");
+});
+
 test("quality gate checks show actual and expected values", async ({ page }) => {
   await page.goto("/");
   const coverageCheck = page.locator(".gate-check").filter({ hasText: "Total coverage" });
@@ -267,6 +290,13 @@ test("readiness explains an empty release scope instead of hiding it", async ({
   await expect(
     page.getByText("The release scope declares no requirements", { exact: false }).first()
   ).toBeVisible();
+
+  await page.goto("/#/");
+  await expect(page.getByRole("heading", { name: "Requirement gaps" })).toBeVisible();
+  await expect(page.getByText("No requirements are included in this release scope")).toBeVisible();
+  await expect(page.getByText("Every requirement in the release scope has evidence")).toHaveCount(
+    0
+  );
 });
 
 test("coverage highlights low coverage files", async ({ page }) => {

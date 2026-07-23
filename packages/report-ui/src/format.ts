@@ -32,7 +32,11 @@ export function formatPercent(value?: number) {
 }
 
 export function formatBytes(value?: number) {
-  if (value === undefined) return "directory";
+  // undefined covers both directories and files whose size wasn't recorded
+  // at manifest-write time (e.g. the report ZIP, created afterward) — the
+  // manifest has no reliable signal to tell those apart, so this stays
+  // neutral rather than guessing from the path.
+  if (value === undefined) return "size not recorded";
   if (value < 1024) return `${value} B`;
   if (value < 1024 * 1024) return `${(value / 1024).toFixed(1)} KB`;
   return `${(value / (1024 * 1024)).toFixed(1)} MB`;

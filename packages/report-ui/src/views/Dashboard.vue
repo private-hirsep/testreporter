@@ -133,12 +133,8 @@
         </div>
         <EmptyState
           v-else
-          variant="positive"
-          :message="
-            manifest.readiness
-              ? 'Every requirement in the release scope has evidence.'
-              : 'Every expected requirement has linked tests.'
-          "
+          :variant="requirementGapEmpty.variant"
+          :message="requirementGapEmpty.message"
         />
       </SectionCard>
 
@@ -233,6 +229,7 @@ import {
   attentionItems,
   buildSummaryCards,
   hasHistoricalRuns,
+  requirementGapEmptyState,
   requirementGaps,
   requirementLink,
   securityBlockerCount,
@@ -256,6 +253,11 @@ const gapTotal = computed(() => {
   const scoped = props.manifest.readiness?.requirements;
   return scoped ? scoped.uncoveredIds.length : props.manifest.requirements.missing.length;
 });
+const requirementGapEmpty = computed(() =>
+  props.manifest
+    ? requirementGapEmptyState(props.manifest)
+    : { variant: "unavailable" as const, message: "" }
+);
 const securityBlockers = computed(() =>
   props.manifest ? securityBlockerCount(props.manifest) : 0
 );
