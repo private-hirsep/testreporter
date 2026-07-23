@@ -1,4 +1,4 @@
-import type { Manifest, TestCase } from "../types";
+import type { HistoryArtifact, Manifest, TestCase } from "../types";
 
 const base = new URL("./data/", window.location.href);
 
@@ -17,4 +17,12 @@ export async function loadTests(manifest: Manifest): Promise<TestCase[]> {
     })
   );
   return chunks.flat();
+}
+
+export async function loadHistory(): Promise<HistoryArtifact | undefined> {
+  const base = new URL("./data/", document.baseURI);
+  const response = await fetch(new URL("history.json", base));
+  if (response.status === 404) return undefined;
+  if (!response.ok) return undefined;
+  return (await response.json()) as HistoryArtifact;
 }

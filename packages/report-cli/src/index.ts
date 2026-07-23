@@ -8,8 +8,54 @@ import { discoverArtifacts } from "./discovery.js";
 import { buildReport } from "./generator.js";
 import { buildPortfolio } from "./portfolio.js";
 import { TOOL_VERSION } from "./version.js";
+import { mergeHistoryDirectory } from "./history.js";
 
 const program = new Command();
+
+const historyCommand = program.command("history").description("Manage compact Git-first history");
+
+historyCommand
+  .command("merge")
+  .option("--history-dir <path>", "Existing Git-friendly history directory")
+  .requiredOption("--current-report <path>", "Current normalized-report.json")
+  .requiredOption("--output-dir <path>", "Atomically written next history directory")
+  .option("--static-output <path>", "Optimized static history.json output")
+  .option("--source-report-url <url>", "Stable URL of the full report")
+  .option("--max-runs <count>", "Maximum retained automated runs", "50")
+  .option("--max-age-days <days>", "Maximum automated run age", "180")
+  .option("--max-manual-executions <count>", "Maximum retained manual executions", "200")
+  .action(
+    async (options: {
+      historyDir?: string;
+      currentReport: string;
+      outputDir: string;
+      staticOutput?: string;
+      sourceReportUrl?: string;
+      maxRuns: string;
+      maxAgeDays: string;
+      maxManualExecutions: string;
+    }) => {
+      try {
+        const store = await mergeHistoryDirectory({
+          currentReport: options.currentReport,
+          outputDir: options.outputDir,
+          ...(options.historyDir ? { historyDir: options.historyDir } : {}),
+          ...(options.staticOutput ? { staticOutput: options.staticOutput } : {}),
+          ...(options.sourceReportUrl ? { sourceReportUrl: options.sourceReportUrl } : {}),
+          retention: {
+            maxRuns: Number(options.maxRuns),
+            maxAgeDays: Number(options.maxAgeDays),
+            maxManualExecutions: Number(options.maxManualExecutions)
+          }
+        });
+        console.log(
+          `History contains ${store.runs.length} automated run(s) and ${store.manualExecutions.length} manual execution(s): ${options.outputDir}`
+        );
+      } catch (error) {
+        handleError(error);
+      }
+    }
+  );
 
 program
   .command("portfolio")
@@ -140,6 +186,8 @@ program
   .option("--workflow-run <id>", "Workflow run identifier or URL")
   .option("--release-date <date>", "Release date")
   .option("--release-scope <path>", "Release scope YAML or JSON")
+  .option("--history-dir <path>", "Existing Git-friendly history directory")
+  .option("--history-output-dir <path>", "Atomically write the next history directory")
   .action(
     async (options: {
       config: string;
@@ -152,7 +200,7 @@ program
       prCommentMarker?: string;
       failOnQualityGate?: boolean;
       zip?: boolean;
-      release?: string; testedBuild?: string; commitSha?: string; branch?: string; environment?: string; workflowRun?: string; releaseDate?: string; releaseScope?: string;
+      release?: string; testedBuild?: string; commitSha?: string; branch?: string; environment?: string; workflowRun?: string; releaseDate?: string; releaseScope?: string; historyDir?: string; historyOutputDir?: string;
     }) => {
       try {
         const config = await loadConfig(
@@ -173,6 +221,25 @@ program
           prCommentMarker: options.prCommentMarker
           ,...(options.release ? { release: options.release } : {}), ...(options.testedBuild ? { testedBuild: options.testedBuild } : {}), ...(options.commitSha ? { commitSha: options.commitSha } : {}), ...(options.branch ? { branch: options.branch } : {}), ...(options.environment ? { environment: options.environment } : {}), ...(options.workflowRun ? { workflowRun: options.workflowRun } : {}), ...(options.releaseDate ? { releaseDate: options.releaseDate } : {}), ...(options.releaseScope ? { releaseScope: options.releaseScope } : {})
         });
+        if (config.history.enabled && options.historyOutputDir) {
+          await mergeHistoryDirectory({
+            ...(options.historyDir ? { historyDir: options.historyDir } : {}),
+            currentReport: path.join(options.output, "normalized-report.json"),
+            outputDir: options.historyOutputDir,
+            staticOutput: path.join(options.output, "data", "history.json"),
+            ...(config.project.reportUrl ? { sourceReportUrl: config.project.reportUrl } : {}),
+            retention: {
+              maxRuns: config.history.maxRuns,
+              maxAgeDays: config.history.maxAgeDays,
+              maxManualExecutions: config.history.maxManualExecutions,
+              minimumSamples: config.history.stability.minimumSamples,
+              flakyTransitionThreshold: config.history.stability.flakyTransitionThreshold,
+              durationMinimumSamples: config.history.duration.minimumSamples,
+              durationRegressionPercent: config.history.duration.regressionPercent,
+              durationMinimumIncreaseMs: config.history.duration.minimumIncreaseMs
+            }
+          });
+        }
         console.log(`Generated report for ${report.metadata.projectName}: ${options.output}`);
         console.log(`Quality gate: ${report.qualityGate.status.toUpperCase()}`);
         if (report.warnings.length > 0)

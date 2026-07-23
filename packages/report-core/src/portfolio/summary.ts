@@ -25,6 +25,18 @@ export const ProjectQualitySummarySchema = z.object({
   securityBlockers: z.number().int().nonnegative(),
   acceptedRisks: z.number().int().nonnegative(),
   recommendedActions: z.number().int().nonnegative()
+  ,history: z.object({
+    schemaVersion: z.literal("1.0"),
+    retainedRunCount: z.number().int().nonnegative(),
+    previousReadiness: z.enum(["ready", "ready-with-accepted-risks", "warning", "blocked", "incomplete"]).optional(),
+    newFailures: z.number().int().nonnegative().default(0),
+    persistentFailures: z.number().int().nonnegative().default(0),
+    recovered: z.number().int().nonnegative().default(0),
+    unstableCases: z.number().int().nonnegative().default(0),
+    slowRegressions: z.number().int().nonnegative().default(0),
+    trendAvailable: z.boolean(),
+    sparkline: z.array(z.object({ at: z.string(), passed: z.number().int().nonnegative(), failed: z.number().int().nonnegative() })).max(12)
+  }).optional()
 });
 export type ProjectQualitySummary = z.infer<typeof ProjectQualitySummarySchema>;
 export type PortfolioProject = ProjectQualitySummary & { stale: boolean; priority: number };
@@ -39,15 +51,25 @@ export function portfolioPriority(
       ? 1
       : item.qualityGate === "failed"
         ? 2
-        : item.manualRemaining > 0
+        : (item.history?.newFailures ?? item.newFailures) > 0
           ? 3
-          : item.uncoveredRequirements > 0
+          : (item.history?.persistentFailures ?? 0) > 0
             ? 4
-            : item.newFailures > 0
+            : item.manualRemaining > 0
               ? 5
-              : item.securityBlockers > 0 || item.readiness === "warning"
+              : item.uncoveredRequirements > 0
                 ? 6
-                : 7;
+                : item.securityBlockers > 0
+                  ? 7
+                  : (item.history?.slowRegressions ?? 0) > 0
+                    ? 8
+                    : (item.history?.unstableCases ?? 0) > 0
+                      ? 9
+                      : stale
+                        ? 10
+                        : item.readiness === "warning" || item.readiness === "incomplete"
+                          ? 11
+                          : 12;
   return { ...item, stale, priority: stale ? Math.min(priority, 2) : priority };
 }
 export function sortPortfolio(items: ProjectQualitySummary[], now = new Date(), staleDays = 7) {

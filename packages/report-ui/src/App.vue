@@ -25,7 +25,7 @@
         </template>
         <template v-else>
           <ProjectContextHeader :manifest="manifest" />
-          <router-view :manifest="manifest" :tests="tests" />
+          <router-view :manifest="manifest" :tests="tests" :history-data="history" />
         </template>
       </v-container>
     </v-main>
@@ -37,11 +37,12 @@ import { onMounted, ref } from "vue";
 import { useDisplay } from "vuetify";
 import AppNavigation from "./components/AppNavigation.vue";
 import ProjectContextHeader from "./components/ProjectContextHeader.vue";
-import { loadManifest, loadTests } from "./services/reportData";
-import type { Manifest, TestCase } from "./types";
+import { loadHistory, loadManifest, loadTests } from "./services/reportData";
+import type { HistoryArtifact, Manifest, TestCase } from "./types";
 
 const manifest = ref<Manifest>();
 const tests = ref<TestCase[]>([]);
+const history = ref<HistoryArtifact>();
 const error = ref("");
 const loading = ref(true);
 const drawer = ref(false);
@@ -55,6 +56,7 @@ onMounted(async () => {
   try {
     manifest.value = await loadManifest();
     tests.value = await loadTests(manifest.value);
+    history.value = await loadHistory();
   } catch (err) {
     error.value = err instanceof Error ? err.message : "Failed to load report data";
   } finally {

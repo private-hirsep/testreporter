@@ -14,3 +14,4 @@ export * from "./utils/hash.js";
 export * from "./utils/redact.js";
 export * from "./catalogue/derive.js";
 export * from "./catalogue/identity.js";
+export * from "./history/history.js";

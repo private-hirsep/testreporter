@@ -1,0 +1,20 @@
+name: Read-only pull request quality report
+on: pull_request
+permissions: { contents: read }
+jobs:
+  report:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with: { persist-credentials: false }
+      - uses: actions/checkout@v5
+        with:
+          ref: quality-history
+          path: read-only-history
+          persist-credentials: false
+        continue-on-error: true
+      - run: npm ci && npm run build
+      - run: npm run quality-report -- generate --config quality-report.yml --input quality-artifacts --output site
+      - run: npm run quality-report -- history merge --history-dir read-only-history/quality-history --current-report site/normalized-report.json --output-dir preview-history --static-output site/data/history.json
+      - uses: actions/upload-artifact@v4
+        with: { name: pr-quality-report, path: site }

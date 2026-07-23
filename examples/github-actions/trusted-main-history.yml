@@ -1,0 +1,61 @@
+name: Persist trusted quality history
+on:
+  push:
+    branches: [main, "release/**"]
+  workflow_dispatch:
+permissions: { contents: read }
+concurrency:
+  group: quality-history-${{ github.repository }}
+  cancel-in-progress: false
+jobs:
+  report:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with: { persist-credentials: false }
+      - run: npm ci && npm run build
+      - run: npm run quality-report -- generate --config quality-report.yml --input quality-artifacts --output site
+      - uses: actions/upload-artifact@v4
+        with: { name: current-quality-report, path: site }
+  persist:
+    needs: report
+    runs-on: ubuntu-latest
+    permissions: { contents: write }
+    steps:
+      - uses: actions/download-artifact@v4
+        with: { name: current-quality-report, path: site }
+      - uses: actions/checkout@v5
+        with:
+          ref: quality-history
+          path: history-checkout
+          fetch-depth: 0
+        continue-on-error: true
+      - uses: actions/checkout@v5
+        with: { path: tool, persist-credentials: false }
+      - run: cd tool && npm ci && npm run build
+      - name: Merge latest history
+        run: |
+          tool/packages/report-cli/dist/index.js history merge \
+            --history-dir history-checkout/quality-history \
+            --current-report site/normalized-report.json \
+            --output-dir next/quality-history \
+            --static-output site/data/history.json
+      - name: Commit without force pushing
+        shell: bash
+        run: |
+          cd history-checkout
+          git fetch origin quality-history || true
+          git switch quality-history || git switch --orphan quality-history
+          rm -rf quality-history
+          cp -R ../next/quality-history quality-history
+          git add quality-history
+          git diff --cached --quiet && exit 0
+          run_id="$(jq -r '.runs[0].id' quality-history/v1/index.json)"
+          git -c user.name=github-actions -c user.email=41898282+github-actions[bot]@users.noreply.github.com commit -m "chore(history): record quality run ${run_id}"
+          for attempt in 1 2 3; do
+            git push origin HEAD:quality-history && exit 0
+            git fetch origin quality-history
+            git rebase origin/quality-history
+          done
+          echo "::warning::History persistence failed after bounded non-fast-forward retries"
+          exit 1

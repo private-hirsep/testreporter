@@ -1,0 +1,20 @@
+name: Persist release quality history
+on:
+  release: { types: [published] }
+permissions: { contents: read }
+concurrency:
+  group: quality-history-${{ github.repository }}
+  cancel-in-progress: false
+jobs:
+  generate:
+    uses: ./.github/workflows/publish-quality-report.yml
+    with:
+      artifact-pattern: quality-*
+      release: ${{ github.event.release.tag_name }}
+  persist:
+    needs: generate
+    permissions: { contents: write }
+    uses: ./.github/workflows/history-persistence.yml
+    with:
+      trusted-event: release
+      report-artifact: quality-report

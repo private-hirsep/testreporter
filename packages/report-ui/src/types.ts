@@ -347,6 +347,116 @@ export type UnifiedExecution = {
   caseResultsAvailable?: boolean;
 };
 
+export type HistoryArtifact = {
+  schemaVersion: string;
+  project: { key: string; name: string };
+  generatedAt: string;
+  retention: {
+    maxRuns: number;
+    maxAgeDays: number;
+    maxManualExecutions: number;
+    prunedRuns: number;
+    prunedManualExecutions: number;
+  };
+  availability: "unavailable" | "insufficient" | "available";
+  runs: Array<{
+    id: string;
+    type: "automated";
+    projectKey: string;
+    release?: string;
+    branch?: string;
+    environment?: string;
+    commit?: string;
+    workflowRun?: string;
+    reportedAt: string;
+    startedAt?: string;
+    completedAt?: string;
+    wallClockDurationMs?: number;
+    testDurationSumMs?: number;
+    status: "passed" | "failed" | "blocked" | "incomplete" | "unknown";
+    counts: UnifiedExecution["counts"];
+    qualityGate?: { status: string; profile?: string };
+    readiness?: { status: string; blockers: number; warnings: number; acceptedRisks: number };
+    requirements?: { covered: number; uncovered: number; excluded: number; total: number };
+    coverage?: { line?: number; branch?: number; function?: number; statement?: number };
+    security?: { blockers: number; warnings: number; accepted: number };
+    caseResults: Array<{
+      testCaseId: string;
+      implementationId?: string;
+      status: CatalogueStatus;
+      durationMs?: number;
+      attemptCount?: number;
+      flakyInRun?: boolean;
+      identity: { source: string; stable: boolean; conflict: boolean };
+    }>;
+    sourceReport?: { url?: string; evidenceUrl?: string };
+  }>;
+  manualExecutions: Array<{
+    executionId: string;
+    projectKey: string;
+    release?: string;
+    environment?: string;
+    testedBuild?: string;
+    tester?: string;
+    startedAt: string;
+    completedAt: string;
+    status: "passed" | "failed" | "blocked" | "incomplete" | "unknown";
+    caseResults: Array<{ testCaseId: string; status: CatalogueStatus }>;
+    sourceReport?: { url?: string; evidenceUrl?: string };
+  }>;
+  cases: HistoricalCaseSummary[];
+  trends: {
+    runCount: number;
+    oldestAt?: string;
+    newestAt?: string;
+    newFailures: number;
+    persistentFailures: number;
+    recovered: number;
+    unstable: number;
+    slowRegressions: number;
+  };
+  diagnostics: Array<{ severity: string; code: string; message: string; artifact?: string }>;
+};
+
+export type HistoricalCaseSummary = {
+  testCaseId: string;
+  samples: Array<{
+    executionId: string;
+    type: "automated" | "manual";
+    at: string;
+    status: string;
+    branch?: string;
+    environment?: string;
+    release?: string;
+    commit?: string;
+    durationMs?: number;
+    implementationResults?: HistoryArtifact["runs"][number]["caseResults"];
+    sourceReport?: { url?: string; evidenceUrl?: string };
+  }>;
+  currentStatus?: string;
+  previousStatus?: string;
+  transition: string;
+  sampleSize: number;
+  passed: number;
+  failed: number;
+  passRate?: number;
+  consecutiveFailures: number;
+  lastPassedAt?: string;
+  lastFailedAt?: string;
+  identityConfidence: "trusted" | "generated-low" | "conflicted";
+  stability: string;
+  passFailTransitions: number;
+  duration?: {
+    latestMs: number;
+    medianMs: number;
+    previousMs?: number;
+    absoluteChangeMs?: number;
+    percentageChange?: number;
+    recentMedianMs: number;
+    slowRegression: boolean;
+  };
+};
+
 export type RequirementCoverage = {
   expected: string[];
   covered: string[];
