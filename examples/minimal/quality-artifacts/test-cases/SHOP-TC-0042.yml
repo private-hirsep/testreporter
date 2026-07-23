@@ -1,0 +1,12 @@
+id: SHOP-TC-0042
+title: Verify checkout with an assistive technology
+description: Manual accessibility verification explicitly associated with the automated checkout case.
+status: draft
+priority: high
+risk: high
+requirements: [JIRA-301, JIRA-501]
+tags: [checkout, accessibility]
+estimatedMinutes: 8
+steps:
+  - action: Complete checkout using keyboard navigation and a screen reader
+    expected: Every control is named, reachable, and the order confirmation is announced

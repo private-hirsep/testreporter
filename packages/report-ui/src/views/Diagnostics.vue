@@ -38,17 +38,35 @@
           ><span>Generated IDs</span>
         </div>
       </div>
-      <ul v-if="issues.length" class="linked-list mt-2">
-        <li v-for="issue in issues" :key="issue.label">
+      <ul v-if="metadataIssues.length" class="linked-list mt-2">
+        <li v-for="issue in metadataIssues" :key="issue.label">
           <StatusChip :status="issue.severity" size="x-small" />
           <span class="linked-list-label">{{ issue.label }}: <span class="mono">{{ issue.value }}</span></span>
         </li>
       </ul>
       <EmptyState
-        v-else
+        v-else-if="!compatibleIds.length && !conflictingIds.length"
         variant="positive"
         message="No identity conflicts or malformed identity metadata were detected."
       />
+      <div v-if="compatibleIds.length" class="mt-4">
+        <h3>Multiple compatible implementations</h3>
+        <ul class="linked-list mt-2">
+          <li v-for="id in compatibleIds" :key="id">
+            <StatusChip status="info" size="x-small" />
+            <span class="linked-list-label"><router-link :to="testCaseRoute(id)" class="mono">{{ id }}</router-link> · {{ catalogueById.get(id)?.implementations.length ?? "multiple" }} implementations<span v-if="variantDimensions(id).length"> · variants: {{ variantDimensions(id).join(", ") }}</span></span>
+          </li>
+        </ul>
+      </div>
+      <div v-if="conflictingIds.length" class="mt-4">
+        <h3>Canonical identity conflicts</h3>
+        <ul class="linked-list mt-2">
+          <li v-for="id in conflictingIds" :key="id">
+            <StatusChip status="warning" size="x-small" />
+            <span class="linked-list-label"><router-link :to="testCaseRoute(id)" class="mono">{{ id }}</router-link> · incompatible logical identities<span v-if="catalogueById.get(id)"> · {{ catalogueById.get(id)?.implementations.map((implementation) => implementation.title).join(" | ") }}</span></span>
+          </li>
+        </ul>
+      </div>
     </SectionCard>
     <EmptyState
       v-if="!manifest.warnings.length"
@@ -95,7 +113,9 @@ import EmptyState from "../components/EmptyState.vue";
 import PageHeader from "../components/PageHeader.vue";
 import SectionCard from "../components/SectionCard.vue";
 import StatusChip from "../components/StatusChip.vue";
+import { catalogueFor } from "../services/catalogue";
 import { groupWarnings, identityIssues } from "../services/diagnostics";
+import { testCaseRoute } from "../services/routes";
 import type { Manifest, TestCase } from "../types";
 const props = defineProps<{ manifest?: Manifest; tests: TestCase[] }>();
 const diagnostics = computed(
@@ -108,10 +128,51 @@ const diagnostics = computed(
       generated: props.tests.length,
       duplicateCanonicalIds: [],
       duplicateExplicitIds: [],
+      multiImplementationCanonicalIds: [],
+      conflictingCanonicalIds: [],
       malformedExplicitIds: 0,
       ambiguousMappings: 0
     }
 );
 const issues = computed(() => (props.manifest ? identityIssues(props.manifest) : []));
+const metadataIssues = computed(() =>
+  issues.value.filter(
+    (issue) =>
+      issue.label !== "Conflicting canonical IDs" &&
+      issue.label !== "Duplicate explicit IDs" &&
+      issue.label !== "Compatible multi-implementation IDs"
+  )
+);
+const catalogueById = computed(
+  () =>
+    new Map(
+      catalogueFor(props.manifest, props.tests).map((entry) => [entry.canonicalId, entry])
+    )
+);
+const diagnosticGroups = computed(() => {
+  const explicitConflicts = diagnostics.value.conflictingCanonicalIds;
+  const conflicts = new Set(
+    explicitConflicts === undefined
+      ? diagnostics.value.duplicateCanonicalIds
+      : explicitConflicts
+  );
+  const compatible = new Set(diagnostics.value.multiImplementationCanonicalIds ?? []);
+  for (const id of conflicts) compatible.delete(id);
+  return {
+    compatible: [...compatible].sort((left, right) => left.localeCompare(right)),
+    conflicts: [...conflicts].sort((left, right) => left.localeCompare(right))
+  };
+});
+const compatibleIds = computed(() => diagnosticGroups.value.compatible);
+const conflictingIds = computed(() => diagnosticGroups.value.conflicts);
+function variantDimensions(id: string) {
+  return [
+    ...new Set(
+      (catalogueById.value.get(id)?.implementations ?? []).flatMap((implementation) =>
+        Object.keys(implementation.variant ?? {})
+      )
+    )
+  ].sort((left, right) => left.localeCompare(right));
+}
 const categories = computed(() => groupWarnings(props.manifest?.warnings ?? []));
 </script>

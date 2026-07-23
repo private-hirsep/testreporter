@@ -74,10 +74,16 @@ export function identityIssues(manifest: Manifest): IdentityIssue[] {
   const diagnostics = manifest.identityDiagnostics;
   if (!diagnostics) return [];
   const issues: IdentityIssue[] = [];
-  if (diagnostics.duplicateCanonicalIds.length)
+  const conflictingIds =
+    diagnostics.conflictingCanonicalIds ?? diagnostics.duplicateCanonicalIds;
+  const conflictingSet = new Set(conflictingIds);
+  const compatibleIds = (diagnostics.multiImplementationCanonicalIds ?? []).filter(
+    (canonicalId) => !conflictingSet.has(canonicalId)
+  );
+  if (conflictingIds.length)
     issues.push({
-      label: "Duplicate canonical IDs",
-      value: diagnostics.duplicateCanonicalIds.join(", "),
+      label: "Conflicting canonical IDs",
+      value: [...conflictingIds].sort((left, right) => left.localeCompare(right)).join(", "),
       severity: "warning"
     });
   if (diagnostics.duplicateExplicitIds.length)
@@ -85,6 +91,12 @@ export function identityIssues(manifest: Manifest): IdentityIssue[] {
       label: "Duplicate explicit IDs",
       value: diagnostics.duplicateExplicitIds.join(", "),
       severity: "warning"
+    });
+  if (compatibleIds.length)
+    issues.push({
+      label: "Compatible multi-implementation IDs",
+      value: [...compatibleIds].sort((left, right) => left.localeCompare(right)).join(", "),
+      severity: "info"
     });
   if (diagnostics.malformedExplicitIds)
     issues.push({

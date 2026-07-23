@@ -111,13 +111,13 @@
             <td>
               <v-chip
                 v-for="linked in linkedTestsFor(key).slice(0, 2)"
-                :key="linked.id"
+                :key="linked.canonicalId"
                 size="x-small"
                 class="mr-1 mono"
                 label
-                :to="`/tests/${linked.id}`"
+                :to="testCaseRoute(linked.canonicalId)"
               >
-                {{ linked.name }}
+                {{ linked.title }}
               </v-chip>
               <span v-if="testIdsFor(key).length > 2" class="text-medium-emphasis"
                 >+{{ testIdsFor(key).length - 2 }} more</span
@@ -153,19 +153,19 @@
                   </tr>
                 </thead>
                 <tbody>
-                  <tr v-for="linked in linkedTestsFor(key)" :key="linked.id">
+                  <tr v-for="linked in linkedTestsFor(key)" :key="linked.canonicalId">
                     <td>
-                      <router-link :to="`/tests/${linked.id}`">{{
-                        linked.fullName ?? linked.name
+                      <router-link :to="testCaseRoute(linked.canonicalId)">{{
+                        linked.title
                       }}</router-link>
                     </td>
-                    <td><StatusChip :status="linked.status" /></td>
+                    <td><StatusChip :status="linked.latestResult?.status ?? 'not-run'" /></td>
                     <td>
-                      <v-chip size="x-small" variant="tonal" label>{{ linked.layer }}</v-chip>
+                      <v-chip v-for="layer in layersForCase(linked)" :key="layer" size="x-small" variant="tonal" label>{{ layer }}</v-chip>
                     </td>
                     <td>
                       <v-chip
-                        v-for="defect in linked.defects ?? []"
+                        v-for="defect in linked.defects"
                         :key="defect"
                         size="x-small"
                         class="mr-1 mono"
@@ -175,7 +175,7 @@
                       >
                       <span v-if="!linked.defects?.length" class="text-medium-emphasis">—</span>
                     </td>
-                    <td class="mono">{{ formatDuration(linked.durationMs) }}</td>
+                    <td class="mono">{{ formatDuration(linked.duration?.latestMs) }}</td>
                   </tr>
                 </tbody>
               </v-table>
@@ -194,15 +194,22 @@ import EmptyState from "../components/EmptyState.vue";
 import PageHeader from "../components/PageHeader.vue";
 import StatusChip from "../components/StatusChip.vue";
 import { formatDuration, formatPercent } from "../format";
-import type { Manifest, TestCase } from "../types";
+import { catalogueFor } from "../services/catalogue";
+import { testCaseRoute } from "../services/routes";
+import type { Manifest, TestCase, TestCaseCatalogueEntry } from "../types";
 const props = defineProps<{ manifest?: Manifest; tests: TestCase[] }>();
 const search = ref("");
 const filter = ref("all");
 const expanded = reactive(new Set<string>());
+const catalogue = computed(() => catalogueFor(props.manifest, props.tests));
 const allKeys = computed(() =>
   props.manifest
     ? [
-        ...new Set([...props.manifest.requirements.expected, ...props.manifest.requirements.extra])
+        ...new Set([
+          ...props.manifest.requirements.expected,
+          ...props.manifest.requirements.extra,
+          ...catalogue.value.flatMap((item) => item.requirements)
+        ])
       ].sort()
     : []
 );
@@ -211,7 +218,16 @@ const filteredKeys = computed(() =>
     .filter((key) => filter.value === "all" || status(key) === filter.value)
     .filter((key) => key.toLowerCase().includes(search.value.toLowerCase()))
 );
-const testById = computed(() => new Map(props.tests.map((test) => [test.id, test])));
+const casesByRequirement = computed(() => {
+  const index = new Map<string, TestCaseCatalogueEntry[]>();
+  for (const item of catalogue.value)
+    for (const requirement of item.requirements) {
+      const group = index.get(requirement);
+      if (group) group.push(item);
+      else index.set(requirement, [item]);
+    }
+  return index;
+});
 
 function status(key: string) {
   if (props.manifest?.requirements.missing.includes(key)) return "missing";
@@ -220,17 +236,25 @@ function status(key: string) {
 }
 
 function testIdsFor(key: string) {
-  return props.manifest?.requirements.testsByRequirement[key] ?? [];
+  return linkedTestsFor(key).map((item) => item.canonicalId);
 }
 
-function linkedTestsFor(key: string): TestCase[] {
-  return testIdsFor(key)
-    .map((id) => testById.value.get(id))
-    .filter((test): test is TestCase => Boolean(test));
+function linkedTestsFor(key: string): TestCaseCatalogueEntry[] {
+  return casesByRequirement.value.get(key) ?? [];
 }
 
 function layersFor(key: string) {
-  return [...new Set(linkedTestsFor(key).map((test) => test.layer))];
+  return [...new Set(linkedTestsFor(key).flatMap(layersForCase))].sort();
+}
+
+function layersForCase(item: TestCaseCatalogueEntry) {
+  return [
+    ...new Set(
+      item.implementations
+        .map((implementation) => implementation.layer)
+        .filter((layer): layer is string => Boolean(layer))
+    )
+  ].sort();
 }
 
 function evidenceFor(key: string) {

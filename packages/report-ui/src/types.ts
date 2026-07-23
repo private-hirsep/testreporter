@@ -9,6 +9,7 @@ export type TestCase = {
   layer: string;
   status: string;
   durationMs?: number;
+  executedAt?: string;
   retries: number;
   requirements: string[];
   identity?: {
@@ -26,6 +27,7 @@ export type TestCase = {
     url: string;
   }>;
   labels?: Record<string, string[]>;
+  variant?: Record<string, string>;
   error?: { message?: string; trace?: string };
   attachments?: Array<{ name: string; path: string; contentType?: string }>;
   sourcePath?: string;
@@ -184,6 +186,8 @@ export type Manifest = {
     generated: number;
     duplicateCanonicalIds: string[];
     duplicateExplicitIds: string[];
+    multiImplementationCanonicalIds?: string[];
+    conflictingCanonicalIds?: string[];
     malformedExplicitIds: number;
     ambiguousMappings: number;
   };
@@ -215,6 +219,132 @@ export type Manifest = {
       href?: string;
     }>;
   };
+  testCaseCatalogue?: TestCaseCatalogueEntry[];
+  unifiedExecutions?: UnifiedExecution[];
+};
+
+export type CatalogueStatus =
+  | "broken"
+  | "failed"
+  | "blocked"
+  | "not-run"
+  | "skipped"
+  | "passed"
+  | "unknown";
+
+export type TestCaseImplementation = {
+  technicalId: string;
+  kind: "automated" | "manual";
+  title: string;
+  framework?: string;
+  layer?: string;
+  source?: { file?: string; line?: number };
+  suitePath?: string[];
+  variant?: Record<string, string>;
+  requirements: string[];
+  defects: string[];
+  tags: string[];
+  active: boolean;
+  latestResult?: {
+    status: CatalogueStatus;
+    executedAt?: string;
+    durationMs?: number;
+    executionId?: string;
+  };
+};
+
+export type TestCaseCatalogueEntry = {
+  id: string;
+  canonicalId: string;
+  displayId: string;
+  identity: {
+    source: "explicit" | "title-token" | "mapping" | "generated";
+    stable: boolean;
+    conflict: boolean;
+  };
+  title: string;
+  type: "automated" | "manual" | "hybrid";
+  lifecycleStatus?: "draft" | "approved" | "deprecated";
+  requirements: string[];
+  defects: string[];
+  tags: string[];
+  implementations: TestCaseImplementation[];
+  latestResult?: {
+    status: CatalogueStatus;
+    executedAt?: string;
+    durationMs?: number;
+    executionId?: string;
+    contributingStatuses: CatalogueStatus[];
+  };
+  lastExecutedAt?: string;
+  stability: {
+    available: boolean;
+    sampleSize: number;
+    passed: number;
+    failed: number;
+    flaky: number;
+    passRate?: number;
+    source: "current-report" | "available-history" | "insufficient-data";
+    unavailableReason?: "identity-conflict";
+  };
+  duration?: {
+    sampleSize: number;
+    latestMs?: number;
+    averageMs?: number;
+    medianMs?: number;
+    minMs?: number;
+    maxMs?: number;
+    source: "automated" | "manual" | "mixed";
+  };
+  definitionHistory?: TestCase["definitionHistory"][];
+  evidence?: { attachmentCount: number; references: string[] };
+};
+
+export type UnifiedExecution = {
+  id: string;
+  type: "automated" | "manual";
+  project: string;
+  release?: string;
+  branch?: string;
+  environment?: string;
+  commit?: string;
+  workflowRun?: string;
+  startedAt?: string;
+  completedAt?: string;
+  reportedAt?: string;
+  status: "passed" | "failed" | "blocked" | "incomplete" | "unknown";
+  counts: {
+    total: number;
+    passed: number;
+    failed: number;
+    broken?: number;
+    blocked?: number;
+    skipped?: number;
+    notRun?: number;
+    unknown?: number;
+  };
+  durationMs?: number;
+  testDurationSumMs?: number;
+  testCaseIds: string[];
+  caseResults: Array<{
+    testCaseId: string;
+    implementationId?: string;
+    status: CatalogueStatus;
+    durationMs?: number;
+    evidenceCount?: number;
+    evidenceReferences?: string[];
+    defects?: string[];
+    notes?: string[];
+    attempt?: number;
+  }>;
+  requirementIds: string[];
+  defectIds: string[];
+  evidence?: { complete: boolean; referenceCount: number };
+  tester?: string;
+  testedBuild?: string;
+  notes?: string[];
+  sourceReport?: string;
+  caseResultsAvailable?: boolean;
 };
 
 export type RequirementCoverage = {

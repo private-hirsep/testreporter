@@ -1,5 +1,5 @@
 <template>
-  <div v-if="manifest">
+  <div v-if="manifest" id="evidence-artifacts" tabindex="-1">
     <PageHeader
       title="Evidence"
       :subtitle="`Audit package, integrity files, and ${manifest.downloads.length} static artifact links from this report`"

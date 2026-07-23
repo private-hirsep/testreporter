@@ -12,3 +12,5 @@ export * from "./release/readiness.js";
 export * from "./portfolio/summary.js";
 export * from "./utils/hash.js";
 export * from "./utils/redact.js";
+export * from "./catalogue/derive.js";
+export * from "./catalogue/identity.js";

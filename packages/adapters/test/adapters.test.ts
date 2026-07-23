@@ -10,6 +10,7 @@ import {
   parseVitestJson,
   parseZapJson
 } from "../src/index.js";
+import { deduplicateTests, deriveTestCaseCatalogue } from "@quality-report/report-core";
 
 const context = {
   sourcePath: "sample",
@@ -107,6 +108,7 @@ describe("adapters", () => {
     expect(result.items[0]?.status).toBe("passed");
     expect(result.items[0]?.retries).toBe(1);
     expect(result.items[0]?.labels.project).toEqual(["chromium"]);
+    expect(result.items[0]?.variant).toEqual({ project: "chromium", browser: "chromium" });
     expect(result.items[0]?.requirements).toEqual(["JIRA-2", "JIRA-3"]);
     expect(result.items[0]?.file).toBe("e2e.spec.ts");
     expect(result.items[0]?.line).toBe(12);
@@ -114,6 +116,74 @@ describe("adapters", () => {
     expect(result.items[1]?.status).toBe("skipped");
     expect(parsePlaywrightJson("{", context).warnings[0]?.code).toBe("playwright.malformed");
     expect(parsePlaywrightJson("{}", context).warnings[0]?.code).toBe("playwright.no-tests");
+  });
+
+  it("preserves Playwright browser, project, and device variants through catalogue derivation", () => {
+    const parsed = parsePlaywrightJson(
+      JSON.stringify({
+        suites: [
+          {
+            title: "checkout.spec.ts",
+            tests: [
+              {
+                title: "checkout succeeds JIRA-2",
+                projectName: "desktop-chromium",
+                browserName: "chromium",
+                deviceName: "Desktop Chrome",
+                location: { file: "tests/checkout.spec.ts", line: 10 },
+                annotations: [
+                  { type: "testCase", description: "SHOP-TC-42" },
+                  { type: "requirement", description: "JIRA-2" }
+                ],
+                results: [
+                  { status: "failed", retry: 0 },
+                  { status: "passed", retry: 1, duration: 20 }
+                ]
+              },
+              {
+                title: "checkout succeeds JIRA-2",
+                projectName: "desktop-firefox",
+                browserName: "firefox",
+                deviceName: "Desktop Firefox",
+                location: { file: "tests/checkout.spec.ts", line: 10 },
+                annotations: [
+                  { type: "testCase", description: "SHOP-TC-42" },
+                  { type: "requirement", description: "JIRA-2" }
+                ],
+                results: [{ status: "failed", retry: 0, duration: 25 }]
+              }
+            ]
+          }
+        ]
+      }),
+      { ...context, layer: "e2e" }
+    );
+    const deduplicated = deduplicateTests(parsed.items);
+    const catalogue = deriveTestCaseCatalogue({
+      tests: deduplicated,
+      manualCases: [],
+      manualExecutions: [],
+      metadata: {
+        projectName: "Demo",
+        generatedAt: "2026-07-23T12:00:00.000Z"
+      }
+    });
+    expect(deduplicated).toHaveLength(2);
+    expect(deduplicated.map((item) => item.retries)).toEqual([1, 0]);
+    expect(new Set(deduplicated.map((item) => item.identity?.technicalId)).size).toBe(2);
+    expect(deduplicated[0]?.variant).toEqual({
+      project: "desktop-chromium",
+      browser: "chromium",
+      device: "Desktop Chrome"
+    });
+    expect(deduplicated[0]?.variant).not.toHaveProperty("requirement");
+    expect(catalogue).toHaveLength(1);
+    expect(catalogue[0]).toMatchObject({
+      canonicalId: "SHOP-TC-42",
+      identity: { conflict: false },
+      latestResult: { status: "failed", contributingStatuses: ["failed", "passed"] }
+    });
+    expect(catalogue[0]?.implementations).toHaveLength(2);
   });
 
   it("extracts explicit aliases, title tokens, defects, and generated fallback identities", () => {

@@ -17,8 +17,19 @@ function visitSuite(
     const error = toArray(latest.errors as JsonRecord[] | JsonRecord | undefined)[0];
     const annotations = toArray(test.annotations as JsonRecord[] | JsonRecord | undefined);
     const labels: Record<string, string[]> = {};
-    if (typeof test.projectName === "string") labels.project = [test.projectName];
-    if (typeof test.browserName === "string") labels.browser = [test.browserName];
+    const variant = Object.fromEntries(
+      [
+        ["project", test.projectName],
+        ["browser", test.browserName],
+        ["device", test.deviceName ?? test.device],
+        ["operatingSystem", test.operatingSystem ?? test.platform ?? test.os]
+      ].filter(
+        (entry): entry is [string, string] =>
+          typeof entry[1] === "string" && Boolean(entry[1].trim())
+      )
+    );
+    if (variant.project) labels.project = [variant.project];
+    if (variant.browser) labels.browser = [variant.browser];
     for (const annotation of annotations) {
       const type = typeof annotation.type === "string" ? annotation.type : "annotation";
       const description =
@@ -60,10 +71,16 @@ function visitSuite(
                 ? "failed"
                 : "unknown",
         durationMs: numberOrUndefined(latest.duration),
+        executedAt:
+          typeof latest.startTime === "string" &&
+          Number.isFinite(Date.parse(latest.startTime))
+            ? latest.startTime
+            : undefined,
         retries: numberOrUndefined(latest.retry),
         message: typeof error?.message === "string" ? error.message : undefined,
         trace: typeof error?.stack === "string" ? error.stack : undefined,
         labels,
+        variant,
         attachments,
         requirementPattern: context.requirementPattern,
         identityPattern: context.identityPattern,

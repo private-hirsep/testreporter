@@ -1,5 +1,6 @@
 # Quality Report Platform
 
+Logical test cases, automated/manual variants, hybrid cases, and unified execution semantics are documented in [Logical test cases and unified executions](docs/test-case-catalogue.md).
 The report UI is a consistent QA workspace — navigation, status semantics, and responsive behavior are documented in [docs/user-interface.md](docs/user-interface.md).
 
 Release readiness, Git definition history, audit evidence, and multi-project portfolio generation are documented in [docs/release-readiness.md](docs/release-readiness.md).

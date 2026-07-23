@@ -259,7 +259,7 @@ test("quality gate checks show actual and expected values", async ({ page }) => 
 
 test("test result filters expose their pressed state", async ({ page }) => {
   await page.goto("/#/tests");
-  const all = page.getByRole("button", { name: /All 46/ });
+  const all = page.getByRole("button", { name: /All 48/ });
   const failed = page.getByRole("button", { name: /Failed 3/ });
   await expect(all).toHaveAttribute("aria-pressed", "true");
   await expect(failed).toHaveAttribute("aria-pressed", "false");

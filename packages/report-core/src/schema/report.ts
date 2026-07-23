@@ -2,6 +2,10 @@
 
 import { ManualCaseSchema, ManualExecutionSchema } from "./manual.js";
 import { ReadinessSchema, ReleaseScopeSchema } from "../release/readiness.js";
+import {
+  TestCaseCatalogueEntrySchema,
+  UnifiedExecutionSchema
+} from "../catalogue/derive.js";
 
 export const TestStatusSchema = z.enum(["passed", "failed", "broken", "skipped", "unknown"]);
 export const TestLayerSchema = z.enum(["backend", "frontend", "e2e", "unknown"]);
@@ -40,6 +44,7 @@ export const NormalizedTestCaseSchema = z.object({
   layer: TestLayerSchema,
   status: TestStatusSchema,
   durationMs: z.number().nonnegative().optional(),
+  executedAt: z.string().datetime().optional(),
   retries: z.number().int().nonnegative().default(0),
   requirements: z.array(z.string()).default([]),
   identity: TestIdentitySchema.optional(),
@@ -47,6 +52,7 @@ export const NormalizedTestCaseSchema = z.object({
   tags: z.array(z.string()).default([]),
   links: z.array(TraceabilityLinkSchema).default([]),
   labels: z.record(z.array(z.string())).default({}),
+  variant: z.record(z.string()).optional(),
   error: z
     .object({
       message: z.string().optional(),
@@ -243,6 +249,8 @@ export const IdentityDiagnosticsSchema = z.object({
   generated: z.number().int().nonnegative(),
   duplicateCanonicalIds: z.array(z.string()).default([]),
   duplicateExplicitIds: z.array(z.string()).default([]),
+  multiImplementationCanonicalIds: z.array(z.string()).default([]),
+  conflictingCanonicalIds: z.array(z.string()).default([]),
   malformedExplicitIds: z.number().int().nonnegative().default(0),
   ambiguousMappings: z.number().int().nonnegative().default(0)
 });
@@ -272,9 +280,13 @@ export const NormalizedReportSchema = z.object({
     generated: 0,
     duplicateCanonicalIds: [],
     duplicateExplicitIds: [],
+    multiImplementationCanonicalIds: [],
+    conflictingCanonicalIds: [],
     malformedExplicitIds: 0,
     ambiguousMappings: 0
-  })
+  }),
+  testCaseCatalogue: z.array(TestCaseCatalogueEntrySchema).optional(),
+  unifiedExecutions: z.array(UnifiedExecutionSchema).optional()
 });
 
 export type TestStatus = z.infer<typeof TestStatusSchema>;

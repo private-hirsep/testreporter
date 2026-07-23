@@ -62,8 +62,33 @@ describe("diagnostics grouping", () => {
     });
     const issues = identityIssues(dirty);
     expect(issues.map((issue) => issue.label)).toEqual([
-      "Duplicate canonical IDs",
+      "Conflicting canonical IDs",
       "Malformed explicit metadata"
     ]);
+  });
+
+  it("keeps compatible and conflicting diagnostic IDs mutually exclusive", () => {
+    const manifest = makeManifest({
+      identityDiagnostics: {
+        total: 4,
+        explicit: 4,
+        titleToken: 0,
+        mapping: 0,
+        generated: 0,
+        duplicateCanonicalIds: ["CASE-2"],
+        duplicateExplicitIds: ["CASE-2"],
+        conflictingCanonicalIds: ["CASE-2"],
+        multiImplementationCanonicalIds: ["CASE-1"],
+        malformedExplicitIds: 0,
+        ambiguousMappings: 0
+      }
+    });
+    const issues = identityIssues(manifest);
+    expect(issues.find((issue) => issue.label === "Conflicting canonical IDs")?.value).toBe(
+      "CASE-2"
+    );
+    expect(
+      issues.find((issue) => issue.label === "Compatible multi-implementation IDs")?.value
+    ).toBe("CASE-1");
   });
 });
