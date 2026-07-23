@@ -1,7 +1,7 @@
 {
   "schemaVersion": "1.0",
-  "executionId": "tokai-release-17",
-  "projectKey": "RFL",
+  "executionId": "demo-release-17",
+  "projectKey": "DEMO",
   "release": "17",
   "testedBuild": "0123456789abcdef",
   "environment": "staging",
@@ -12,7 +12,7 @@
   "state": "completed",
   "cases": [
     {
-      "caseId": "RFL-MT-0012",
+      "caseId": "DEMO-MT-0012",
       "status": "failed",
       "steps": [
         { "index": 0, "status": "passed", "evidence": [] },

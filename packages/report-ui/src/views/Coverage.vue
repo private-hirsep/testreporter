@@ -1,11 +1,18 @@
 <template>
   <div v-if="manifest">
-    <PageHeader title="Coverage" subtitle="Backend, frontend, and file-level coverage from static artifacts" />
+    <PageHeader
+      title="Coverage"
+      subtitle="Backend, frontend, and file-level coverage from static artifacts"
+    />
     <section class="summary-strip">
       <div>
         <div class="page-kicker">Total coverage</div>
-        <div class="summary-number">{{ formatPercent(manifest.summary.coverage.totalPercentage) }}</div>
-        <v-chip v-if="lowCoverageFiles.length" color="warning" label class="mt-3">{{ lowCoverageFiles.length }} low coverage file(s)</v-chip>
+        <div class="summary-number">
+          {{ formatPercent(manifest.summary.coverage.totalPercentage) }}
+        </div>
+        <v-chip v-if="lowCoverageFiles.length" color="warning" label class="mt-3"
+          >{{ lowCoverageFiles.length }} low coverage file(s)</v-chip
+        >
       </div>
       <div>
         <ProgressMetric
@@ -24,10 +31,23 @@
         <span class="page-kicker">below {{ LOW_COVERAGE_THRESHOLD }}% line coverage</span>
       </div>
       <v-table density="compact" class="data-table">
-        <thead><tr><th>Layer</th><th>File</th><th>Lines</th><th>Branches</th></tr></thead>
+        <thead>
+          <tr>
+            <th scope="col">Layer</th>
+            <th scope="col">File</th>
+            <th scope="col">Lines</th>
+            <th scope="col">Branches</th>
+          </tr>
+        </thead>
         <tbody>
-          <tr v-for="entry in lowCoverageFiles" :key="`${entry.layer}-${entry.file.path}`" class="failed-row">
-            <td><v-chip size="small" variant="tonal" label>{{ entry.layer }}</v-chip></td>
+          <tr
+            v-for="entry in lowCoverageFiles"
+            :key="`${entry.layer}-${entry.file.path}`"
+            class="failed-row"
+          >
+            <td>
+              <v-chip size="small" variant="tonal" label>{{ entry.layer }}</v-chip>
+            </td>
             <td class="mono wrap-anywhere">{{ entry.file.path }}</td>
             <td>{{ formatPercent(entry.file.lines?.percentage) }}</td>
             <td>{{ formatPercent(entry.file.branches?.percentage) }}</td>
@@ -35,7 +55,10 @@
         </tbody>
       </v-table>
     </section>
-    <EmptyState v-if="!manifest.coverage.length" message="No coverage artifacts were parsed for this run." />
+    <EmptyState
+      v-if="!manifest.coverage.length"
+      message="No coverage artifacts were parsed for this run."
+    />
     <v-expansion-panels v-else variant="accordion">
       <v-expansion-panel v-for="item in manifest.coverage" :key="item.layer" class="portal-card">
         <v-expansion-panel-title>
@@ -53,27 +76,43 @@
             />
           </div>
           <div v-if="item.rawLinks?.length" class="mb-4">
-            <v-chip v-for="link in item.rawLinks" :key="link" class="mr-2 mb-2" prepend-icon="mdi-file-chart" :href="link" target="_blank" rel="noopener" label>
+            <v-chip
+              v-for="link in item.rawLinks"
+              :key="link"
+              class="mr-2 mb-2"
+              prepend-icon="mdi-file-chart"
+              :href="link"
+              target="_blank"
+              rel="noopener"
+              label
+            >
               Raw coverage report
             </v-chip>
           </div>
           <v-table v-if="item.files?.length" density="compact" class="data-table">
             <thead>
               <tr>
-                <th>File</th>
-                <th>Package</th>
-                <th :aria-sort="fileSortDir[item.layer] === -1 ? 'descending' : 'ascending'">
+                <th scope="col">File</th>
+                <th scope="col">Package</th>
+                <th scope="col" :aria-sort="fileSortDir[item.layer] === -1 ? 'descending' : 'ascending'">
                   <button class="th-sort" type="button" @click="toggleFileSort(item.layer)">
                     Lines
-                    <v-icon size="x-small" :icon="fileSortDir[item.layer] === -1 ? 'mdi-arrow-down' : 'mdi-arrow-up'" />
+                    <v-icon
+                      size="x-small"
+                      :icon="fileSortDir[item.layer] === -1 ? 'mdi-arrow-down' : 'mdi-arrow-up'"
+                    />
                   </button>
                 </th>
-                <th>Branches</th>
-                <th>Functions / Methods</th>
+                <th scope="col">Branches</th>
+                <th scope="col">Functions / Methods</th>
               </tr>
             </thead>
             <tbody>
-              <tr v-for="file in sortedFiles(item)" :key="file.path" :class="{ 'failed-row': (file.lines?.percentage ?? 100) < LOW_COVERAGE_THRESHOLD }">
+              <tr
+                v-for="file in sortedFiles(item)"
+                :key="file.path"
+                :class="{ 'failed-row': (file.lines?.percentage ?? 100) < LOW_COVERAGE_THRESHOLD }"
+              >
                 <td class="mono">{{ file.path }}</td>
                 <td>{{ file.packageName ?? "n/a" }}</td>
                 <td>{{ formatPercent(file.lines?.percentage) }}</td>

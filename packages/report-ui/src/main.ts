@@ -18,22 +18,47 @@ import TestDetail from "./views/TestDetail.vue";
 import Tests from "./views/Tests.vue";
 import Manual from "./views/Manual.vue";
 import Readiness from "./views/Readiness.vue";
+import { navItems } from "./services/navigation";
 
 const router = createRouter({
   history: createWebHashHistory(),
   routes: [
-    { path: "/", component: Dashboard },
-    { path: "/tests", component: Tests },
+    { path: "/", component: Dashboard, alias: ["/overview"] },
+    { path: "/tests", component: Tests, alias: ["/test-cases"] },
     { path: "/tests/:id", component: TestDetail },
     { path: "/manual", component: Manual },
     { path: "/readiness", component: Readiness },
     { path: "/coverage", component: Coverage },
     { path: "/requirements", component: Requirements },
     { path: "/security", component: Security },
-    { path: "/downloads", component: Downloads },
+    { path: "/downloads", component: Downloads, alias: ["/evidence"] },
     { path: "/diagnostics", component: Diagnostics },
-    { path: "/history", component: History }
-  ]
+    { path: "/history", component: History, alias: ["/executions"] }
+  ],
+  scrollBehavior(to, _from, savedPosition) {
+    if (savedPosition) return savedPosition;
+    if (to.hash) {
+      // Report data loads asynchronously, so the anchor target may not exist
+      // yet; views handle late scrolling themselves in that case.
+      try {
+        if (document.querySelector(to.hash)) return { el: to.hash, top: 12 };
+      } catch {
+        return { top: 0 };
+      }
+      return undefined;
+    }
+    return { top: 0 };
+  }
+});
+
+router.afterEach((to) => {
+  const section = navItems.find(
+    (item) =>
+      to.path === item.to ||
+      (item.to !== "/" && to.path.startsWith(`${item.to}/`)) ||
+      (item.aliases ?? []).some((alias) => to.path === alias || to.path.startsWith(`${alias}/`))
+  );
+  document.title = section ? `${section.title} · Quality Report` : "Quality Report";
 });
 
 const vuetify = createVuetify({

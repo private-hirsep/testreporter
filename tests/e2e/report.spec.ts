@@ -3,7 +3,7 @@ import { expect, test } from "@playwright/test";
 test("manual case runner restores progress and exports a validated result", async ({ page }) => {
   await page.goto("/#/manual");
   await expect(page.getByRole("heading", { name: "Manual testing" })).toBeVisible();
-  await expect(page.getByText("RFL-MT-0012 — Verify TOKAI draft usability")).toBeVisible();
+  await expect(page.getByText("DEMO-MT-0012 — Verify report draft usability")).toBeVisible();
   await page.getByRole("button", { name: "Run case" }).first().click();
   await expect(page.getByLabel("Execution ID")).toBeEditable();
   await page.getByLabel("Tester").fill("E2E Tester");
@@ -23,26 +23,49 @@ test("manual case runner restores progress and exports a validated result", asyn
   expect((await download).suggestedFilename()).toMatch(/^manual-result-.*\.json$/);
 });
 
-test("generated report loads dashboard and tests", async ({ page }) => {
+test("overview prioritizes readiness, required actions, and the quality gate", async ({
+  page
+}) => {
   await page.goto("/");
-  await expect(page.locator(".gate-hero")).toBeVisible();
-  await expect(page.locator(".gate-title")).toHaveText("Quality Gate PASSED");
+  await expect(page.getByRole("heading", { name: "Overview" })).toBeVisible();
+  await expect(page.locator(".context-header")).toContainText("Minimal Quality Example");
+  await expect(page.locator(".context-header")).toContainText("Release 1.1.7");
+  await expect(page.locator(".context-header")).toContainText("staging");
+  await expect(page.locator(".context-header")).toContainText(/Generated \d{2} \w{3} \d{4}/);
+  await expect(page.locator(".context-header")).not.toContainText("Last tested");
+  await expect(page.locator(".context-header .status-chip")).toContainText("Blocked");
+  await expect(page.getByRole("heading", { name: "Required actions" })).toBeVisible();
+  expect(await page.locator(".attention-list li").count()).toBeGreaterThanOrEqual(5);
+  await expect(page.locator(".summary-cards .metric-card")).toHaveCount(4);
   expect(await page.locator(".gate-check").count()).toBeGreaterThanOrEqual(3);
   await expect(page.locator(".gate-check").filter({ hasText: "Total coverage" })).toBeVisible();
-  await expect(page.locator(".metrics")).toHaveCount(0);
-  await expect(page.locator(".quality-areas")).toHaveCount(0);
-  await expect(page.locator(".dashboard-overview .summary-panel")).toHaveCount(3);
-  await expect(page.getByText("Test Health")).toBeVisible();
-  await expect(page.getByText("Risk & Compliance")).toBeVisible();
-  await page.getByRole("link", { name: "Tests" }).first().click();
-  await expect(page.getByRole("heading", { name: "Tests" })).toBeVisible();
+  await expect(
+    page.getByText("Historical execution trends are not available in this report yet", {
+      exact: false
+    })
+  ).toBeVisible();
+  await page.getByRole("link", { name: "Test Cases" }).first().click();
+  await expect(page.getByRole("heading", { name: "Test Cases" })).toBeVisible();
   await expect(page.getByText("creates user account JIRA-101")).toBeVisible();
+});
+
+test("a readiness action on the overview leads to the affected test", async ({ page }) => {
+  await page.goto("/");
+  const action = page.locator(".attention-list a").first();
+  await expect(action).toContainText(/failed/);
+  await action.click();
+  await expect(page.locator(".test-detail")).toBeVisible();
 });
 
 test("release readiness explains a blocker and links to its test", async ({ page }) => {
   await page.goto("/#/readiness");
-  await expect(page.getByRole("heading", { name: "Release readiness" })).toBeVisible();
-  await expect(page.locator(".v-alert").filter({ hasText: /Test .* failed\./ })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Release Readiness" })).toBeVisible();
+  await expect(page.locator(".page-heading .status-chip")).toContainText("Blocked");
+  await expect(page.getByRole("heading", { name: "Why this status" })).toBeVisible();
+  await expect(page.locator(".reason-list li").filter({ hasText: /Test .* failed\./ }).first())
+    .toBeVisible();
+  await expect(page.getByRole("heading", { name: "Accepted risks" })).toBeVisible();
+  await expect(page.locator(".risk-list")).toContainText("RISK-004");
   const failed = page.getByRole("link", { name: /Test .* failed\./ }).first();
   await expect(failed).toBeVisible();
   await failed.click();
@@ -62,17 +85,40 @@ test("audit evidence manifest and checksums are inspectable", async ({ request }
   const checksums=await request.get("/checksums.sha256"); expect(checksums.ok()).toBeTruthy(); expect(await checksums.text()).toMatch(/[a-f0-9]{64}/);
 });
 
-test("navigation routes work with GitHub Pages hash fallback", async ({ page }) => {
+test("navigation reaches every major section with GitHub Pages hash fallback", async ({
+  page
+}) => {
   await page.goto("/404.html#/coverage");
   await expect(page.getByRole("heading", { name: "Coverage", exact: true })).toBeVisible();
-  await page.getByRole("link", { name: "Requirements" }).first().click();
-  await expect(page.getByRole("heading", { name: "Requirement Coverage" })).toBeVisible();
-  await page.getByRole("link", { name: "Security" }).first().click();
-  await expect(page.getByRole("heading", { name: "Security" })).toBeVisible();
-  await page.getByRole("link", { name: "Downloads" }).first().click();
-  await expect(page.getByRole("heading", { name: "Downloads" })).toBeVisible();
-  await page.getByRole("link", { name: "History" }).first().click();
-  await expect(page.getByRole("heading", { name: "History" })).toBeVisible();
+  const sections: Array<[string, string | RegExp]> = [
+    ["Overview", "Overview"],
+    ["Test Cases", "Test Cases"],
+    ["Executions", "Executions"],
+    ["Release Readiness", "Release Readiness"],
+    ["Requirements", "Requirements"],
+    ["Manual Testing", "Manual Testing"],
+    ["Coverage", "Coverage"],
+    ["Security", "Security"],
+    ["Evidence", "Evidence"],
+    ["Diagnostics", "Diagnostics"]
+  ];
+  for (const [link, heading] of sections) {
+    await page.getByRole("link", { name: link, exact: true }).first().click();
+    await expect(page.getByRole("heading", { name: heading, level: 1 })).toBeVisible();
+  }
+});
+
+test("legacy route paths keep working as aliases", async ({ page }) => {
+  await page.goto("/#/downloads");
+  await expect(page.getByRole("heading", { name: "Evidence" })).toBeVisible();
+  await expect(page).toHaveTitle("Evidence · Quality Report");
+  await page.goto("/#/evidence");
+  await expect(page.getByRole("heading", { name: "Evidence" })).toBeVisible();
+  await expect(page).toHaveTitle("Evidence · Quality Report");
+  await page.goto("/#/executions");
+  await expect(page.getByRole("heading", { name: "Executions", level: 1 })).toBeVisible();
+  await page.goto("/#/history");
+  await expect(page.getByRole("heading", { name: "Executions", level: 1 })).toBeVisible();
 });
 
 test("test filters and detail page make failures visible and safe", async ({ page }) => {
@@ -93,12 +139,12 @@ test("test filters and detail page make failures visible and safe", async ({ pag
 
 test("requirement links connect requirements and tests", async ({ page }) => {
   await page.goto("/#/requirements");
-  await expect(page.locator("#requirement-JIRA-999")).toContainText("missing");
+  await expect(page.locator("#requirement-JIRA-999")).toContainText(/missing/i);
   await page.getByRole("button", { name: "Toggle linked tests for JIRA-401" }).click();
   const details = page.locator("#requirement-JIRA-401-details");
   await expect(details).toBeVisible();
   expect(await details.getByRole("link").count()).toBeGreaterThanOrEqual(3);
-  await expect(details.getByRole("row").last()).toContainText(/passed|failed|broken|skipped/);
+  await expect(details.getByRole("row").last()).toContainText(/passed|failed|broken|skipped/i);
   await page.locator("#requirement-JIRA-101").getByRole("link").first().click();
   await expect(page.getByRole("heading", { name: /JIRA-101/ })).toBeVisible();
 });
@@ -157,11 +203,100 @@ test("downloads listed in manifest resolve from static output", async ({ page, r
     expect(response.ok(), `${download.path} should resolve`).toBeTruthy();
   }
   await page.goto("/#/downloads");
-  await expect(page.getByText("Full report")).toBeVisible();
-  const hasHorizontalOverflow = await page
+  await expect(page.getByRole("heading", { name: "Evidence", level: 1 })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Audit package" })).toBeVisible();
+  await expect(page.getByText("Full generated report ZIP")).toBeVisible();
+  const overflows = await page
     .locator(".data-table")
-    .evaluate((element) => element.scrollWidth > element.clientWidth + 1);
-  expect(hasHorizontalOverflow).toBeFalsy();
+    .evaluateAll((elements) =>
+      elements.map((element) => element.scrollWidth > element.clientWidth + 1)
+    );
+  expect(overflows.every((overflow) => !overflow)).toBeTruthy();
+});
+
+test("evidence page verifies audit integrity files", async ({ page }) => {
+  await page.goto("/#/downloads");
+  await expect(page.getByRole("heading", { name: "Audit integrity" })).toBeVisible();
+  await expect(page.getByRole("link", { name: "Evidence manifest" })).toBeVisible();
+  await expect(page.getByRole("link", { name: "Checksums" })).toBeVisible();
+  expect(await page.locator(".status-chip").filter({ hasText: "present" }).count()).toBe(2);
+  const zipRow = page.getByRole("row", { name: /Full generated report ZIP/ });
+  await expect(zipRow).toContainText("size not recorded");
+  await expect(zipRow).not.toContainText("directory");
+});
+
+test("an extensionless download with no recorded size is not mislabeled as a directory", async ({
+  page,
+  request
+}) => {
+  const manifest = await (await request.get("/data/manifest.json")).json();
+  await page.route("**/data/manifest.json", async (route) => {
+    await route.fulfill({
+      contentType: "application/json",
+      body: JSON.stringify({
+        ...manifest,
+        downloads: [
+          ...manifest.downloads,
+          { id: "synthetic-raw-dir", name: "raw-report", category: "raw", path: "raw/raw-report" }
+        ]
+      })
+    });
+  });
+  await page.goto("/#/downloads");
+  const row = page.getByRole("row", { name: /raw-report/ });
+  await expect(row).toContainText("size not recorded");
+  await expect(row).not.toContainText("directory");
+});
+
+test("quality gate checks show actual and expected values", async ({ page }) => {
+  await page.goto("/");
+  const coverageCheck = page.locator(".gate-check").filter({ hasText: "Total coverage" });
+  await expect(coverageCheck).toContainText("72.4%");
+  await expect(coverageCheck).toContainText("(>= 70%)");
+  const failedCheck = page.locator(".gate-check").filter({ hasText: "Failed tests" });
+  await expect(failedCheck).toContainText("(<= 3)");
+});
+
+test("test result filters expose their pressed state", async ({ page }) => {
+  await page.goto("/#/tests");
+  const all = page.getByRole("button", { name: /All 46/ });
+  const failed = page.getByRole("button", { name: /Failed 3/ });
+  await expect(all).toHaveAttribute("aria-pressed", "true");
+  await expect(failed).toHaveAttribute("aria-pressed", "false");
+  await failed.click();
+  await expect(failed).toHaveAttribute("aria-pressed", "true");
+  await expect(all).toHaveAttribute("aria-pressed", "false");
+});
+
+test("readiness explains an empty release scope instead of hiding it", async ({
+  page,
+  request
+}) => {
+  const manifest = await (await request.get("/data/manifest.json")).json();
+  await page.route("**/data/manifest.json", async (route) => {
+    await route.fulfill({
+      contentType: "application/json",
+      body: JSON.stringify({
+        ...manifest,
+        readiness: {
+          ...manifest.readiness,
+          requirements: { covered: 0, uncovered: 0, excluded: 0, uncoveredIds: [], excludedIds: [] }
+        }
+      })
+    });
+  });
+  await page.goto("/#/readiness");
+  await expect(page.getByRole("heading", { name: "Scoped requirements" })).toBeVisible();
+  await expect(
+    page.getByText("The release scope declares no requirements", { exact: false }).first()
+  ).toBeVisible();
+
+  await page.goto("/#/");
+  await expect(page.getByRole("heading", { name: "Requirement gaps" })).toBeVisible();
+  await expect(page.getByText("No requirements are included in this release scope")).toBeVisible();
+  await expect(page.getByText("Every requirement in the release scope has evidence")).toHaveCount(
+    0
+  );
 });
 
 test("coverage highlights low coverage files", async ({ page }) => {
@@ -242,5 +377,65 @@ test("generated data does not leak absolute paths or embed raw html", async ({ r
 test("github pages fallback redirects clean paths to hash routes", async ({ page }) => {
   await page.goto("/tests");
   await expect(page).toHaveURL(/#\/tests$/);
-  await expect(page.getByRole("heading", { name: "Tests" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Test Cases" })).toBeVisible();
+});
+
+test("requirement deep links scroll to and focus the requirement row", async ({ page }) => {
+  await page.goto("/#/requirements#requirement-JIRA-999");
+  const row = page.locator("#requirement-JIRA-999");
+  await expect(row).toBeInViewport();
+  await expect(row).toBeFocused();
+  await page.goto("/#/tests");
+  await page.getByRole("link", { name: "JIRA-601", exact: true }).first().click();
+  await expect(page.locator("#requirement-JIRA-601")).toBeInViewport();
+});
+
+test("scope-only requirement chips are not rendered as dead links", async ({ page }) => {
+  await page.goto("/");
+  const gapChips = page.locator(".gap-chips .v-chip");
+  await expect(gapChips.first()).toContainText("DEMO-123");
+  expect(await page.locator(".gap-chips a").count()).toBe(0);
+  await page.goto("/#/readiness");
+  await expect(page.getByText("Uncovered:")).toBeVisible();
+  expect(
+    await page.locator(".portal-card", { hasText: "Scoped requirements" }).locator("a").count()
+  ).toBe(0);
+});
+
+test("skip link focuses main content without breaking the route", async ({ page }) => {
+  await page.goto("/");
+  await expect(page.getByRole("heading", { name: "Overview" })).toBeVisible();
+  await page.keyboard.press("Tab");
+  await expect(page.getByRole("link", { name: "Skip to content" })).toBeFocused();
+  await page.keyboard.press("Enter");
+  await expect(page).toHaveURL(/#\/$/);
+  expect(await page.evaluate(() => document.activeElement?.id)).toBe("main-content");
+  await expect(page.getByRole("heading", { name: "Overview" })).toBeVisible();
+});
+
+test("diagnostics groups warnings by category", async ({ page }) => {
+  await page.goto("/#/diagnostics");
+  await expect(page.getByRole("heading", { name: "Identity health" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: /Configuration \(2\)/ })).toBeVisible();
+  await expect(page.getByRole("heading", { name: /Data compatibility \(1\)/ })).toBeVisible();
+  await expect(page.getByText("Unexpected end of JSON input")).toBeVisible();
+});
+
+test("narrow viewports keep the workspace usable through the drawer", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto("/");
+  await expect(page.getByRole("heading", { name: "Overview" })).toBeVisible();
+  await expect(page.locator(".context-header")).toContainText("Release 1.1.7");
+  const toggle = page.getByRole("button", { name: "Open navigation" });
+  await expect(toggle).toBeVisible();
+  await toggle.click();
+  await page.getByRole("link", { name: "Manual Testing", exact: true }).click();
+  await expect(page.getByRole("heading", { name: "Manual Testing", level: 1 })).toBeVisible();
+  await toggle.click();
+  await page.getByRole("link", { name: "Test Cases", exact: true }).click();
+  await expect(page.getByRole("heading", { name: "Test Cases", level: 1 })).toBeVisible();
+  const bodyOverflow = await page.evaluate(
+    () => document.documentElement.scrollWidth > document.documentElement.clientWidth + 1
+  );
+  expect(bodyOverflow).toBeFalsy();
 });

@@ -1,8 +1,8 @@
 <template>
-  <v-chip :size="size ?? 'small'" :color="severityColor(severity)" label>{{ severity }}</v-chip>
+  <StatusChip :status="severity" :size="size" />
 </template>
 
 <script setup lang="ts">
-import { severityColor } from "../format";
+import StatusChip from "./StatusChip.vue";
 defineProps<{ severity: string; size?: string }>();
 </script>

@@ -1,5 +1,7 @@
 # Quality Report Platform
 
+The report UI is a consistent QA workspace — navigation, status semantics, and responsive behavior are documented in [docs/user-interface.md](docs/user-interface.md).
+
 Release readiness, Git definition history, audit evidence, and multi-project portfolio generation are documented in [docs/release-readiness.md](docs/release-readiness.md).
 
 Stable test identity and traceability are documented in [docs/test-identity.md](docs/test-identity.md). Explicit IDs are optional; all automated results remain imported automatically.

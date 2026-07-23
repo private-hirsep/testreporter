@@ -2,7 +2,21 @@
 <meta charset="utf-8" />
 <title>Quality Report</title>
 <script>
-  const knownRoutes = new Set(["tests", "coverage", "requirements", "security", "downloads", "diagnostics", "history"]);
+  const knownRoutes = new Set([
+    "tests",
+    "test-cases",
+    "coverage",
+    "requirements",
+    "security",
+    "downloads",
+    "evidence",
+    "diagnostics",
+    "history",
+    "executions",
+    "manual",
+    "readiness",
+    "overview"
+  ]);
   const parts = window.location.pathname.split("/").filter(Boolean);
   if (parts.length && parts[parts.length - 1].toLowerCase() === "404.html") parts.pop();
   const first = parts[0] || "";

@@ -30,6 +30,41 @@ describe("portfolio generator", () => {
     expect(html).toContain("Alpha");
     expect(html).toContain("Beta");
     expect(html).toContain("Gamma");
+    expect(html).toContain('data-priority="1"');
+    expect(html).toContain("Blocked");
+    expect(html).toContain("Stale report");
+    expect(html).toContain("Manual remaining");
+    expect(html).toContain('<a href="https://example.invalid/alpha/">Alpha</a>');
+    expect(html).toContain("Project quality portfolio");
+    // Metric tones are semantic: failures are negative, outstanding work is
+    // caution, accepted risks stay neutral, and zero values are never colored.
+    expect(html).toContain('data-tone="negative"><strong>1</strong><span>Failed tests');
+    expect(html).toContain('data-tone="caution"><strong>2</strong><span>Manual remaining');
+    expect(html).toContain('data-tone="neutral"><strong>1</strong><span>Accepted risks');
+    expect(html).toContain('data-tone="neutral"><strong>0</strong><span>Failed tests');
+    expect(html).not.toContain("metric-alert");
+
+    // Card border tone is a distinct semantic signal from sort priority.
+    // GAMMA is stale (clamped into the top sort-priority band alongside
+    // genuine blockers) but is otherwise ready-with-accepted-risks, so its
+    // card must border as a warning, not as a failure.
+    const cardTones = new Map(
+      [...html.matchAll(/data-priority="(\d+)" data-tone="(\w+)">.*?<h2>(?:<a[^>]*>)?([A-Za-z]+)/gs)]
+        .map((match) => [match[3], match[2]])
+    );
+    expect(cardTones.get("Alpha")).toBe("fail");
+    expect(cardTones.get("Gamma")).toBe("warn");
+    expect(cardTones.get("Beta")).toBe("warn");
+    expect(html).not.toMatch(/data-priority="2" data-tone="fail"/);
+  });
+
+  it("renders an honest empty state without project summaries", async () => {
+    const input = await mkdtemp(path.join(os.tmpdir(), "qr-portfolio-empty-"));
+    const output = path.join(input, "output");
+    const projects = await buildPortfolio(input, output);
+    expect(projects).toHaveLength(0);
+    const html = await readFile(path.join(output, "index.html"), "utf8");
+    expect(html).toContain("No project summaries were found");
   });
 
   it("rejects duplicate project keys with source paths", async () => {

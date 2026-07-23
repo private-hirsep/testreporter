@@ -1,10 +1,10 @@
-id: RFL-MT-0013
+id: DEMO-MT-0013
 title: Verify offline warning
 status: approved
 priority: medium
 risk: medium
-requirements: [RFL-124]
-tags: [tokai]
+requirements: [DEMO-124]
+tags: [reporting]
 steps:
   - action: Disconnect the reporting API
     expected: A non-destructive offline warning is displayed
