@@ -21,7 +21,7 @@ notes: [Candidate validated in staging]
 references: [https://example.invalid/releases/1.1.7]
 ```
 
-Unknown requirement and manual-case IDs produce warnings. Invalid entries do not stop unrelated artifact parsing. Release metadata precedence is CLI (`--release`, `--tested-build`, `--commit-sha`, `--branch`, `--environment`, `--workflow-run`, `--release-date`), then `QR_*`/GitHub Actions variables, then configuration.
+Unknown requirement and manual-case IDs produce warnings. Invalid entries do not stop unrelated artifact parsing. Release metadata precedence is CLI (`--release`, `--tested-build`, `--commit-sha`, `--branch`, `--environment`, `--workflow-run`, `--release-date`), then `QR_*`/GitHub Actions variables, then configuration, then the release-scope `release` value as a final fallback.
 
 ## Deterministic readiness rules
 
@@ -45,7 +45,7 @@ Shallow and non-Git directories still generate reports; history is best-effort a
 
 ## Audit package
 
-`normalized-report.json`, copied raw evidence under `raw/`, `evidence-manifest.json`, `checksums.sha256`, and the human-readable static report are included when ZIP output is enabled. The manifest separates included files, external links, missing evidence, and locally drafted (not imported) manual work. It contains no environment dump, token, absolute local path, or authentication data. SHA-256 entries use sorted report-relative paths. The manifest enumerates every regular bundle file except the checksum file and ZIP; `checksums.sha256` verifies every enumerated file plus `evidence-manifest.json`.
+`normalized-report.json`, copied raw evidence under `raw/`, `evidence-manifest.json`, `checksums.sha256`, and the human-readable static report are included when ZIP output is enabled. The manifest separates included files, external links, missing evidence, and locally drafted (not imported) manual work. It contains no environment dump, token, absolute local path, or authentication data. SHA-256 entries use sorted report-relative paths. The manifest enumerates every regular bundle file except the checksum file and ZIP; `checksums.sha256` verifies every enumerated file plus `evidence-manifest.json`. Requirement totals in the manifest come from release scope rather than the repository-wide requirement set, and the tool version is read from the installed CLI package metadata.
 
 ## Project summary and central portfolio
 

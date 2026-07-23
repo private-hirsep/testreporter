@@ -3,6 +3,7 @@ import { readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import fg from "fast-glob";
 import type { NormalizedReport, ProjectQualitySummary } from "@quality-report/report-core";
+import { TOOL_VERSION } from "./version.js";
 
 export async function sha256(file: string) {
   return createHash("sha256")
@@ -38,6 +39,10 @@ export async function writeEvidence(output: string, report: NormalizedReport) {
       sha256: await sha256(path.join(output, file))
     }))
   );
+  const scopedRequirements = report.readiness?.requirements;
+  const scopedIncluded = scopedRequirements
+    ? scopedRequirements.covered + scopedRequirements.uncovered
+    : report.requirements.expected.length;
   const manifest = {
     schemaVersion: "1.0",
     project: report.metadata.projectName,
@@ -48,15 +53,17 @@ export async function writeEvidence(output: string, report: NormalizedReport) {
     workflowRun: report.metadata.workflowRun ?? report.metadata.runId,
     generatedAt: report.metadata.generatedAt,
     reportSchemaVersion: report.schemaVersion,
-    toolVersion: "0.1.0",
+    toolVersion: TOOL_VERSION,
     qualityProfile: report.metadata.qualityProfile,
     automated: report.summary.tests,
     manual: report.summary.manual,
     requirements: {
       covered: report.readiness?.requirements.covered ?? report.requirements.covered.length,
-      expected: report.requirements.expected.length,
+      expected: scopedIncluded,
+      included: scopedIncluded,
       uncovered: report.readiness?.requirements.uncovered ?? report.requirements.missing.length,
-      excluded: report.readiness?.requirements.excluded ?? 0
+      excluded: scopedRequirements?.excluded ?? 0,
+      total: scopedIncluded + (scopedRequirements?.excluded ?? 0)
     },
     security: report.summary.security,
     acceptedRisks: report.readiness?.acceptedRisks ?? [],

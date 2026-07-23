@@ -7,6 +7,7 @@ import { loadConfig } from "./config.js";
 import { discoverArtifacts } from "./discovery.js";
 import { buildReport } from "./generator.js";
 import { buildPortfolio } from "./portfolio.js";
+import { TOOL_VERSION } from "./version.js";
 
 const program = new Command();
 
@@ -20,7 +21,7 @@ program
 program
   .name("quality-report")
   .description("Generate static quality reports from CI artifacts")
-  .version("0.1.0");
+  .version(TOOL_VERSION);
 
 function handleError(error: unknown): never {
   if (error instanceof ZodError) {

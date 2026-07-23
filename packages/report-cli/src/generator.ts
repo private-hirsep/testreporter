@@ -891,6 +891,7 @@ export async function buildReport(options: GenerateOptions): Promise<NormalizedR
     try {
       const absolute = path.resolve(path.dirname(options.configPath), scopePath);
       releaseScope = ReleaseScopeSchema.parse(parseYaml(await readFile(absolute, "utf8")));
+      if (!meta.release) meta.release = releaseScope.release;
       const knownRequirements = new Set([
         ...requirements.expected,
         ...requirements.covered,

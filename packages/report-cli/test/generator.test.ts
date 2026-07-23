@@ -6,6 +6,7 @@ import { describe, expect, it } from "vitest";
 import { QualityReportConfigSchema } from "@quality-report/report-core";
 import { BUILT_IN_QUALITY_PROFILES, loadConfig } from "../src/config.js";
 import { buildReport } from "../src/generator.js";
+import { TOOL_VERSION } from "../src/version.js";
 
 async function assertFullHtml(output: string) {
   const html = await readFile(path.join(output, "index.html"), "utf8");
@@ -289,7 +290,32 @@ describe("report generator", () => {
     expect(fullComment.startsWith("<!-- quality-report-platform:summary -->")).toBe(true);
     const evidence = JSON.parse(
       await readFile(path.join(output, "evidence-manifest.json"), "utf8")
-    ) as { includedEvidence: Array<{ path: string; sha256: string }> };
+    ) as {
+      toolVersion: string;
+      requirements: {
+        covered: number;
+        expected: number;
+        included: number;
+        uncovered: number;
+        excluded: number;
+        total: number;
+      };
+      includedEvidence: Array<{ path: string; sha256: string }>;
+    };
+    expect(evidence.toolVersion).toBe(TOOL_VERSION);
+    expect(evidence.requirements).toEqual({
+      covered: report.readiness!.requirements.covered,
+      expected:
+        report.readiness!.requirements.covered + report.readiness!.requirements.uncovered,
+      included:
+        report.readiness!.requirements.covered + report.readiness!.requirements.uncovered,
+      uncovered: report.readiness!.requirements.uncovered,
+      excluded: report.readiness!.requirements.excluded,
+      total:
+        report.readiness!.requirements.covered +
+        report.readiness!.requirements.uncovered +
+        report.readiness!.requirements.excluded
+    });
     expect(evidence.includedEvidence.length).toBeGreaterThan(0);
     expect(evidence.includedEvidence.every((item) => /^[a-f0-9]{64}$/.test(item.sha256))).toBe(
       true
@@ -317,6 +343,39 @@ describe("report generator", () => {
       expect(actual, item.file).toBe(item.hash);
     }
     await expect(stat(path.join(output, "project-quality-summary.json"))).resolves.toBeTruthy();
+  });
+
+  it("falls back to the release-scope release when report metadata has no release", async () => {
+    const temp = await mkdtemp(path.join(os.tmpdir(), "quality-report-release-fallback-"));
+    const input = path.join(temp, "input");
+    const output = path.join(temp, "output");
+    const configPath = path.join(temp, "quality-report.yml");
+    await mkdir(input);
+    await writeFile(
+      path.join(temp, "release-scope.yml"),
+      "release: 4.2.0\nrequirements: []\nrequiredManualCases: []\n"
+    );
+    const previousRelease = process.env.QR_RELEASE;
+    delete process.env.QR_RELEASE;
+    try {
+      const report = await buildReport({
+        config: loadConfigFromObject({
+          project: { name: "Release fallback" },
+          release: { scope: "release-scope.yml" }
+        }),
+        configPath,
+        inputPath: input,
+        outputPath: output
+      });
+      expect(report.metadata.release).toBe("4.2.0");
+      expect(report.releaseScope?.release).toBe("4.2.0");
+      expect(
+        report.warnings.some((warning) => warning.code === "release-scope.release-mismatch")
+      ).toBe(false);
+    } finally {
+      if (previousRelease === undefined) delete process.env.QR_RELEASE;
+      else process.env.QR_RELEASE = previousRelease;
+    }
   });
 
   it("keeps built-in profiles and custom quality-gate fields typed", async () => {
