@@ -22,17 +22,17 @@ import Readiness from "./views/Readiness.vue";
 const router = createRouter({
   history: createWebHashHistory(),
   routes: [
-    { path: "/", component: Dashboard },
-    { path: "/tests", component: Tests },
+    { path: "/", component: Dashboard, alias: ["/overview"] },
+    { path: "/tests", component: Tests, alias: ["/test-cases"] },
     { path: "/tests/:id", component: TestDetail },
     { path: "/manual", component: Manual },
     { path: "/readiness", component: Readiness },
     { path: "/coverage", component: Coverage },
     { path: "/requirements", component: Requirements },
     { path: "/security", component: Security },
-    { path: "/downloads", component: Downloads },
+    { path: "/downloads", component: Downloads, alias: ["/evidence"] },
     { path: "/diagnostics", component: Diagnostics },
-    { path: "/history", component: History }
+    { path: "/history", component: History, alias: ["/executions"] }
   ]
 });
 
