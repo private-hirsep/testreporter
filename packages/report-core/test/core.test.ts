@@ -95,6 +95,28 @@ describe("core normalization and gates", () => {
     expect(calculateIdentityDiagnostics(deduped).duplicateExplicitIds).toEqual(["APP-TC-1"]);
   });
 
+  it("reports compatible browser and device variants as information, not duplicate warnings", () => {
+    const variants = [
+      test({
+        name: "[APP-TC-2] completes checkout",
+        variant: { project: "desktop", browser: "chromium", device: "Desktop Chrome" },
+        identity: { canonicalId: "APP-TC-2", technicalId: "chromium", source: "explicit", stable: true }
+      }),
+      test({
+        name: "[APP-TC-2] completes checkout",
+        variant: { project: "mobile", browser: "webkit", device: "iPhone" },
+        identity: { canonicalId: "APP-TC-2", technicalId: "webkit", source: "explicit", stable: true }
+      })
+    ];
+    const forward = calculateIdentityDiagnostics(variants);
+    const reversed = calculateIdentityDiagnostics([...variants].reverse());
+    expect(forward).toEqual(reversed);
+    expect(forward.duplicateCanonicalIds).toEqual([]);
+    expect(forward.duplicateExplicitIds).toEqual([]);
+    expect(forward.conflictingCanonicalIds).toEqual([]);
+    expect(forward.multiImplementationCanonicalIds).toEqual(["APP-TC-2"]);
+  });
+
   it("parses legacy schema 1.0 reports with defaulted identity diagnostics", () => {
     const requirements = calculateRequirementCoverage([], []);
     const config = QualityReportConfigSchema.parse({ project: { name: "legacy" } });

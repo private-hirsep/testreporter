@@ -978,13 +978,41 @@ export async function buildReport(options: GenerateOptions): Promise<NormalizedR
     for (const test of dedupedTests) test.definitionHistory = gitResult.histories.get(test.id);
   if (gitResult)
     for (const item of uniqueManualCases) item.definitionHistory = gitResult.histories.get(item.id);
-  const identityDiagnostics = calculateIdentityDiagnostics(dedupedTests, warnings);
+  const normalizedIdentityDiagnostics = calculateIdentityDiagnostics(dedupedTests, warnings);
   const catalogueInput = {
     tests: dedupedTests,
     manualCases: uniqueManualCases,
     manualExecutions: officialManualExecutions,
     metadata: meta,
-    identityDiagnostics
+    identityDiagnostics: normalizedIdentityDiagnostics
+  };
+  const testCaseCatalogue = deriveTestCaseCatalogue(catalogueInput);
+  const catalogueConflicts = testCaseCatalogue
+    .filter((entry) => entry.identity.conflict)
+    .map((entry) => entry.canonicalId);
+  const compatibleMultiImplementations = testCaseCatalogue
+    .filter((entry) => !entry.identity.conflict && entry.implementations.length > 1)
+    .map((entry) => entry.canonicalId);
+  const identityDiagnostics = {
+    ...normalizedIdentityDiagnostics,
+    duplicateCanonicalIds: [
+      ...new Set([
+        ...normalizedIdentityDiagnostics.duplicateCanonicalIds,
+        ...catalogueConflicts
+      ])
+    ].sort(),
+    conflictingCanonicalIds: [
+      ...new Set([
+        ...normalizedIdentityDiagnostics.conflictingCanonicalIds,
+        ...catalogueConflicts
+      ])
+    ].sort(),
+    multiImplementationCanonicalIds: [
+      ...new Set([
+        ...normalizedIdentityDiagnostics.multiImplementationCanonicalIds,
+        ...compatibleMultiImplementations
+      ])
+    ].sort()
   };
   const report = NormalizedReportSchema.parse({
     schemaVersion: "1.0",
@@ -1018,7 +1046,7 @@ export async function buildReport(options: GenerateOptions): Promise<NormalizedR
     readiness,
     git: gitResult?.repository,
     identityDiagnostics,
-    testCaseCatalogue: deriveTestCaseCatalogue(catalogueInput),
+    testCaseCatalogue,
     unifiedExecutions: deriveUnifiedExecutions(catalogueInput)
   });
 

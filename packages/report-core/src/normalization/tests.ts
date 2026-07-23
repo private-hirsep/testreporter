@@ -1,5 +1,6 @@
 import type { NormalizedTestCase } from "../schema/report.js";
 import { stableId } from "../utils/hash.js";
+import { analyzeCanonicalIdentityGroup } from "../catalogue/identity.js";
 
 export function extractRequirementKeys(text: string | undefined, pattern: RegExp): string[] {
   if (!text) return [];
@@ -58,25 +59,38 @@ export function calculateIdentityDiagnostics(
     if (group) group.push(test);
     else ids.set(canonical, [test]);
   }
-  const duplicateCanonicalIds = [...ids]
-    .filter(([, values]) => values.length > 1)
-    .map(([id]) => id)
-    .sort();
-  const duplicateExplicitIds = [...ids]
-    .filter(
-      ([id, values]) =>
-        new Set(
-          values
-            .filter((test) => test.identity?.source === "explicit")
-            .map((test) =>
-              test.name
-                .replace(new RegExp(`\\[?${escapeRegExp(id)}\\]?`, "giu"), "")
-                .replace(/\s+/gu, " ")
-                .trim()
-                .toLocaleLowerCase()
-            )
-        ).size > 1
+  const analyses = [...ids]
+    .map(([canonicalId, values]) =>
+      analyzeCanonicalIdentityGroup(
+        canonicalId,
+        values.map((test) => ({
+          title: test.name,
+          ...(test.variant ? { variant: test.variant } : {})
+        }))
+      )
     )
+    .sort((left, right) => left.canonicalId.localeCompare(right.canonicalId));
+  const multiImplementationCanonicalIds = analyses
+    .filter((analysis) => analysis.implementationCount > 1 && analysis.compatible)
+    .map((analysis) => analysis.canonicalId);
+  const conflictingCanonicalIds = analyses
+    .filter((analysis) => !analysis.compatible)
+    .map((analysis) => analysis.canonicalId);
+  const duplicateCanonicalIds = conflictingCanonicalIds;
+  const duplicateExplicitIds = [...ids]
+    .filter(([id, values]) => {
+      const explicit = values.filter((test) => test.identity?.source === "explicit");
+      return (
+        explicit.length > 1 &&
+        !analyzeCanonicalIdentityGroup(
+          id,
+          explicit.map((test) => ({
+            title: test.name,
+            ...(test.variant ? { variant: test.variant } : {})
+          }))
+        ).compatible
+      );
+    })
     .map(([id]) => id)
     .sort();
   return {
@@ -87,14 +101,12 @@ export function calculateIdentityDiagnostics(
     generated: counts.generated,
     duplicateCanonicalIds,
     duplicateExplicitIds,
+    multiImplementationCanonicalIds,
+    conflictingCanonicalIds,
     malformedExplicitIds: warnings.filter(
       (warning) => warning.code === "identity.explicit.malformed"
     ).length,
     ambiguousMappings: warnings.filter((warning) => warning.code === "identity.mapping.ambiguous")
       .length
   };
-}
-
-function escapeRegExp(value: string): string {
-  return value.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&");
 }

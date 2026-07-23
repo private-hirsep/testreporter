@@ -27,7 +27,7 @@
             <dt>Current result</dt><dd><StatusChip :status="item.latestResult?.status ?? 'not-run'" /> <span class="text-medium-emphasis">{{ item.latestResult?.contributingStatuses.join(", ") }}</span></dd>
             <dt>Last executed</dt><dd>{{ formatDate(item.lastExecutedAt) }}</dd>
             <dt>Stability</dt><dd>{{ stabilityLabel }}</dd>
-            <dt>Duration</dt><dd>{{ formatDuration(item.duration?.latestMs) }}<span v-if="item.duration"> · {{ item.duration.sampleSize }} {{ item.duration.source }} sample(s), average {{ formatDuration(item.duration.averageMs) }}</span></dd>
+            <dt>Duration</dt><dd><span v-if="item.duration?.latestMs !== undefined">{{ formatDuration(item.duration.latestMs) }}</span><span v-else>Latest not available</span><span v-if="item.duration"> · {{ item.duration.sampleSize }} {{ item.duration.source }} sample(s), average {{ formatDuration(item.duration.averageMs) }}, median {{ formatDuration(item.duration.medianMs) }}, range {{ formatDuration(item.duration.minMs) }}–{{ formatDuration(item.duration.maxMs) }}</span></dd>
             <dt>Requirements</dt><dd>{{ item.requirements.join(", ") || "none" }}</dd>
             <dt>Defects</dt><dd>{{ item.defects.join(", ") || "none" }}</dd>
             <dt>Retries</dt><dd>{{ item.stability.flaky ? `${item.stability.flaky} retried passing result(s)` : "0" }}</dd>
@@ -70,8 +70,11 @@
       <v-window-item value="executions">
         <section class="portal-card detail-section"><h2>Available executions</h2>
           <EmptyState v-if="!executions.length" message="No unified execution in this report contains this case." />
+          <v-alert v-else-if="executions.some((execution) => !execution.caseResultsAvailable)" type="info" variant="tonal" class="mb-3">
+            Execution-specific case results are unavailable in this older report.
+          </v-alert>
           <v-table v-else density="compact"><thead><tr><th scope="col">Execution</th><th scope="col">Type</th><th scope="col">Result</th><th scope="col">Release / environment</th><th scope="col">Time</th><th scope="col">Duration</th></tr></thead>
-            <tbody><tr v-for="execution in executions" :key="execution.id"><td><router-link :to="executionRoute(execution.id)" class="mono">{{ execution.id }}</router-link></td><td>{{ execution.type }}</td><td><StatusChip :status="executionCaseStatus(execution)" /></td><td>{{ execution.release ?? "n/a" }} / {{ execution.environment ?? "n/a" }}</td><td>{{ executionTime(execution) }}</td><td>{{ formatDuration(execution.durationMs) }}<span v-if="execution.testDurationSumMs"> · summed test time {{ formatDuration(execution.testDurationSumMs) }}</span></td></tr></tbody></v-table>
+            <tbody><tr v-for="execution in executions" :key="execution.id"><td><router-link :to="executionRoute(execution.id)" class="mono">{{ execution.id }}</router-link></td><td>{{ execution.type }}</td><td><template v-if="execution.caseResultsAvailable"><div v-for="result in caseResultsForExecution(execution)" :key="result.implementationId ?? result.testCaseId" class="mb-1"><span class="text-caption">{{ implementationLabel(result.implementationId) }}</span> <StatusChip :status="result.status" /></div></template><span v-else>Unavailable</span></td><td>{{ execution.release ?? "n/a" }} / {{ execution.environment ?? "n/a" }}</td><td>{{ executionTime(execution) }}</td><td><template v-if="execution.caseResultsAvailable"><div v-for="result in caseResultsForExecution(execution)" :key="result.implementationId ?? result.testCaseId" class="mono">{{ implementationLabel(result.implementationId) }}: {{ result.durationMs !== undefined ? formatDuration(result.durationMs) : "Not recorded" }}</div><div v-if="caseDurationSum(execution) !== undefined && caseResultsForExecution(execution).length > 1" class="text-caption">Summed case implementation time: {{ formatDuration(caseDurationSum(execution)) }}</div></template><span v-else>Not recorded</span></td></tr></tbody></v-table>
         </section>
       </v-window-item>
       <v-window-item value="traceability">
@@ -109,8 +112,9 @@ import PageHeader from "../components/PageHeader.vue";
 import StatusChip from "../components/StatusChip.vue";
 import { formatDuration } from "../format";
 import { catalogueFor, executionsFor } from "../services/catalogue";
+import type { ResolvedUnifiedExecution } from "../services/catalogue";
 import { evidenceRoute, executionRoute, requirementRoute } from "../services/routes";
-import type { Manifest, TestCase, TestCaseImplementation, UnifiedExecution } from "../types";
+import type { Manifest, TestCase, TestCaseImplementation } from "../types";
 const props = defineProps<{ manifest?: Manifest; tests: TestCase[] }>();
 const route = useRoute();
 const tab = ref("overview");
@@ -132,13 +136,25 @@ const stabilityLabel = computed(() => item.value?.stability.available ? `${item.
 function formatDate(value?: string) { return value && Number.isFinite(Date.parse(value)) ? new Date(value).toLocaleString() : "Not executed"; }
 function source(implementation: TestCaseImplementation) { return implementation.source?.file ? `${implementation.source.file}${implementation.source.line ? `:${implementation.source.line}` : ""}` : "n/a"; }
 function variant(value?: Record<string, string>) { return value ? Object.entries(value).map(([key, item]) => `${key}: ${item}`).join(", ") : "n/a"; }
-const executionSeverity: Record<string, number> = { broken: 0, failed: 1, blocked: 2, "not-run": 3, skipped: 4, passed: 5, unknown: 6 };
-function executionCaseStatus(execution: UnifiedExecution) {
-  return execution.caseResults
-    .filter((result) => result.testCaseId === item.value?.canonicalId)
-    .sort((left, right) => (executionSeverity[left.status] ?? 9) - (executionSeverity[right.status] ?? 9))[0]?.status ?? "unknown";
+function caseResultsForExecution(execution: ResolvedUnifiedExecution) {
+  return execution.caseResults.filter((result) => result.testCaseId === item.value?.canonicalId);
 }
-function executionTime(execution: UnifiedExecution) {
+function implementationLabel(implementationId?: string) {
+  if (!implementationId) return item.value?.type === "manual" ? "Manual" : "Case";
+  const implementation = item.value?.implementations.find(
+    (candidate) => candidate.technicalId === implementationId
+  );
+  if (!implementation) return implementationId;
+  const variantLabel = variant(implementation.variant);
+  return variantLabel === "n/a" ? implementation.kind : variantLabel;
+}
+function caseDurationSum(execution: ResolvedUnifiedExecution) {
+  const durations = caseResultsForExecution(execution)
+    .map((result) => result.durationMs)
+    .filter((duration): duration is number => duration !== undefined);
+  return durations.length ? durations.reduce((sum, duration) => sum + duration, 0) : undefined;
+}
+function executionTime(execution: ResolvedUnifiedExecution) {
   if (execution.completedAt) return formatDate(execution.completedAt);
   if (execution.startedAt) return formatDate(execution.startedAt);
   return execution.reportedAt ? `Report generated ${formatDate(execution.reportedAt)}` : "Unknown";

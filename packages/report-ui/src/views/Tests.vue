@@ -68,7 +68,7 @@
               <span v-else class="text-medium-emphasis">Insufficient history · {{ item.stability.sampleSize }} execution{{ item.stability.sampleSize === 1 ? '' : 's' }}</span>
               <v-chip v-if="item.stability.flaky" size="x-small" color="warning" class="ml-1" label>flaky {{ item.stability.flaky }}</v-chip>
             </td>
-            <td class="mono">{{ formatDuration(item.duration?.latestMs) }}<small v-if="item.duration" class="duration-source">{{ item.duration.source }}</small></td>
+            <td class="mono">{{ item.duration?.latestMs !== undefined ? formatDuration(item.duration.latestMs) : item.duration ? "Latest not available" : "Not recorded" }}<small v-if="item.duration" class="duration-source">{{ item.duration.source }}</small></td>
             <td>
               <div class="chip-row">
                 <router-link v-for="key in item.requirements.slice(0, 2)" :key="key" :to="requirementRoute(key)" class="trace-link mono">{{ key }}</router-link>

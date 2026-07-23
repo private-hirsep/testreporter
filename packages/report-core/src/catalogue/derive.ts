@@ -8,6 +8,7 @@ import type {
 } from "../schema/report.js";
 import type { ManualCase, ManualExecution, ManualStatus } from "../schema/manual.js";
 import { stableId } from "../utils/hash.js";
+import { analyzeCanonicalIdentityGroup } from "./identity.js";
 
 export const CatalogueResultStatusSchema = z.enum([
   "broken",
@@ -207,16 +208,6 @@ function round(value: number): number {
   return Math.round(value * 100) / 100;
 }
 
-function normalizeLogicalTitle(title: string, canonicalId: string): string {
-  return title
-    .split(canonicalId)
-    .join(" ")
-    .replace(/\[\s*\]/g, " ")
-    .replace(/\s+/g, " ")
-    .trim()
-    .toLocaleLowerCase();
-}
-
 function manualStatus(status: ManualStatus): CatalogueResultStatus {
   return status;
 }
@@ -237,9 +228,10 @@ type Candidate = {
     durationMs?: number;
     flaky?: boolean;
     executionId?: string;
+    implementationId: string;
   }>;
   evidence: string[];
-  logicalTitle: string;
+  compatibilityTitle: string;
 };
 
 export type CatalogueInput = {
@@ -252,6 +244,33 @@ export type CatalogueInput = {
 
 export function deriveTestCaseCatalogue(input: CatalogueInput): TestCaseCatalogueEntry[] {
   const groups = new Map<string, Candidate[]>();
+  const executions = deriveUnifiedExecutions(input);
+  const executionSamplesByCase = new Map<
+    string,
+    Array<{ status: CatalogueResultStatus; flaky: boolean }>
+  >();
+  for (const execution of executions) {
+    const resultsByCase = new Map<string, UnifiedExecution["caseResults"]>();
+    for (const result of execution.caseResults) {
+      const group = resultsByCase.get(result.testCaseId);
+      if (group) group.push(result);
+      else resultsByCase.set(result.testCaseId, [result]);
+    }
+    for (const [testCaseId, results] of resultsByCase) {
+      const status = [...results].sort(
+        (left, right) =>
+          severity[left.status] - severity[right.status] ||
+          (left.implementationId ?? "").localeCompare(right.implementationId ?? "")
+      )[0]!.status;
+      const group = executionSamplesByCase.get(testCaseId);
+      const sample = {
+        status,
+        flaky: status === "passed" && results.some((result) => (result.attempt ?? 0) > 0)
+      };
+      if (group) group.push(sample);
+      else executionSamplesByCase.set(testCaseId, [sample]);
+    }
+  }
   const push = (canonicalId: string, candidate: Candidate) => {
     const group = groups.get(canonicalId);
     if (group) group.push(candidate);
@@ -284,9 +303,19 @@ export function deriveTestCaseCatalogue(input: CatalogueInput): TestCaseCatalogu
       identitySource: test.identity?.source ?? "generated",
       identityStable: test.identity?.stable ?? false,
       ...(test.definitionHistory ? { history: test.definitionHistory } : {}),
-      samples: [{ ...latestResult, flaky: test.retries > 0 && test.status === "passed" }],
+      samples: [
+        {
+          status: latestResult.status,
+          ...(latestResult.executedAt ? { at: latestResult.executedAt } : {}),
+          ...(latestResult.durationMs !== undefined
+            ? { durationMs: latestResult.durationMs }
+            : {}),
+          flaky: test.retries > 0 && test.status === "passed",
+          implementationId: test.identity?.technicalId ?? test.id
+        }
+      ],
       evidence: (test.attachments ?? []).map((item) => item.path),
-      logicalTitle: normalizeLogicalTitle(test.name, canonicalId)
+      compatibilityTitle: test.name
     });
   }
 
@@ -310,7 +339,8 @@ export function deriveTestCaseCatalogue(input: CatalogueInput): TestCaseCatalogu
     const samples = (resultsByCase.get(manualCase.id) ?? []).map(({ execution, result }) => ({
       status: manualStatus(result.status),
       ...(execution.completedAt ? { at: execution.completedAt } : {}),
-      executionId: execution.executionId
+      executionId: execution.executionId,
+      implementationId: `manual:${manualCase.id}`
     }));
     const latest = samples.at(-1);
     const active = manualCase.status === "approved";
@@ -345,7 +375,7 @@ export function deriveTestCaseCatalogue(input: CatalogueInput): TestCaseCatalogu
         ...result.evidence,
         ...result.steps.flatMap((step) => step.evidence)
       ]),
-      logicalTitle: normalizeLogicalTitle(manualCase.title, manualCase.id)
+      compatibilityTitle: manualCase.title
     });
   }
 
@@ -373,13 +403,13 @@ export function deriveTestCaseCatalogue(input: CatalogueInput): TestCaseCatalogu
             left.status.localeCompare(right.status) ||
             (left.executionId ?? "").localeCompare(right.executionId ?? "")
         )[0];
-      const allSamples = candidates.flatMap((candidate) => candidate.samples);
-      const hasAvailableHistory = candidates.some((candidate) => candidate.samples.length >= 2);
-      const passed = allSamples.filter((sample) => sample.status === "passed").length;
-      const failed = allSamples.filter((sample) =>
+      const stabilitySamples = executionSamplesByCase.get(canonicalId) ?? [];
+      const hasAvailableHistory = stabilitySamples.length >= 2;
+      const passed = stabilitySamples.filter((sample) => sample.status === "passed").length;
+      const failed = stabilitySamples.filter((sample) =>
         ["failed", "broken", "blocked"].includes(sample.status)
       ).length;
-      const flaky = allSamples.filter((sample) => sample.flaky).length;
+      const flaky = stabilitySamples.filter((sample) => sample.flaky).length;
       const durations = candidates.flatMap((candidate) =>
         candidate.samples
           .map((sample) => sample.durationMs)
@@ -424,7 +454,15 @@ export function deriveTestCaseCatalogue(input: CatalogueInput): TestCaseCatalogu
           : identitySources.includes("mapping")
             ? "mapping"
             : "generated";
-      const conflict = new Set(candidates.map((candidate) => candidate.logicalTitle)).size > 1;
+      const conflict = !analyzeCanonicalIdentityGroup(
+        canonicalId,
+        candidates.map((candidate) => ({
+          title: candidate.compatibilityTitle,
+          ...(candidate.implementation.variant
+            ? { variant: candidate.implementation.variant }
+            : {})
+        }))
+      ).compatible;
       const histories = candidates
         .map((candidate) => candidate.history)
         .filter((history): history is NonNullable<typeof history> => Boolean(history));
@@ -474,12 +512,12 @@ export function deriveTestCaseCatalogue(input: CatalogueInput): TestCaseCatalogu
           : {}),
         stability: {
           available: hasAvailableHistory,
-          sampleSize: allSamples.length,
+          sampleSize: stabilitySamples.length,
           passed,
           failed,
           flaky,
           ...(hasAvailableHistory
-            ? { passRate: round((passed / allSamples.length) * 100) }
+            ? { passRate: round((passed / stabilitySamples.length) * 100) }
             : {}),
           source: hasAvailableHistory ? "available-history" : "insufficient-data"
         },
@@ -487,10 +525,21 @@ export function deriveTestCaseCatalogue(input: CatalogueInput): TestCaseCatalogu
           ? {
               duration: {
                 sampleSize: durations.length,
-                latestMs: [...candidates]
-                  .flatMap((candidate) => candidate.samples)
-                  .sort((a, b) => validTime(b.at) - validTime(a.at))
-                  .find((sample) => validDuration(sample.durationMs))?.durationMs,
+                ...(() => {
+                  const latest = [...candidates]
+                    .flatMap((candidate) => candidate.samples)
+                    .filter(
+                      (sample) =>
+                        validDuration(sample.durationMs) &&
+                        Number.isFinite(validTime(sample.at))
+                    )
+                    .sort(
+                      (a, b) =>
+                        validTime(b.at) - validTime(a.at) ||
+                        a.implementationId.localeCompare(b.implementationId)
+                    )[0];
+                  return latest ? { latestMs: latest.durationMs } : {};
+                })(),
                 averageMs: round(durations.reduce((sum, value) => sum + value, 0) / durations.length),
                 ...(median !== undefined ? { medianMs: round(median) } : {}),
                 minMs: sortedDurations[0],

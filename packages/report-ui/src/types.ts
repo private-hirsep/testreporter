@@ -186,6 +186,8 @@ export type Manifest = {
     generated: number;
     duplicateCanonicalIds: string[];
     duplicateExplicitIds: string[];
+    multiImplementationCanonicalIds?: string[];
+    conflictingCanonicalIds?: string[];
     malformedExplicitIds: number;
     ambiguousMappings: number;
   };
@@ -341,6 +343,7 @@ export type UnifiedExecution = {
   testedBuild?: string;
   notes?: string[];
   sourceReport?: string;
+  caseResultsAvailable?: boolean;
 };
 
 export type RequirementCoverage = {

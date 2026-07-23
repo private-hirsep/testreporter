@@ -62,7 +62,7 @@ describe("diagnostics grouping", () => {
     });
     const issues = identityIssues(dirty);
     expect(issues.map((issue) => issue.label)).toEqual([
-      "Duplicate canonical IDs",
+      "Conflicting canonical IDs",
       "Malformed explicit metadata"
     ]);
   });

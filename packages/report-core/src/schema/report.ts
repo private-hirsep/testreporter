@@ -249,6 +249,8 @@ export const IdentityDiagnosticsSchema = z.object({
   generated: z.number().int().nonnegative(),
   duplicateCanonicalIds: z.array(z.string()).default([]),
   duplicateExplicitIds: z.array(z.string()).default([]),
+  multiImplementationCanonicalIds: z.array(z.string()).default([]),
+  conflictingCanonicalIds: z.array(z.string()).default([]),
   malformedExplicitIds: z.number().int().nonnegative().default(0),
   ambiguousMappings: z.number().int().nonnegative().default(0)
 });
@@ -278,6 +280,8 @@ export const NormalizedReportSchema = z.object({
     generated: 0,
     duplicateCanonicalIds: [],
     duplicateExplicitIds: [],
+    multiImplementationCanonicalIds: [],
+    conflictingCanonicalIds: [],
     malformedExplicitIds: 0,
     ambiguousMappings: 0
   }),

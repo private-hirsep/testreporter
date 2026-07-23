@@ -20,7 +20,8 @@
       </dl></section>
     </div>
     <section class="portal-card detail-section mt-4"><h2>Test cases involved</h2>
-      <v-table density="compact"><thead><tr><th scope="col">ID</th><th scope="col">Title</th><th scope="col">Result</th></tr></thead><tbody>
+      <v-alert v-if="!execution.caseResultsAvailable" type="info" variant="tonal" class="mb-3">Execution-specific case results are unavailable in this older report.</v-alert>
+      <v-table v-else density="compact"><thead><tr><th scope="col">ID</th><th scope="col">Title</th><th scope="col">Result</th></tr></thead><tbody>
         <tr v-for="(result, index) in execution.caseResults" :key="`${result.testCaseId}-${result.implementationId ?? index}`">
           <td><router-link :to="testCaseRoute(result.testCaseId)" class="mono">{{ result.testCaseId }}</router-link><div v-if="result.implementationId" class="mono text-caption">{{ result.implementationId }}</div></td>
           <td>{{ caseById.get(result.testCaseId)?.title ?? "Case unavailable in this report" }}</td>

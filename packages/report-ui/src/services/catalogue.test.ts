@@ -21,7 +21,7 @@ describe("catalogue compatibility", () => {
       title: "Legacy case",
       type: "automated",
       identity: { stable: false, conflict: false },
-      stability: { available: false, sampleSize: 1 }
+      stability: { available: false, sampleSize: 0 }
     });
   });
 
@@ -44,6 +44,10 @@ describe("catalogue compatibility", () => {
     } as unknown as Manifest;
     expect(catalogueFor(manifest, [])).toBe(catalogue);
     expect(executionsFor(manifest)).toHaveLength(1);
+    expect(executionsFor(manifest)[0]).toMatchObject({
+      caseResultsAvailable: false,
+      caseResults: [{ testCaseId: "technical/id", status: "unknown" }]
+    });
   });
 
   it("builds route locations without embedding raw IDs in selectors", () => {

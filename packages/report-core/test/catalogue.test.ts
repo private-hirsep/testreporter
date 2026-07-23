@@ -260,6 +260,115 @@ describe("logical test case catalogue", () => {
     })[0]!;
     expect(durations.stability.available).toBe(false);
     expect(durations.duration).toMatchObject({ sampleSize: 3, averageMs: 20, medianMs: 20, minMs: 10, maxMs: 30 });
+    expect(durations.duration?.latestMs).toBeUndefined();
+  });
+
+  it("counts execution-level stability samples instead of implementation variants", () => {
+    const automatedVariants = [
+      automated("STABLE-1", "chromium", "passed", {
+        variant: { browser: "chromium" },
+        executedAt: "2026-07-23T09:00:00.000Z"
+      }),
+      automated("STABLE-1", "firefox", "failed", {
+        variant: { browser: "firefox" },
+        executedAt: "2026-07-23T09:00:00.000Z"
+      })
+    ];
+    const automatedOnly = deriveTestCaseCatalogue({
+      tests: automatedVariants,
+      manualCases: [],
+      manualExecutions: [],
+      metadata
+    })[0]!;
+    expect(automatedOnly.stability).toMatchObject({
+      available: false,
+      sampleSize: 1,
+      passed: 0,
+      failed: 1,
+      flaky: 0
+    });
+
+    const hybrid = deriveTestCaseCatalogue({
+      tests: automatedVariants.map((test) => ({
+        ...test,
+        identity: { ...test.identity!, canonicalId: "HYBRID-STABILITY" },
+        name: "HYBRID-STABILITY manual verification"
+      })),
+      manualCases: [manualCase("HYBRID-STABILITY")],
+      manualExecutions: [
+        manualExecution("manual-one", "HYBRID-STABILITY", "passed", "2026-07-22T10:00:00.000Z"),
+        manualExecution("manual-two", "HYBRID-STABILITY", "passed", "2026-07-23T10:00:00.000Z")
+      ],
+      metadata
+    })[0]!;
+    expect(hybrid.stability).toMatchObject({
+      available: true,
+      sampleSize: 3,
+      passed: 2,
+      failed: 1,
+      passRate: 66.67
+    });
+    expect(
+      deriveTestCaseCatalogue({
+        tests: [...automatedVariants].reverse(),
+        manualCases: [],
+        manualExecutions: [],
+        metadata
+      })[0]!.stability
+    ).toEqual(automatedOnly.stability);
+  });
+
+  it("selects latest duration deterministically and omits latest without reliable time", () => {
+    const input = [
+      automated("DURATION-ORDER", "b", "passed", {
+        durationMs: 20,
+        executedAt: "2026-07-23T10:00:00.000Z"
+      }),
+      automated("DURATION-ORDER", "a", "passed", {
+        durationMs: 10,
+        executedAt: "2026-07-23T10:00:00.000Z"
+      }),
+      automated("DURATION-ORDER", "newest", "passed", {
+        durationMs: 30,
+        executedAt: "2026-07-23T11:00:00.000Z"
+      }),
+      { ...automated("DURATION-ORDER", "invalid", "passed"), durationMs: Number.NaN },
+      { ...automated("DURATION-ORDER", "negative", "passed"), durationMs: -1 }
+    ];
+    const forward = deriveTestCaseCatalogue({
+      tests: input,
+      manualCases: [],
+      manualExecutions: [],
+      metadata
+    })[0]!.duration;
+    const reversed = deriveTestCaseCatalogue({
+      tests: [...input].reverse(),
+      manualCases: [],
+      manualExecutions: [],
+      metadata
+    })[0]!.duration;
+    expect(forward).toEqual(reversed);
+    expect(forward).toMatchObject({ sampleSize: 3, latestMs: 30, medianMs: 20 });
+
+    const equalTimestamp = deriveTestCaseCatalogue({
+      tests: input.slice(0, 2),
+      manualCases: [],
+      manualExecutions: [],
+      metadata
+    })[0]!.duration;
+    expect(equalTimestamp?.latestMs).toBe(10);
+
+    const missingTimestamp = deriveTestCaseCatalogue({
+      tests: [
+        automated("NO-TIME", "b", "passed", { durationMs: 20 }),
+        automated("NO-TIME", "a", "passed", { durationMs: 10 })
+      ],
+      manualCases: [],
+      manualExecutions: [],
+      metadata
+    })[0]!.duration;
+    expect(missingTimestamp).toMatchObject({ sampleSize: 2, averageMs: 15 });
+    expect(missingTimestamp?.latestMs).toBeUndefined();
   });
 
   it("derives several thousand entries in a linear grouping pass", () => {

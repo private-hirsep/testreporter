@@ -42,10 +42,22 @@ test("browser variants and execution snapshots remain distinct", async ({ page }
   await page.getByRole("textbox", { name: "Search catalogue" }).fill("SHOP-TC-0043");
   await page.getByText("receipt is printable JIRA-302").first().click();
   await expect(page.getByText(/Conflicted canonical identity/)).toBeHidden();
+  await expect(page.getByText("Insufficient history · 1 execution(s)")).toBeVisible();
   await page.getByRole("tab", { name: "Implementations" }).click();
   await expect(page.getByRole("cell", { name: /browser: chromium/ })).toBeVisible();
   await expect(page.getByRole("cell", { name: /browser: firefox/ })).toBeVisible();
   await expect(page.getByRole("row").filter({ hasText: "automated" })).toHaveCount(2);
+  await page.getByRole("tab", { name: "Executions" }).click();
+  const automatedExecution = page.getByRole("row").filter({ hasText: "automated-" });
+  await expect(automatedExecution).toContainText("740 ms");
+  await expect(automatedExecution).toContainText("810 ms");
+  await expect(automatedExecution).toContainText("Summed case implementation time: 1.55 s");
+  await expect(automatedExecution).not.toContainText("summed test time");
+
+  await page.goto("/#/diagnostics");
+  const compatible = page.locator(".linked-list li").filter({ hasText: "SHOP-TC-0043" });
+  await expect(compatible).toContainText("Compatible multi-implementation IDs");
+  await expect(compatible).not.toContainText("Warning");
 
   await page.goto("/#/executions/demo-release-17");
   await expect(page.getByRole("row").filter({ hasText: "DEMO-MT-0012" })).toContainText("Failed");
@@ -94,4 +106,25 @@ test("older report fallback remains readable", async ({ page }) => {
   await expect(page.getByRole("heading", { name: "Test Cases" })).toBeVisible();
   await page.goto("/#/history");
   await expect(page.getByText(/older report does not contain unified execution summaries/)).toBeVisible();
+});
+
+test("older execution snapshots show an honest unavailable state", async ({ page }) => {
+  await page.route("**/data/manifest.json", async (route) => {
+    const response = await route.fetch();
+    const body = (await response.json()) as {
+      unifiedExecutions?: Array<Record<string, unknown>>;
+    };
+    for (const execution of body.unifiedExecutions ?? []) delete execution.caseResults;
+    await route.fulfill({ response, json: body });
+  });
+  await page.goto("/#/tests/SHOP-TC-0043");
+  await page.getByRole("tab", { name: "Executions" }).click();
+  await expect(
+    page.getByText("Execution-specific case results are unavailable in this older report.")
+  ).toBeVisible();
+  await expect(page.getByText("Summed case implementation time")).toBeHidden();
+  await page.goto("/#/executions/demo-release-17");
+  await expect(
+    page.getByText("Execution-specific case results are unavailable in this older report.")
+  ).toBeVisible();
 });

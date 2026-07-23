@@ -52,10 +52,10 @@ export function catalogueFor(manifest: Manifest | undefined, tests: TestCase[]):
     },
     stability: {
       available: false,
-      sampleSize: 1,
-      passed: test.status === "passed" ? 1 : 0,
-      failed: ["failed", "broken"].includes(test.status) ? 1 : 0,
-      flaky: test.retries > 0 && test.status === "passed" ? 1 : 0,
+      sampleSize: 0,
+      passed: 0,
+      failed: 0,
+      flaky: 0,
       source: "insufficient-data"
     },
     ...(test.executedAt ? { lastExecutedAt: test.executedAt } : {}),
@@ -63,7 +63,6 @@ export function catalogueFor(manifest: Manifest | undefined, tests: TestCase[]):
       ? {
           duration: {
             sampleSize: 1,
-            latestMs: test.durationMs,
             averageMs: test.durationMs,
             medianMs: test.durationMs,
             minMs: test.durationMs,
@@ -75,9 +74,15 @@ export function catalogueFor(manifest: Manifest | undefined, tests: TestCase[]):
   }));
 }
 
-export function executionsFor(manifest: Manifest | undefined): UnifiedExecution[] {
+export type ResolvedUnifiedExecution = UnifiedExecution & {
+  caseResults: NonNullable<UnifiedExecution["caseResults"]>;
+  caseResultsAvailable: boolean;
+};
+
+export function executionsFor(manifest: Manifest | undefined): ResolvedUnifiedExecution[] {
   return (manifest?.unifiedExecutions ?? []).map((execution) => ({
     ...execution,
+    caseResultsAvailable: execution.caseResults !== undefined,
     caseResults:
       execution.caseResults ??
       execution.testCaseIds.map((testCaseId) => ({

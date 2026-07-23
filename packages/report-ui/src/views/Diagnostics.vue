@@ -108,6 +108,8 @@ const diagnostics = computed(
       generated: props.tests.length,
       duplicateCanonicalIds: [],
       duplicateExplicitIds: [],
+      multiImplementationCanonicalIds: [],
+      conflictingCanonicalIds: [],
       malformedExplicitIds: 0,
       ambiguousMappings: 0
     }
