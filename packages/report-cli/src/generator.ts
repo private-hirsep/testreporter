@@ -995,24 +995,33 @@ export async function buildReport(options: GenerateOptions): Promise<NormalizedR
     .map((entry) => entry.canonicalId);
   const identityDiagnostics = {
     ...normalizedIdentityDiagnostics,
-    duplicateCanonicalIds: [
-      ...new Set([
-        ...normalizedIdentityDiagnostics.duplicateCanonicalIds,
-        ...catalogueConflicts
-      ])
-    ].sort(),
-    conflictingCanonicalIds: [
-      ...new Set([
-        ...normalizedIdentityDiagnostics.conflictingCanonicalIds,
-        ...catalogueConflicts
-      ])
-    ].sort(),
-    multiImplementationCanonicalIds: [
-      ...new Set([
-        ...normalizedIdentityDiagnostics.multiImplementationCanonicalIds,
-        ...compatibleMultiImplementations
-      ])
-    ].sort()
+    ...(() => {
+      const conflictingCanonicalIds = [
+        ...new Set([
+          ...normalizedIdentityDiagnostics.conflictingCanonicalIds,
+          ...catalogueConflicts
+        ])
+      ].sort();
+      const conflictingSet = new Set(conflictingCanonicalIds);
+      const multiImplementationCanonicalIds = [
+        ...new Set([
+          ...normalizedIdentityDiagnostics.multiImplementationCanonicalIds,
+          ...compatibleMultiImplementations
+        ])
+      ]
+        .filter((canonicalId) => !conflictingSet.has(canonicalId))
+        .sort();
+      return {
+        conflictingCanonicalIds,
+        multiImplementationCanonicalIds,
+        duplicateCanonicalIds: conflictingCanonicalIds
+      };
+    })(),
+    duplicateExplicitIds: normalizedIdentityDiagnostics.duplicateExplicitIds.filter(
+      (canonicalId) =>
+        catalogueConflicts.includes(canonicalId) ||
+        normalizedIdentityDiagnostics.conflictingCanonicalIds.includes(canonicalId)
+    )
   };
   const report = NormalizedReportSchema.parse({
     schemaVersion: "1.0",

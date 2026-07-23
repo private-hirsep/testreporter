@@ -285,6 +285,7 @@ export type TestCaseCatalogueEntry = {
     flaky: number;
     passRate?: number;
     source: "current-report" | "available-history" | "insufficient-data";
+    unavailableReason?: "identity-conflict";
   };
   duration?: {
     sampleSize: number;

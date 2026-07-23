@@ -243,6 +243,10 @@ describe("report generator", () => {
     expect(report.identityDiagnostics.duplicateCanonicalIds).not.toContain("SHOP-TC-0043");
     expect(report.identityDiagnostics.multiImplementationCanonicalIds).toContain("SHOP-TC-0043");
     expect(report.identityDiagnostics.conflictingCanonicalIds).toContain("SHOP-TC-0042");
+    expect(report.identityDiagnostics.duplicateCanonicalIds).toContain("SHOP-TC-0042");
+    expect(report.identityDiagnostics.multiImplementationCanonicalIds).not.toContain(
+      "SHOP-TC-0042"
+    );
     expect(report.unifiedExecutions?.filter((item) => item.type === "automated")).toHaveLength(1);
     expect(report.unifiedExecutions?.filter((item) => item.type === "manual").length).toBeGreaterThan(
       1

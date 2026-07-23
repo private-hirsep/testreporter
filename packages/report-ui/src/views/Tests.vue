@@ -64,9 +64,10 @@
             <td><StatusChip :status="item.latestResult?.status ?? 'not-run'" /></td>
             <td>{{ formatDate(item.lastExecutedAt) }}</td>
             <td>
-              <span v-if="item.stability.available">{{ item.stability.passRate }}% · {{ item.stability.sampleSize }} executions</span>
+              <span v-if="item.identity.conflict || item.stability.unavailableReason === 'identity-conflict'" class="text-medium-emphasis">Unavailable · identity conflict</span>
+              <span v-else-if="item.stability.available">{{ item.stability.passRate }}% · {{ item.stability.sampleSize }} executions</span>
               <span v-else class="text-medium-emphasis">Insufficient history · {{ item.stability.sampleSize }} execution{{ item.stability.sampleSize === 1 ? '' : 's' }}</span>
-              <v-chip v-if="item.stability.flaky" size="x-small" color="warning" class="ml-1" label>flaky {{ item.stability.flaky }}</v-chip>
+              <v-chip v-if="!item.identity.conflict && item.stability.flaky" size="x-small" color="warning" class="ml-1" label>flaky {{ item.stability.flaky }}</v-chip>
             </td>
             <td class="mono">{{ item.duration?.latestMs !== undefined ? formatDuration(item.duration.latestMs) : item.duration ? "Latest not available" : "Not recorded" }}<small v-if="item.duration" class="duration-source">{{ item.duration.source }}</small></td>
             <td>

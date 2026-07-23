@@ -102,7 +102,8 @@ export const TestCaseCatalogueEntrySchema = z.object({
     failed: z.number().int().nonnegative(),
     flaky: z.number().int().nonnegative(),
     passRate: z.number().min(0).max(100).optional(),
-    source: z.enum(["current-report", "available-history", "insufficient-data"])
+    source: z.enum(["current-report", "available-history", "insufficient-data"]),
+    unavailableReason: z.enum(["identity-conflict"]).optional()
   }),
   duration: z
     .object({
@@ -511,12 +512,13 @@ export function deriveTestCaseCatalogue(input: CatalogueInput): TestCaseCatalogu
           ? { lastExecutedAt: lastExecutedResult.executedAt }
           : {}),
         stability: {
-          available: hasAvailableHistory,
+          available: !conflict && hasAvailableHistory,
           sampleSize: stabilitySamples.length,
           passed,
           failed,
           flaky,
-          ...(hasAvailableHistory
+          ...(conflict ? { unavailableReason: "identity-conflict" as const } : {}),
+          ...(!conflict && hasAvailableHistory
             ? { passRate: round((passed / stabilitySamples.length) * 100) }
             : {}),
           source: hasAvailableHistory ? "available-history" : "insufficient-data"

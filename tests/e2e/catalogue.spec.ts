@@ -56,8 +56,17 @@ test("browser variants and execution snapshots remain distinct", async ({ page }
 
   await page.goto("/#/diagnostics");
   const compatible = page.locator(".linked-list li").filter({ hasText: "SHOP-TC-0043" });
-  await expect(compatible).toContainText("Compatible multi-implementation IDs");
+  await expect(compatible).toContainText("implementations");
   await expect(compatible).not.toContainText("Warning");
+  const conflict = page.locator(".linked-list li").filter({ hasText: "SHOP-TC-0042" });
+  await expect(conflict).toContainText("incompatible logical identities");
+  await expect(
+    page.getByRole("heading", { name: "Multiple compatible implementations" })
+      .locator("..")
+      .getByText("SHOP-TC-0042")
+  ).toBeHidden();
+  await conflict.getByRole("link", { name: "SHOP-TC-0042" }).click();
+  await expect(page.getByText(/Stability unavailable due to identity conflict/)).toBeVisible();
 
   await page.goto("/#/executions/demo-release-17");
   await expect(page.getByRole("row").filter({ hasText: "DEMO-MT-0012" })).toContainText("Failed");
@@ -108,22 +117,45 @@ test("older report fallback remains readable", async ({ page }) => {
   await expect(page.getByText(/older report does not contain unified execution summaries/)).toBeVisible();
 });
 
-test("older execution snapshots show an honest unavailable state", async ({ page }) => {
+test("mixed current and older execution snapshots remain visible", async ({ page }) => {
   await page.route("**/data/manifest.json", async (route) => {
     const response = await route.fetch();
     const body = (await response.json()) as {
       unifiedExecutions?: Array<Record<string, unknown>>;
     };
-    for (const execution of body.unifiedExecutions ?? []) delete execution.caseResults;
+    const current = body.unifiedExecutions?.find(
+      (execution) => execution.type === "automated"
+    );
+    if (current) {
+      const older = structuredClone(current);
+      older.id = "legacy-automated-execution";
+      older.reportedAt = "2026-07-01T10:00:00.000Z";
+      delete older.caseResults;
+      body.unifiedExecutions?.push(older);
+    }
     await route.fulfill({ response, json: body });
   });
   await page.goto("/#/tests/SHOP-TC-0043");
   await page.getByRole("tab", { name: "Executions" }).click();
   await expect(
-    page.getByText("Execution-specific case results are unavailable in this older report.")
+    page.getByText("Some older executions do not contain execution-specific case results.")
   ).toBeVisible();
-  await expect(page.getByText("Summed case implementation time")).toBeHidden();
-  await page.goto("/#/executions/demo-release-17");
+  const currentRow = page
+    .getByRole("row")
+    .filter({ has: page.getByRole("link", { name: /^automated-[a-f0-9]+$/ }) });
+  const olderRow = page.getByRole("row").filter({ hasText: "legacy-automated-execution" });
+  await expect(currentRow).toBeVisible();
+  await expect(currentRow).toContainText("Passed");
+  await expect(currentRow).toContainText("740 ms");
+  await expect(currentRow).toContainText("810 ms");
+  await expect(olderRow).toBeVisible();
+  await expect(olderRow).toContainText("Unavailable");
+  await expect(olderRow).toContainText(
+    "Execution-specific case results are unavailable in this older report."
+  );
+  await expect(olderRow).toContainText("Not recorded");
+  await expect(olderRow).not.toContainText("Passed");
+  await olderRow.getByRole("link", { name: "legacy-automated-execution" }).click();
   await expect(
     page.getByText("Execution-specific case results are unavailable in this older report.")
   ).toBeVisible();

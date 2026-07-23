@@ -165,6 +165,76 @@ describe("logical test case catalogue", () => {
       "chromium",
       "firefox"
     ]);
+    expect(entry.stability.unavailableReason).toBeUndefined();
+  });
+
+  it("keeps a compatible manual association hybrid and marks incompatible hybrids untrusted", () => {
+    const compatible = deriveTestCaseCatalogue({
+      tests: [
+        automated("HYBRID-COMPATIBLE", "chromium", "passed", {
+          name: "[HYBRID-COMPATIBLE] completes checkout",
+          variant: { browser: "chromium" }
+        }),
+        automated("HYBRID-COMPATIBLE", "firefox", "passed", {
+          name: "[HYBRID-COMPATIBLE] completes checkout",
+          variant: { browser: "firefox" }
+        })
+      ],
+      manualCases: [
+        ManualCaseSchema.parse({
+          ...manualCase("HYBRID-COMPATIBLE"),
+          title: "Completes checkout"
+        })
+      ],
+      manualExecutions: [],
+      metadata
+    })[0]!;
+    expect(compatible).toMatchObject({
+      type: "hybrid",
+      identity: { conflict: false },
+      stability: { available: false, sampleSize: 1 }
+    });
+
+    const input = {
+      tests: [
+        automated("HYBRID-CONFLICT", "chromium", "passed", {
+          name: "[HYBRID-CONFLICT] completes checkout",
+          variant: { browser: "chromium" }
+        }),
+        automated("HYBRID-CONFLICT", "firefox", "passed", {
+          name: "[HYBRID-CONFLICT] completes checkout",
+          variant: { browser: "firefox" }
+        })
+      ],
+      manualCases: [
+        ManualCaseSchema.parse({
+          ...manualCase("HYBRID-CONFLICT"),
+          title: "Deletes customer"
+        })
+      ],
+      manualExecutions: [
+        manualExecution("old", "HYBRID-CONFLICT", "passed", "2026-07-22T10:00:00.000Z"),
+        manualExecution("new", "HYBRID-CONFLICT", "failed", "2026-07-23T10:00:00.000Z")
+      ],
+      metadata
+    };
+    const conflicted = deriveTestCaseCatalogue(input)[0]!;
+    expect(conflicted).toMatchObject({
+      identity: { conflict: true },
+      stability: {
+        available: false,
+        sampleSize: 3,
+        unavailableReason: "identity-conflict"
+      }
+    });
+    expect(conflicted.stability.passRate).toBeUndefined();
+    expect(
+      deriveTestCaseCatalogue({
+        ...input,
+        tests: [...input.tests].reverse(),
+        manualExecutions: [...input.manualExecutions].reverse()
+      })[0]!.stability
+    ).toEqual(conflicted.stability);
   });
 
   it("calculates aggregate status independently from the newest execution timestamp", () => {
