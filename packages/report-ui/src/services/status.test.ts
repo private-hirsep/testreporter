@@ -13,7 +13,8 @@ describe("status semantics registry", () => {
     ["not-run", "Not run", "grey", "mdi-circle-outline"],
     ["skipped", "Skipped", "warning", "mdi-debug-step-over"],
     ["accepted-risk", "Accepted risk", "info", "mdi-scale-balance"],
-    ["unavailable", "Unavailable", "grey", "mdi-help-circle-outline"]
+    ["unavailable", "Unavailable", "grey", "mdi-help-circle-outline"],
+    ["unknown", "Unknown", "grey", "mdi-help-circle-outline"]
   ])("maps %s to a consistent label, color, and icon", (key, label, color, icon) => {
     const descriptor = resolveStatus(key);
     expect(descriptor.label).toBe(label);
@@ -26,6 +27,11 @@ describe("status semantics registry", () => {
     expect(resolveStatus("not_evaluated")).toEqual(resolveStatus("unavailable"));
     expect(resolveStatus("uncovered")).toEqual(resolveStatus("missing"));
     expect(resolveStatus("not_run")).toEqual(resolveStatus("not-run"));
+  });
+
+  it("keeps unknown distinct from unavailable", () => {
+    expect(resolveStatus("unknown").label).toBe("Unknown");
+    expect(resolveStatus("unavailable").label).toBe("Unavailable");
   });
 
   it("is case-insensitive and falls back safely for unknown values", () => {

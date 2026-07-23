@@ -166,8 +166,8 @@
         <v-table density="compact" class="data-table">
           <thead>
             <tr>
-              <th>Function</th>
-              <th>Location</th>
+              <th scope="col">Function</th>
+              <th scope="col">Location</th>
             </tr>
           </thead>
           <tbody>
@@ -180,7 +180,7 @@
       </template>
     </section>
     <section class="portal-card detail-section mt-4"><h2>Execution History</h2><p>This report records the current execution. Cross-run execution trends remain available under History.</p></section>
-    <section class="portal-card detail-section mt-4"><h2>Definition History</h2><p>Confidence: <strong>{{ test.definitionHistory?.confidence ?? 'unavailable' }}</strong><span v-if="test.definitionHistory?.sourcePath"> · {{ test.definitionHistory.sourcePath }}</span></p><v-table v-if="test.definitionHistory?.revisions.length" density="compact"><thead><tr><th>Date</th><th>Author</th><th>Commit</th><th>Message</th></tr></thead><tbody><tr v-for="item in test.definitionHistory.revisions" :key="item.hash"><td>{{ item.date }}</td><td>{{ item.author }}</td><td class="mono"><a v-if="item.url" :href="item.url" target="_blank" rel="noopener">{{ item.hash.slice(0,8) }}</a><span v-else>{{ item.hash.slice(0,8) }}</span></td><td>{{ item.message }}</td></tr></tbody></v-table><p v-else>Definition history was not collected or is unavailable.</p></section>
+    <section class="portal-card detail-section mt-4"><h2>Definition History</h2><p>Confidence: <strong>{{ test.definitionHistory?.confidence ?? 'unavailable' }}</strong><span v-if="test.definitionHistory?.sourcePath"> · {{ test.definitionHistory.sourcePath }}</span></p><v-table v-if="test.definitionHistory?.revisions.length" density="compact"><thead><tr><th scope="col">Date</th><th scope="col">Author</th><th scope="col">Commit</th><th scope="col">Message</th></tr></thead><tbody><tr v-for="item in test.definitionHistory.revisions" :key="item.hash"><td>{{ item.date }}</td><td>{{ item.author }}</td><td class="mono"><a v-if="item.url" :href="item.url" target="_blank" rel="noopener">{{ item.hash.slice(0,8) }}</a><span v-else>{{ item.hash.slice(0,8) }}</span></td><td>{{ item.message }}</td></tr></tbody></v-table><p v-else>Definition history was not collected or is unavailable.</p></section>
   </div>
   <v-alert v-else type="warning" variant="tonal"
     >Test case was not found in the loaded chunks.</v-alert

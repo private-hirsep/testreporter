@@ -141,9 +141,16 @@ register(
     tone: "neutral",
     description: "This report does not contain the required data"
   },
-  "not_evaluated",
-  "unknown"
+  "not_evaluated"
 );
+register({
+  key: "unknown",
+  label: "Unknown",
+  icon: "mdi-help-circle-outline",
+  color: "grey",
+  tone: "neutral",
+  description: "The status could not be determined from the source artifact"
+});
 register(
   {
     key: "informational",

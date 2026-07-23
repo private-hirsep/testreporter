@@ -109,8 +109,10 @@ test("navigation reaches every major section with GitHub Pages hash fallback", a
 test("legacy route paths keep working as aliases", async ({ page }) => {
   await page.goto("/#/downloads");
   await expect(page.getByRole("heading", { name: "Evidence" })).toBeVisible();
+  await expect(page).toHaveTitle("Evidence · Quality Report");
   await page.goto("/#/evidence");
   await expect(page.getByRole("heading", { name: "Evidence" })).toBeVisible();
+  await expect(page).toHaveTitle("Evidence · Quality Report");
   await page.goto("/#/executions");
   await expect(page.getByRole("heading", { name: "Executions", level: 1 })).toBeVisible();
   await page.goto("/#/history");
@@ -297,6 +299,39 @@ test("github pages fallback redirects clean paths to hash routes", async ({ page
   await page.goto("/tests");
   await expect(page).toHaveURL(/#\/tests$/);
   await expect(page.getByRole("heading", { name: "Test Cases" })).toBeVisible();
+});
+
+test("requirement deep links scroll to and focus the requirement row", async ({ page }) => {
+  await page.goto("/#/requirements#requirement-JIRA-999");
+  const row = page.locator("#requirement-JIRA-999");
+  await expect(row).toBeInViewport();
+  await expect(row).toBeFocused();
+  await page.goto("/#/tests");
+  await page.getByRole("link", { name: "JIRA-601", exact: true }).first().click();
+  await expect(page.locator("#requirement-JIRA-601")).toBeInViewport();
+});
+
+test("scope-only requirement chips are not rendered as dead links", async ({ page }) => {
+  await page.goto("/");
+  const gapChips = page.locator(".gap-chips .v-chip");
+  await expect(gapChips.first()).toContainText("DEMO-123");
+  expect(await page.locator(".gap-chips a").count()).toBe(0);
+  await page.goto("/#/readiness");
+  await expect(page.getByText("Uncovered:")).toBeVisible();
+  expect(
+    await page.locator(".portal-card", { hasText: "Scoped requirements" }).locator("a").count()
+  ).toBe(0);
+});
+
+test("skip link focuses main content without breaking the route", async ({ page }) => {
+  await page.goto("/");
+  await expect(page.getByRole("heading", { name: "Overview" })).toBeVisible();
+  await page.keyboard.press("Tab");
+  await expect(page.getByRole("link", { name: "Skip to content" })).toBeFocused();
+  await page.keyboard.press("Enter");
+  await expect(page).toHaveURL(/#\/$/);
+  expect(await page.evaluate(() => document.activeElement?.id)).toBe("main-content");
+  await expect(page.getByRole("heading", { name: "Overview" })).toBeVisible();
 });
 
 test("diagnostics groups warnings by category", async ({ page }) => {

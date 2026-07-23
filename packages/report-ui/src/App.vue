@@ -1,6 +1,8 @@
 <template>
   <v-app class="app-shell">
-    <a class="skip-link" href="#main-content">Skip to content</a>
+    <!-- Plain hash hrefs are interpreted as routes by the hash router, so the
+         skip link moves focus programmatically instead. -->
+    <a class="skip-link" href="#main-content" @click.prevent="focusMain">Skip to content</a>
     <AppNavigation :manifest="manifest" :model="drawer" @update:model-value="drawer = $event" />
     <v-app-bar v-if="!mdAndUp" flat border color="surface" density="compact">
       <v-btn
@@ -44,6 +46,10 @@ const error = ref("");
 const loading = ref(true);
 const drawer = ref(false);
 const { mdAndUp } = useDisplay();
+
+function focusMain() {
+  document.getElementById("main-content")?.focus();
+}
 
 onMounted(async () => {
   try {

@@ -229,6 +229,21 @@ export function requirementGaps(manifest: Manifest, limit = 6): string[] {
   return gaps.slice(0, limit);
 }
 
+/**
+ * Keys that actually have a row on the Requirements page. Scoped release
+ * requirements can reference keys outside the traceability set; linking those
+ * would produce anchors that do not exist.
+ */
+export function knownRequirementKeys(manifest: Manifest): Set<string> {
+  return new Set([...manifest.requirements.expected, ...manifest.requirements.extra]);
+}
+
+export function requirementLink(manifest: Manifest, key: string): string | undefined {
+  return knownRequirementKeys(manifest).has(key)
+    ? `/requirements#requirement-${key}`
+    : undefined;
+}
+
 export function securityBlockerCount(manifest: Manifest): number {
   return count(manifest.summary.security.critical) + count(manifest.summary.security.high);
 }

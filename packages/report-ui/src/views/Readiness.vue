@@ -191,7 +191,12 @@
             size="small"
             class="mr-1 mb-1 mono"
             label
-            :to="`/requirements#requirement-${key}`"
+            :to="scopedLink(key)"
+            :title="
+              scopedLink(key)
+                ? undefined
+                : 'This requirement is only referenced by the release scope and has no traceability row'
+            "
             >{{ key }}</v-chip
           >
         </p>
@@ -220,7 +225,7 @@ import MetadataList from "../components/MetadataList.vue";
 import PageHeader from "../components/PageHeader.vue";
 import SectionCard from "../components/SectionCard.vue";
 import StatusChip from "../components/StatusChip.vue";
-import { attentionItems, resolveTestIds } from "../services/overview";
+import { attentionItems, requirementLink, resolveTestIds } from "../services/overview";
 import type { Manifest, TestCase } from "../types";
 
 const props = defineProps<{
@@ -234,4 +239,8 @@ const sortedActions = computed(() =>
     (a, b) => (severityRank[a.severity] ?? 2) - (severityRank[b.severity] ?? 2)
   )
 );
+
+function scopedLink(key: string) {
+  return props.manifest ? requirementLink(props.manifest, key) : undefined;
+}
 </script>

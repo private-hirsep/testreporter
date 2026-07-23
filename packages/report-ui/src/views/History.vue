@@ -55,13 +55,13 @@
       <v-table density="compact" class="data-table">
         <thead>
           <tr>
-            <th>Generated</th>
-            <th>Quality gate</th>
-            <th>Tests</th>
-            <th>Failed</th>
-            <th>Coverage</th>
-            <th>Requirements</th>
-            <th>Critical / high findings</th>
+            <th scope="col">Generated</th>
+            <th scope="col">Quality gate</th>
+            <th scope="col">Tests</th>
+            <th scope="col">Failed</th>
+            <th scope="col">Coverage</th>
+            <th scope="col">Requirements</th>
+            <th scope="col">Critical / high findings</th>
           </tr>
         </thead>
         <tbody>

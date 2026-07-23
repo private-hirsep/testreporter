@@ -14,18 +14,17 @@
         {{ manifest?.metadata.repository ?? "Static quality workspace" }}
       </div>
     </div>
-    <nav aria-label="Report sections">
-      <v-list nav density="compact">
-        <v-list-item
-          v-for="item in navItems"
-          :key="item.to"
-          :prepend-icon="item.icon"
-          :title="item.title"
-          :to="item.to"
-          :exact="item.to === '/'"
-        />
-      </v-list>
-    </nav>
+    <!-- The drawer itself renders a <nav>; a nested nav would duplicate the landmark. -->
+    <v-list nav density="compact">
+      <v-list-item
+        v-for="item in navItems"
+        :key="item.to"
+        :prepend-icon="item.icon"
+        :title="item.title"
+        :to="item.to"
+        :exact="item.to === '/'"
+      />
+    </v-list>
   </v-navigation-drawer>
 </template>
 

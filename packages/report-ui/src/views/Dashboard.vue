@@ -118,7 +118,12 @@
             size="small"
             class="mono"
             label
-            :to="`/requirements#requirement-${key}`"
+            :to="gapLink(key)"
+            :title="
+              gapLink(key)
+                ? undefined
+                : 'This requirement is only referenced by the release scope and has no traceability row'
+            "
             >{{ key }}</v-chip
           >
           <span v-if="gapTotal > gaps.length" class="text-medium-emphasis">
@@ -228,6 +233,7 @@ import {
   buildSummaryCards,
   hasHistoricalRuns,
   requirementGaps,
+  requirementLink,
   securityBlockerCount,
   topFailingTests
 } from "../services/overview";
@@ -256,6 +262,10 @@ const totalFindings = computed(() =>
   Object.values(props.manifest?.summary.security ?? {}).reduce((sum, value) => sum + value, 0)
 );
 const hasHistory = computed(() => (props.manifest ? hasHistoricalRuns(props.manifest) : false));
+
+function gapLink(key: string) {
+  return props.manifest ? requirementLink(props.manifest, key) : undefined;
+}
 
 function checkActual(check: { actual: string | number; expected: string }) {
   if (typeof check.actual === "number" && check.expected.includes("%"))

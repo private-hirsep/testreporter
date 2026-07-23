@@ -43,7 +43,12 @@
     <v-table v-else density="compact" fixed-header height="650" class="data-table">
       <thead>
         <tr>
-          <th v-for="column in columns" :key="column.key" :aria-sort="ariaSort(column.key)">
+          <th
+            v-for="column in columns"
+            :key="column.key"
+            scope="col"
+            :aria-sort="ariaSort(column.key)"
+          >
             <button
               v-if="column.sortable"
               class="th-sort"

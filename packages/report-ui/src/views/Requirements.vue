@@ -54,18 +54,23 @@
     <v-table v-else density="compact" class="data-table">
       <thead>
         <tr>
-          <th>Requirement</th>
-          <th>Status</th>
-          <th>Evidence</th>
-          <th>Tests</th>
-          <th>Layers</th>
-          <th>Linked Tests</th>
-          <th />
+          <th scope="col">Requirement</th>
+          <th scope="col">Status</th>
+          <th scope="col">Evidence</th>
+          <th scope="col">Tests</th>
+          <th scope="col">Layers</th>
+          <th scope="col">Linked Tests</th>
+          <th scope="col"><span class="visually-hidden">Details</span></th>
         </tr>
       </thead>
       <tbody>
         <template v-for="key in filteredKeys" :key="key">
-          <tr :id="`requirement-${key}`" :class="{ 'failed-row': status(key) === 'missing' }">
+          <tr
+            :id="`requirement-${key}`"
+            tabindex="-1"
+            class="requirement-row"
+            :class="{ 'failed-row': status(key) === 'missing' }"
+          >
             <td class="mono">{{ key }}</td>
             <td><StatusChip :status="status(key)" /></td>
             <td>
@@ -140,11 +145,11 @@
               <v-table density="compact" class="list-table">
                 <thead>
                   <tr>
-                    <th>Test</th>
-                    <th>Status</th>
-                    <th>Layer</th>
-                    <th>Defects</th>
-                    <th>Duration</th>
+                    <th scope="col">Test</th>
+                    <th scope="col">Status</th>
+                    <th scope="col">Layer</th>
+                    <th scope="col">Defects</th>
+                    <th scope="col">Duration</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -183,7 +188,8 @@
 </template>
 
 <script setup lang="ts">
-import { computed, reactive, ref } from "vue";
+import { computed, nextTick, reactive, ref, watch } from "vue";
+import { useRoute } from "vue-router";
 import EmptyState from "../components/EmptyState.vue";
 import PageHeader from "../components/PageHeader.vue";
 import StatusChip from "../components/StatusChip.vue";
@@ -248,4 +254,26 @@ function toggle(key: string) {
   if (expanded.has(key)) expanded.delete(key);
   else expanded.add(key);
 }
+
+// Deep links like /requirements#requirement-KEY arrive before the manifest
+// has loaded, so the router cannot scroll to the row; do it here once the
+// data (and therefore the row) exists, clearing filters that would hide it.
+const route = useRoute();
+watch(
+  [() => route.hash, allKeys],
+  async ([hash]) => {
+    if (!hash?.startsWith("#requirement-")) return;
+    const key = decodeURIComponent(hash.slice("#requirement-".length));
+    if (!allKeys.value.includes(key)) return;
+    if (!filteredKeys.value.includes(key)) {
+      filter.value = "all";
+      search.value = "";
+    }
+    await nextTick();
+    const row = document.getElementById(`requirement-${key}`);
+    row?.scrollIntoView({ block: "center" });
+    row?.focus({ preventScroll: true });
+  },
+  { immediate: true }
+);
 </script>

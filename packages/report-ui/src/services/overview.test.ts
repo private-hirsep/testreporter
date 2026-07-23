@@ -4,7 +4,9 @@ import {
   attentionItems,
   buildSummaryCards,
   hasHistoricalRuns,
+  knownRequirementKeys,
   requirementGaps,
+  requirementLink,
   resolveTestIds,
   securityBlockerCount,
   topFailingTests
@@ -118,6 +120,13 @@ describe("overview attention and secondary panels", () => {
     expect(securityBlockerCount(manifest)).toBe(1);
     delete (manifest as Partial<Manifest>).readiness;
     expect(requirementGaps(manifest)).toEqual(["REQ-3"]);
+  });
+
+  it("only links requirements that have a traceability row", () => {
+    const manifest = makeManifest();
+    expect(knownRequirementKeys(manifest)).toEqual(new Set(["REQ-1", "REQ-2", "REQ-3", "REQ-9"]));
+    expect(requirementLink(manifest, "REQ-3")).toBe("/requirements#requirement-REQ-3");
+    expect(requirementLink(manifest, "SCOPE-ONLY-1")).toBeUndefined();
   });
 
   it("treats a single recorded run as having no history", () => {
