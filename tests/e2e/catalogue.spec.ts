@@ -1,5 +1,10 @@
 import { expect, test } from "@playwright/test";
 
+async function select(page: import("@playwright/test").Page, label: string, option: string) {
+  await page.getByRole("combobox", { name: label }).press("ArrowDown");
+  await page.getByRole("option", { name: option, exact: true }).click();
+}
+
 test("logical catalogue and unified execution workflow", async ({ page }) => {
   await page.goto("/#/tests");
   await page.getByRole("textbox", { name: "Search catalogue" }).fill("SHOP-TC-0042");
@@ -29,6 +34,51 @@ test("logical catalogue and unified execution workflow", async ({ page }) => {
   await expect(page.getByText("Example Tester")).toBeVisible();
   await page.getByRole("link", { name: "Open evidence" }).click();
   await expect(page.getByRole("heading", { name: "Evidence" })).toBeVisible();
+});
+
+test("browser variants and execution snapshots remain distinct", async ({ page }) => {
+  await page.goto("/#/tests");
+  await expect(page.getByRole("button", { name: "All 48" })).toBeVisible();
+  await page.getByRole("textbox", { name: "Search catalogue" }).fill("SHOP-TC-0043");
+  await page.getByText("receipt is printable JIRA-302").first().click();
+  await expect(page.getByText(/Conflicted canonical identity/)).toBeHidden();
+  await page.getByRole("tab", { name: "Implementations" }).click();
+  await expect(page.getByRole("cell", { name: /browser: chromium/ })).toBeVisible();
+  await expect(page.getByRole("cell", { name: /browser: firefox/ })).toBeVisible();
+  await expect(page.getByRole("row").filter({ hasText: "automated" })).toHaveCount(2);
+
+  await page.goto("/#/executions/demo-release-17");
+  await expect(page.getByRole("row").filter({ hasText: "DEMO-MT-0012" })).toContainText("Failed");
+  await page.goto("/#/executions/demo-release-17-follow-up");
+  await expect(page.getByRole("row").filter({ hasText: "DEMO-MT-0012" })).toContainText("Passed");
+});
+
+test("logical filters and manual requirement traceability work together", async ({ page }) => {
+  await page.goto("/#/tests");
+  await select(page, "Requirement", "JIRA-301");
+  await select(page, "Tag", "critical");
+  await expect(page.getByText("buyer can complete checkout JIRA-301 JIRA-501")).toBeVisible();
+  await expect(page.getByText("receipt is printable JIRA-302")).toBeHidden();
+  await page.getByRole("button", { name: "Reset filters" }).click();
+  await page.getByRole("columnheader", { name: /Status/ }).getByRole("button").click();
+  await expect(page.getByRole("columnheader", { name: /Status/ })).toHaveAttribute(
+    "aria-sort",
+    "descending"
+  );
+
+  await page.goto("/#/requirements#requirement-DEMO-124");
+  const requirement = page.locator("#requirement-DEMO-124");
+  await expect(requirement).toBeFocused();
+  await requirement.getByRole("link", { name: /Verify offline warning/ }).click();
+  await expect(page.locator(".test-detail")).toContainText("DEMO-MT-0013");
+
+  await page.goto("/#/history");
+  await select(page, "Type", "manual");
+  await select(page, "Environment", "staging");
+  await expect(page.getByText("demo-release-17-follow-up")).toBeVisible();
+  await page.getByText("demo-release-17-follow-up").click();
+  await page.getByRole("link", { name: "Open evidence" }).click();
+  await expect(page).toHaveURL(/#\/downloads#evidence-artifacts$/);
 });
 
 test("older report fallback remains readable", async ({ page }) => {

@@ -36,15 +36,18 @@ export function catalogueFor(manifest: Manifest | undefined, tests: TestCase[]):
         requirements: test.requirements,
         defects: test.defects ?? [],
         tags: test.tags ?? [],
+        ...(test.variant ? { variant: test.variant } : {}),
         active: true,
         latestResult: {
           status: test.status as CatalogueStatus,
+          ...(test.executedAt ? { executedAt: test.executedAt } : {}),
           ...(test.durationMs !== undefined ? { durationMs: test.durationMs } : {})
         }
       }
     ],
     latestResult: {
       status: test.status as CatalogueStatus,
+      ...(test.executedAt ? { executedAt: test.executedAt } : {}),
       contributingStatuses: [test.status as CatalogueStatus]
     },
     stability: {
@@ -55,6 +58,7 @@ export function catalogueFor(manifest: Manifest | undefined, tests: TestCase[]):
       flaky: test.retries > 0 && test.status === "passed" ? 1 : 0,
       source: "insufficient-data"
     },
+    ...(test.executedAt ? { lastExecutedAt: test.executedAt } : {}),
     ...(test.durationMs !== undefined
       ? {
           duration: {
@@ -72,5 +76,13 @@ export function catalogueFor(manifest: Manifest | undefined, tests: TestCase[]):
 }
 
 export function executionsFor(manifest: Manifest | undefined): UnifiedExecution[] {
-  return manifest?.unifiedExecutions ?? [];
+  return (manifest?.unifiedExecutions ?? []).map((execution) => ({
+    ...execution,
+    caseResults:
+      execution.caseResults ??
+      execution.testCaseIds.map((testCaseId) => ({
+        testCaseId,
+        status: "unknown" as const
+      }))
+  }));
 }

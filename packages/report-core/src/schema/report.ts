@@ -44,6 +44,7 @@ export const NormalizedTestCaseSchema = z.object({
   layer: TestLayerSchema,
   status: TestStatusSchema,
   durationMs: z.number().nonnegative().optional(),
+  executedAt: z.string().datetime().optional(),
   retries: z.number().int().nonnegative().default(0),
   requirements: z.array(z.string()).default([]),
   identity: TestIdentitySchema.optional(),
@@ -51,6 +52,7 @@ export const NormalizedTestCaseSchema = z.object({
   tags: z.array(z.string()).default([]),
   links: z.array(TraceabilityLinkSchema).default([]),
   labels: z.record(z.array(z.string())).default({}),
+  variant: z.record(z.string()).optional(),
   error: z
     .object({
       message: z.string().optional(),

@@ -61,6 +61,22 @@ describe("core normalization and gates", () => {
     expect(result[0]?.id).toBe(testIdentity(result[0]!));
   });
 
+  it("isolates retries within identical execution variants", () => {
+    const chromium = { project: "desktop", browser: "chromium" };
+    const firefox = { project: "desktop", browser: "firefox" };
+    const result = deduplicateTests([
+      test({ status: "failed", variant: chromium, retries: 0 }),
+      test({ status: "passed", variant: chromium, retries: 1 }),
+      test({ status: "failed", variant: firefox, retries: 2 })
+    ]);
+    expect(result).toHaveLength(2);
+    expect(result.map((item) => [item.variant?.browser, item.status, item.retries])).toEqual([
+      ["chromium", "passed", 1],
+      ["firefox", "failed", 2]
+    ]);
+    expect(result[0]?.id).not.toBe(result[1]?.id);
+  });
+
   it("reports duplicate canonical IDs without deduplicating distinct technical tests", () => {
     const tests = [
       test({

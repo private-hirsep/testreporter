@@ -131,6 +131,7 @@ export const UnifiedExecutionSchema = z.object({
   workflowRun: z.string().optional(),
   startedAt: z.string().optional(),
   completedAt: z.string().optional(),
+  reportedAt: z.string().optional(),
   status: z.enum(["passed", "failed", "blocked", "incomplete", "unknown"]),
   counts: z.object({
     total: z.number().int().nonnegative(),
@@ -139,10 +140,27 @@ export const UnifiedExecutionSchema = z.object({
     broken: z.number().int().nonnegative().optional(),
     blocked: z.number().int().nonnegative().optional(),
     skipped: z.number().int().nonnegative().optional(),
-    notRun: z.number().int().nonnegative().optional()
+    notRun: z.number().int().nonnegative().optional(),
+    unknown: z.number().int().nonnegative().optional()
   }),
   durationMs: z.number().nonnegative().optional(),
+  testDurationSumMs: z.number().nonnegative().optional(),
   testCaseIds: z.array(z.string()),
+  caseResults: z
+    .array(
+      z.object({
+        testCaseId: z.string(),
+        implementationId: z.string().optional(),
+        status: CatalogueResultStatusSchema,
+        durationMs: z.number().nonnegative().optional(),
+        evidenceCount: z.number().int().nonnegative().optional(),
+        evidenceReferences: z.array(z.string()).optional(),
+        defects: z.array(z.string()).optional(),
+        notes: z.array(z.string()).optional(),
+        attempt: z.number().int().nonnegative().optional()
+      })
+    )
+    .default([]),
   requirementIds: z.array(z.string()),
   defectIds: z.array(z.string()),
   evidence: z
@@ -189,12 +207,14 @@ function round(value: number): number {
   return Math.round(value * 100) / 100;
 }
 
-function variantFrom(test: NormalizedTestCase): Record<string, string> | undefined {
-  const entries = Object.entries(test.labels)
-    .filter(([, values]) => values.length === 1)
-    .map(([key, values]) => [key, values[0]!] as const)
-    .sort(([a], [b]) => a.localeCompare(b));
-  return entries.length ? Object.fromEntries(entries) : undefined;
+function normalizeLogicalTitle(title: string, canonicalId: string): string {
+  return title
+    .split(canonicalId)
+    .join(" ")
+    .replace(/\[\s*\]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+    .toLocaleLowerCase();
 }
 
 function manualStatus(status: ManualStatus): CatalogueResultStatus {
@@ -219,6 +239,7 @@ type Candidate = {
     executionId?: string;
   }>;
   evidence: string[];
+  logicalTitle: string;
 };
 
 export type CatalogueInput = {
@@ -231,15 +252,17 @@ export type CatalogueInput = {
 
 export function deriveTestCaseCatalogue(input: CatalogueInput): TestCaseCatalogueEntry[] {
   const groups = new Map<string, Candidate[]>();
-  const push = (canonicalId: string, candidate: Candidate) =>
-    groups.set(canonicalId, [...(groups.get(canonicalId) ?? []), candidate]);
+  const push = (canonicalId: string, candidate: Candidate) => {
+    const group = groups.get(canonicalId);
+    if (group) group.push(candidate);
+    else groups.set(canonicalId, [candidate]);
+  };
 
   for (const test of input.tests) {
     const canonicalId = test.identity?.canonicalId ?? test.id;
-    const executedAt = input.metadata.generatedAt;
     const latestResult = {
       status: automatedStatus(test.status),
-      ...(executedAt ? { executedAt } : {}),
+      ...(test.executedAt ? { executedAt: test.executedAt } : {}),
       ...(validDuration(test.durationMs) ? { durationMs: test.durationMs } : {})
     };
     push(canonicalId, {
@@ -251,7 +274,7 @@ export function deriveTestCaseCatalogue(input: CatalogueInput): TestCaseCatalogu
         layer: test.layer,
         ...((test.file || test.line) ? { source: { ...(test.file ? { file: test.file } : {}), ...(test.line ? { line: test.line } : {}) } } : {}),
         ...(test.suite ? { suitePath: test.suite.split(/(?:\s*>\s*|\/)/).filter(Boolean) } : {}),
-        ...(variantFrom(test) ? { variant: variantFrom(test) } : {}),
+        ...(test.variant && Object.keys(test.variant).length ? { variant: test.variant } : {}),
         requirements: sortedUnique(test.requirements),
         defects: sortedUnique(test.defects),
         tags: sortedUnique(test.tags),
@@ -262,7 +285,8 @@ export function deriveTestCaseCatalogue(input: CatalogueInput): TestCaseCatalogu
       identityStable: test.identity?.stable ?? false,
       ...(test.definitionHistory ? { history: test.definitionHistory } : {}),
       samples: [{ ...latestResult, flaky: test.retries > 0 && test.status === "passed" }],
-      evidence: (test.attachments ?? []).map((item) => item.path)
+      evidence: (test.attachments ?? []).map((item) => item.path),
+      logicalTitle: normalizeLogicalTitle(test.name, canonicalId)
     });
   }
 
@@ -276,7 +300,11 @@ export function deriveTestCaseCatalogue(input: CatalogueInput): TestCaseCatalogu
   const resultsByCase = new Map<string, Array<{ execution: ManualExecution; result: ManualExecution["cases"][number] }>>();
   for (const execution of completed)
     for (const result of execution.cases)
-      resultsByCase.set(result.caseId, [...(resultsByCase.get(result.caseId) ?? []), { execution, result }]);
+      {
+        const group = resultsByCase.get(result.caseId);
+        if (group) group.push({ execution, result });
+        else resultsByCase.set(result.caseId, [{ execution, result }]);
+      }
 
   for (const manualCase of input.manualCases) {
     const samples = (resultsByCase.get(manualCase.id) ?? []).map(({ execution, result }) => ({
@@ -316,11 +344,11 @@ export function deriveTestCaseCatalogue(input: CatalogueInput): TestCaseCatalogu
       evidence: (resultsByCase.get(manualCase.id) ?? []).flatMap(({ result }) => [
         ...result.evidence,
         ...result.steps.flatMap((step) => step.evidence)
-      ])
+      ]),
+      logicalTitle: normalizeLogicalTitle(manualCase.title, manualCase.id)
     });
   }
 
-  const conflicts = new Set(input.identityDiagnostics?.duplicateExplicitIds ?? []);
   return [...groups]
     .map(([canonicalId, candidates]): TestCaseCatalogueEntry => {
       const implementations = candidates
@@ -337,6 +365,14 @@ export function deriveTestCaseCatalogue(input: CatalogueInput): TestCaseCatalogu
               (a.executionId ?? "").localeCompare(b.executionId ?? "")
           )[0]
         : undefined;
+      const lastExecutedResult = activeResults
+        .filter((result) => Number.isFinite(validTime(result.executedAt)))
+        .sort(
+          (left, right) =>
+            validTime(right.executedAt) - validTime(left.executedAt) ||
+            left.status.localeCompare(right.status) ||
+            (left.executionId ?? "").localeCompare(right.executionId ?? "")
+        )[0];
       const allSamples = candidates.flatMap((candidate) => candidate.samples);
       const hasAvailableHistory = candidates.some((candidate) => candidate.samples.length >= 2);
       const passed = allSamples.filter((sample) => sample.status === "passed").length;
@@ -388,7 +424,7 @@ export function deriveTestCaseCatalogue(input: CatalogueInput): TestCaseCatalogu
           : identitySources.includes("mapping")
             ? "mapping"
             : "generated";
-      const conflict = conflicts.has(canonicalId);
+      const conflict = new Set(candidates.map((candidate) => candidate.logicalTitle)).size > 1;
       const histories = candidates
         .map((candidate) => candidate.history)
         .filter((history): history is NonNullable<typeof history> => Boolean(history));
@@ -430,9 +466,11 @@ export function deriveTestCaseCatalogue(input: CatalogueInput): TestCaseCatalogu
               latestResult: {
                 ...latestResult,
                 contributingStatuses: activeResults.map((result) => result.status).sort()
-              },
-              ...(latestResult.executedAt ? { lastExecutedAt: latestResult.executedAt } : {})
+              }
             }
+          : {}),
+        ...(lastExecutedResult?.executedAt
+          ? { lastExecutedAt: lastExecutedResult.executedAt }
           : {}),
         stability: {
           available: hasAvailableHistory,
@@ -479,6 +517,39 @@ function executionDuration(startedAt: string | undefined, completedAt: string | 
   return Number.isFinite(start) && Number.isFinite(end) && end >= start ? end - start : undefined;
 }
 
+function automatedExecutionStatus(counts: {
+  total: number;
+  passed: number;
+  failed: number;
+  broken: number;
+  skipped: number;
+  unknown: number;
+}) {
+  if (counts.failed || counts.broken) return "failed" as const;
+  if (counts.unknown) return "unknown" as const;
+  if (counts.passed > 0 && counts.passed + counts.skipped === counts.total)
+    return "passed" as const;
+  if (counts.total > 0 && counts.skipped === counts.total) return "incomplete" as const;
+  return "unknown" as const;
+}
+
+function manualExecutionStatus(counts: {
+  total: number;
+  passed: number;
+  failed: number;
+  blocked: number;
+  skipped: number;
+  notRun: number;
+}) {
+  if (counts.failed) return "failed" as const;
+  if (counts.blocked) return "blocked" as const;
+  if (counts.passed > 0 && counts.passed + counts.skipped === counts.total)
+    return "passed" as const;
+  if (counts.total > 0 && counts.skipped + counts.notRun === counts.total)
+    return "incomplete" as const;
+  return "unknown" as const;
+}
+
 export function deriveUnifiedExecutions(input: CatalogueInput): UnifiedExecution[] {
   const executions: UnifiedExecution[] = [];
   if (input.tests.length) {
@@ -487,7 +558,8 @@ export function deriveUnifiedExecutions(input: CatalogueInput): UnifiedExecution
       passed: input.tests.filter((test) => test.status === "passed").length,
       failed: input.tests.filter((test) => test.status === "failed").length,
       broken: input.tests.filter((test) => test.status === "broken").length,
-      skipped: input.tests.filter((test) => test.status === "skipped").length
+      skipped: input.tests.filter((test) => test.status === "skipped").length,
+      unknown: input.tests.filter((test) => test.status === "unknown").length
     };
     const requirements = sortedUnique(input.tests.flatMap((test) => test.requirements));
     const defects = sortedUnique(input.tests.flatMap((test) => test.defects));
@@ -509,18 +581,38 @@ export function deriveUnifiedExecutions(input: CatalogueInput): UnifiedExecution
       ...(input.metadata.environment ? { environment: input.metadata.environment } : {}),
       ...(input.metadata.commitSha ? { commit: input.metadata.commitSha } : {}),
       ...(input.metadata.workflowRun ? { workflowRun: input.metadata.workflowRun } : {}),
-      completedAt: input.metadata.generatedAt,
-      status: counts.broken || counts.failed ? "failed" : counts.passed === counts.total ? "passed" : "unknown",
+      reportedAt: input.metadata.generatedAt,
+      status: automatedExecutionStatus(counts),
       counts,
       ...(() => {
         const durations = input.tests
           .map((test) => test.durationMs)
           .filter((value): value is number => validDuration(value));
         return durations.length
-          ? { durationMs: durations.reduce((sum, value) => sum + value, 0) }
+          ? { testDurationSumMs: durations.reduce((sum, value) => sum + value, 0) }
           : {};
       })(),
       testCaseIds: sortedUnique(input.tests.map((test) => test.identity?.canonicalId ?? test.id)),
+      caseResults: input.tests
+        .map((test) => {
+          const evidenceReferences = sortedUnique(test.attachments.map((item) => item.path));
+          return {
+            testCaseId: test.identity?.canonicalId ?? test.id,
+            implementationId: test.identity?.technicalId ?? test.id,
+            status: automatedStatus(test.status),
+            ...(validDuration(test.durationMs) ? { durationMs: test.durationMs } : {}),
+            evidenceCount: evidenceReferences.length,
+            ...(evidenceReferences.length ? { evidenceReferences } : {}),
+            ...(test.defects.length ? { defects: sortedUnique(test.defects) } : {}),
+            ...(test.error?.message ? { notes: [test.error.message] } : {}),
+            ...(test.retries > 0 ? { attempt: test.retries } : {})
+          };
+        })
+        .sort(
+          (left, right) =>
+            left.testCaseId.localeCompare(right.testCaseId) ||
+            left.implementationId.localeCompare(right.implementationId)
+        ),
       requirementIds: requirements,
       defectIds: defects,
       evidence: {
@@ -559,12 +651,32 @@ export function deriveUnifiedExecutions(input: CatalogueInput): UnifiedExecution
       ...(execution.sourceCommit ? { commit: execution.sourceCommit } : {}),
       startedAt: execution.startedAt,
       completedAt: execution.completedAt,
-      status: counts.failed ? "failed" : counts.blocked ? "blocked" : counts.passed === counts.total ? "passed" : "incomplete",
+      status: manualExecutionStatus(counts),
       counts,
       ...(executionDuration(execution.startedAt, execution.completedAt) !== undefined
         ? { durationMs: executionDuration(execution.startedAt, execution.completedAt) }
         : {}),
       testCaseIds: sortedUnique(execution.cases.map((item) => item.caseId)),
+      caseResults: execution.cases
+        .map((item) => {
+          const evidenceReferences = sortedUnique([
+            ...item.evidence,
+            ...item.steps.flatMap((step) => step.evidence)
+          ]);
+          const notes = [item.actualResult, item.notes, ...item.steps.flatMap((step) => [
+            step.actualResult,
+            step.notes
+          ])].filter((value): value is string => Boolean(value));
+          return {
+            testCaseId: item.caseId,
+            status: manualStatus(item.status),
+            evidenceCount: evidenceReferences.length,
+            ...(evidenceReferences.length ? { evidenceReferences } : {}),
+            ...(item.defects.length ? { defects: sortedUnique(item.defects) } : {}),
+            ...(notes.length ? { notes } : {})
+          };
+        })
+        .sort((left, right) => left.testCaseId.localeCompare(right.testCaseId)),
       requirementIds: sortedUnique(
         execution.cases.flatMap((item) => manualById.get(item.caseId)?.requirements ?? [])
       ),
@@ -581,7 +693,8 @@ export function deriveUnifiedExecutions(input: CatalogueInput): UnifiedExecution
   }
   return executions.sort(
     (a, b) =>
-      validTime(b.completedAt ?? b.startedAt) - validTime(a.completedAt ?? a.startedAt) ||
+      validTime(b.completedAt ?? b.startedAt ?? b.reportedAt) -
+        validTime(a.completedAt ?? a.startedAt ?? a.reportedAt) ||
       a.id.localeCompare(b.id)
   );
 }

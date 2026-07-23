@@ -71,7 +71,7 @@
         <section class="portal-card detail-section"><h2>Available executions</h2>
           <EmptyState v-if="!executions.length" message="No unified execution in this report contains this case." />
           <v-table v-else density="compact"><thead><tr><th scope="col">Execution</th><th scope="col">Type</th><th scope="col">Result</th><th scope="col">Release / environment</th><th scope="col">Time</th><th scope="col">Duration</th></tr></thead>
-            <tbody><tr v-for="execution in executions" :key="execution.id"><td><router-link :to="executionRoute(execution.id)" class="mono">{{ execution.id }}</router-link></td><td>{{ execution.type }}</td><td><StatusChip :status="execution.status" /></td><td>{{ execution.release ?? "n/a" }} / {{ execution.environment ?? "n/a" }}</td><td>{{ formatDate(execution.completedAt ?? execution.startedAt) }}</td><td>{{ formatDuration(execution.durationMs) }}</td></tr></tbody></v-table>
+            <tbody><tr v-for="execution in executions" :key="execution.id"><td><router-link :to="executionRoute(execution.id)" class="mono">{{ execution.id }}</router-link></td><td>{{ execution.type }}</td><td><StatusChip :status="executionCaseStatus(execution)" /></td><td>{{ execution.release ?? "n/a" }} / {{ execution.environment ?? "n/a" }}</td><td>{{ executionTime(execution) }}</td><td>{{ formatDuration(execution.durationMs) }}<span v-if="execution.testDurationSumMs"> · summed test time {{ formatDuration(execution.testDurationSumMs) }}</span></td></tr></tbody></v-table>
         </section>
       </v-window-item>
       <v-window-item value="traceability">
@@ -93,7 +93,7 @@
         <section class="portal-card detail-section"><h2>Evidence</h2>
           <p>{{ item.evidence?.attachmentCount ?? 0 }} evidence reference(s) belong to this case.</p>
           <ul v-if="item.evidence?.references.length"><li v-for="reference in item.evidence.references" :key="reference" class="mono">{{ reference }}</li></ul>
-          <v-btn :to="evidenceRoute(item.canonicalId)" variant="text" append-icon="mdi-arrow-right">Open Evidence</v-btn>
+          <v-btn :to="evidenceRoute()" variant="text" append-icon="mdi-arrow-right">Open Evidence</v-btn>
         </section>
       </v-window-item>
     </v-window>
@@ -110,7 +110,7 @@ import StatusChip from "../components/StatusChip.vue";
 import { formatDuration } from "../format";
 import { catalogueFor, executionsFor } from "../services/catalogue";
 import { evidenceRoute, executionRoute, requirementRoute } from "../services/routes";
-import type { Manifest, TestCase, TestCaseImplementation } from "../types";
+import type { Manifest, TestCase, TestCaseImplementation, UnifiedExecution } from "../types";
 const props = defineProps<{ manifest?: Manifest; tests: TestCase[] }>();
 const route = useRoute();
 const tab = ref("overview");
@@ -132,4 +132,15 @@ const stabilityLabel = computed(() => item.value?.stability.available ? `${item.
 function formatDate(value?: string) { return value && Number.isFinite(Date.parse(value)) ? new Date(value).toLocaleString() : "Not executed"; }
 function source(implementation: TestCaseImplementation) { return implementation.source?.file ? `${implementation.source.file}${implementation.source.line ? `:${implementation.source.line}` : ""}` : "n/a"; }
 function variant(value?: Record<string, string>) { return value ? Object.entries(value).map(([key, item]) => `${key}: ${item}`).join(", ") : "n/a"; }
+const executionSeverity: Record<string, number> = { broken: 0, failed: 1, blocked: 2, "not-run": 3, skipped: 4, passed: 5, unknown: 6 };
+function executionCaseStatus(execution: UnifiedExecution) {
+  return execution.caseResults
+    .filter((result) => result.testCaseId === item.value?.canonicalId)
+    .sort((left, right) => (executionSeverity[left.status] ?? 9) - (executionSeverity[right.status] ?? 9))[0]?.status ?? "unknown";
+}
+function executionTime(execution: UnifiedExecution) {
+  if (execution.completedAt) return formatDate(execution.completedAt);
+  if (execution.startedAt) return formatDate(execution.startedAt);
+  return execution.reportedAt ? `Report generated ${formatDate(execution.reportedAt)}` : "Unknown";
+}
 </script>

@@ -123,7 +123,11 @@ describe("logical test case catalogue", () => {
       identity: { canonicalId: "generated-1", technicalId: "generated-tech", source: "generated", stable: false }
     });
     const catalogue = deriveTestCaseCatalogue({
-      tests: [generated, automated("DUP-1", "one", "passed"), automated("DUP-1", "two", "failed")],
+      tests: [
+        generated,
+        automated("DUP-1", "one", "passed", { name: "creates account" }),
+        automated("DUP-1", "two", "failed", { name: "deletes invoice" })
+      ],
       manualCases: [],
       manualExecutions: [],
       metadata,
@@ -138,6 +142,65 @@ describe("logical test case catalogue", () => {
       identity: { conflict: true, stable: false },
       implementations: [{ technicalId: "one" }, { technicalId: "two" }]
     });
+  });
+
+  it("does not mark compatible browser variants as identity conflicts", () => {
+    const entry = deriveTestCaseCatalogue({
+      tests: [
+        automated("VARIANT-1", "chromium", "passed", {
+          name: "[VARIANT-1] completes checkout",
+          variant: { project: "desktop", browser: "chromium" }
+        }),
+        automated("VARIANT-1", "firefox", "failed", {
+          name: "[VARIANT-1] completes checkout",
+          variant: { project: "desktop", browser: "firefox" }
+        })
+      ],
+      manualCases: [],
+      manualExecutions: [],
+      metadata
+    })[0]!;
+    expect(entry.identity.conflict).toBe(false);
+    expect(entry.implementations.map((item) => item.variant?.browser)).toEqual([
+      "chromium",
+      "firefox"
+    ]);
+  });
+
+  it("calculates aggregate status independently from the newest execution timestamp", () => {
+    const olderFailure = deriveTestCaseCatalogue({
+      tests: [
+        automated("TIME-1", "firefox", "failed", {
+          executedAt: "2026-07-10T10:00:00.000Z",
+          variant: { browser: "firefox" }
+        }),
+        automated("TIME-1", "chromium", "passed", {
+          executedAt: "2026-07-23T10:00:00.000Z",
+          variant: { browser: "chromium" }
+        })
+      ],
+      manualCases: [],
+      manualExecutions: [],
+      metadata
+    })[0]!;
+    expect(olderFailure.latestResult?.status).toBe("failed");
+    expect(olderFailure.lastExecutedAt).toBe("2026-07-23T10:00:00.000Z");
+
+    const newerFailure = deriveTestCaseCatalogue({
+      tests: [
+        automated("TIME-2", "firefox", "failed", {
+          executedAt: "2026-07-23T10:00:00.000Z"
+        }),
+        automated("TIME-2", "chromium", "passed", {
+          executedAt: "2026-07-10T10:00:00.000Z"
+        })
+      ],
+      manualCases: [],
+      manualExecutions: [],
+      metadata
+    })[0]!;
+    expect(newerFailure.latestResult?.status).toBe("failed");
+    expect(newerFailure.lastExecutedAt).toBe("2026-07-23T10:00:00.000Z");
   });
 
   it("excludes draft and deprecated manual definitions from active results", () => {
@@ -201,11 +264,14 @@ describe("logical test case catalogue", () => {
 
   it("derives several thousand entries in a linear grouping pass", () => {
     const tests = Array.from({ length: 5000 }, (_, index) =>
-      automated(`PERF-${index}`, `technical-${index}`, "passed")
+      automated(`PERF-${Math.floor(index / 5)}`, `technical-${index}`, "passed", {
+        variant: { browser: `browser-${index % 5}` }
+      })
     );
     const start = performance.now();
     const catalogue = deriveTestCaseCatalogue({ tests, manualCases: [], manualExecutions: [], metadata });
-    expect(catalogue).toHaveLength(5000);
+    expect(catalogue).toHaveLength(1000);
+    expect(catalogue.every((item) => item.implementations.length === 5)).toBe(true);
     expect(performance.now() - start).toBeLessThan(5000);
   });
 });
@@ -225,11 +291,110 @@ describe("unified executions", () => {
     const executions = deriveUnifiedExecutions(input);
     expect(executions.map((item) => item.id)).toEqual(["run-42", "manual-new", "manual-old"]);
     expect(executions[0]).toMatchObject({
-      type: "automated", testCaseIds: ["AUTO-1"], requirementIds: ["REQ-A"], defectIds: ["BUG-A"]
+      type: "automated",
+      reportedAt: metadata.generatedAt,
+      testCaseIds: ["AUTO-1"],
+      requirementIds: ["REQ-A"],
+      defectIds: ["BUG-A"],
+      caseResults: [{ testCaseId: "AUTO-1", implementationId: "one", status: "passed" }]
     });
     expect(executions[1]).toMatchObject({
-      type: "manual", status: "failed", testCaseIds: ["MANUAL-1"], requirementIds: ["REQ-M"], defectIds: ["BUG-1"]
+      type: "manual",
+      status: "failed",
+      testCaseIds: ["MANUAL-1"],
+      requirementIds: ["REQ-M"],
+      defectIds: ["BUG-1"],
+      caseResults: [
+        {
+          testCaseId: "MANUAL-1",
+          status: "failed",
+          evidenceReferences: ["proof.png"],
+          defects: ["BUG-1"]
+        }
+      ]
     });
+  });
+
+  it("keeps execution snapshots independent from the catalogue latest result", () => {
+    const definitions = [manualCase("CASE-1")];
+    const manualExecutions = [
+      manualExecution("A", "CASE-1", "passed", "2026-07-22T10:00:00.000Z"),
+      manualExecution("B", "CASE-1", "failed", "2026-07-23T10:00:00.000Z")
+    ];
+    const input = { tests: [], manualCases: definitions, manualExecutions, metadata };
+    const executions = deriveUnifiedExecutions(input);
+    expect(executions.find((item) => item.id === "A")?.caseResults[0]?.status).toBe("passed");
+    expect(executions.find((item) => item.id === "B")?.caseResults[0]?.status).toBe("failed");
+    expect(deriveTestCaseCatalogue(input)[0]?.latestResult?.status).toBe("failed");
+  });
+
+  it("preserves manual snapshot notes, defects, and evidence references", () => {
+    const execution = ManualExecutionSchema.parse({
+      ...manualExecution("notes", "CASE-1", "failed", "2026-07-23T10:00:00.000Z"),
+      cases: [
+        {
+          caseId: "CASE-1",
+          status: "failed",
+          steps: [
+            {
+              index: 0,
+              status: "failed",
+              actualResult: "Step failed",
+              notes: "Step note",
+              evidence: ["step.png"]
+            }
+          ],
+          actualResult: "Case failed",
+          notes: "Case note",
+          defects: ["BUG-2"],
+          evidence: ["case.txt"]
+        }
+      ]
+    });
+    const result = deriveUnifiedExecutions({
+      tests: [],
+      manualCases: [manualCase("CASE-1")],
+      manualExecutions: [execution],
+      metadata
+    })[0]!.caseResults[0]!;
+    expect(result).toMatchObject({
+      status: "failed",
+      defects: ["BUG-2"],
+      evidenceReferences: ["case.txt", "step.png"],
+      notes: ["Case failed", "Case note", "Step failed", "Step note"]
+    });
+  });
+
+  it.each([
+    [["passed", "skipped"], "passed"],
+    [["skipped", "skipped"], "incomplete"],
+    [["passed", "failed", "skipped"], "failed"],
+    [["passed", "unknown"], "unknown"]
+  ] as const)("derives automated execution status for %j as %s", (statuses, expected) => {
+    const execution = deriveUnifiedExecutions({
+      tests: statuses.map((status, index) => automated(`CASE-${index}`, `tech-${index}`, status)),
+      manualCases: [],
+      manualExecutions: [],
+      metadata
+    })[0]!;
+    expect(execution.status).toBe(expected);
+  });
+
+  it("separates report time, summed test time, and wall-clock duration", () => {
+    const execution = deriveUnifiedExecutions({
+      tests: [
+        automated("A", "a", "passed", { durationMs: 100 }),
+        automated("B", "b", "skipped", { durationMs: 50 })
+      ],
+      manualCases: [],
+      manualExecutions: [],
+      metadata
+    })[0]!;
+    expect(execution.reportedAt).toBe(metadata.generatedAt);
+    expect(execution.completedAt).toBeUndefined();
+    expect(execution.startedAt).toBeUndefined();
+    expect(execution.durationMs).toBeUndefined();
+    expect(execution.testDurationSumMs).toBe(150);
   });
 
   it("generates a deterministic automated ID when run metadata has no run ID", () => {

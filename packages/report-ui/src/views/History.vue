@@ -12,6 +12,7 @@
       <v-select v-model="type" :items="['all','automated','manual']" label="Type" density="compact" hide-details />
       <v-select v-model="status" :items="statusOptions" label="Status" density="compact" hide-details />
       <v-select v-model="release" :items="releaseOptions" label="Release" density="compact" hide-details />
+      <v-select v-model="branch" :items="branchOptions" label="Branch" density="compact" hide-details />
       <v-select v-model="environment" :items="environmentOptions" label="Environment" density="compact" hide-details />
       <v-select v-model="failure" :items="['all','contains failures','no failures']" label="Failures" density="compact" hide-details />
       <v-select v-model="evidence" :items="['all','complete','incomplete']" label="Evidence" density="compact" hide-details />
@@ -25,7 +26,7 @@
         <td><v-chip size="small" variant="tonal" label>{{ execution.type }}</v-chip></td><td><StatusChip :status="execution.status" /></td>
         <td>{{ execution.release ?? "n/a" }} / {{ execution.branch ?? "n/a" }} / {{ execution.environment ?? "n/a" }}</td>
         <td class="mono cell-truncate" :title="execution.commit">{{ execution.commit?.slice(0, 12) ?? "n/a" }}</td>
-        <td>{{ formatDate(execution.completedAt ?? execution.startedAt) }}</td><td class="mono">{{ formatDuration(execution.durationMs) }}</td>
+        <td>{{ timeLabel(execution) }}</td><td class="mono"><span v-if="execution.durationMs">Wall clock {{ formatDuration(execution.durationMs) }}</span><span v-else-if="execution.testDurationSumMs">Summed test time {{ formatDuration(execution.testDurationSumMs) }}</span><span v-else>n/a</span></td>
         <td>{{ execution.counts.passed }} passed · {{ failed(execution) }} failed</td>
         <td>{{ execution.testCaseIds.length }} / {{ execution.requirementIds.length }}</td>
         <td>{{ execution.evidence?.complete ? "Complete" : "Incomplete" }} · {{ execution.evidence?.referenceCount ?? 0 }}</td>
@@ -40,25 +41,33 @@ import PageHeader from "../components/PageHeader.vue";
 import StatusChip from "../components/StatusChip.vue";
 import { formatDuration } from "../format";
 import { executionsFor } from "../services/catalogue";
+import {
+  executionFailureCount,
+  filterExecutions,
+  sortExecutions
+} from "../services/executionView";
 import { executionRoute } from "../services/routes";
 import type { Manifest, TestCase, UnifiedExecution } from "../types";
 const props = defineProps<{ manifest?: Manifest; tests: TestCase[] }>();
-const search = ref(""); const type = ref("all"); const status = ref("all"); const release = ref("all"); const environment = ref("all"); const failure = ref("all"); const evidence = ref("all"); const sort = ref("newest");
+const search = ref(""); const type = ref("all"); const status = ref("all"); const release = ref("all"); const branch = ref("all"); const environment = ref("all"); const failure = ref("all"); const evidence = ref("all"); const sort = ref("newest");
 const executions = computed(() => executionsFor(props.manifest));
 const options = (values: Array<string | undefined>) => ["all", ...new Set(values.filter((value): value is string => Boolean(value)).sort())];
 const statusOptions = ["all","passed","failed","blocked","incomplete","unknown"];
 const releaseOptions = computed(() => options(executions.value.map((item) => item.release)));
+const branchOptions = computed(() => options(executions.value.map((item) => item.branch)));
 const environmentOptions = computed(() => options(executions.value.map((item) => item.environment)));
 const sortOptions = [{title:"Newest first",value:"newest"},{title:"Oldest first",value:"oldest"},{title:"Status severity",value:"status"},{title:"Duration",value:"duration"},{title:"Failed count",value:"failed"}];
-const failed = (item: UnifiedExecution) => item.counts.failed + (item.counts.broken ?? 0) + (item.counts.blocked ?? 0);
-const severity: Record<string,number> = { failed:0, blocked:1, incomplete:2, unknown:3, passed:4 };
-const time = (item: UnifiedExecution) => Date.parse(item.completedAt ?? item.startedAt ?? "0") || 0;
-const filtered = computed(() => executions.value
-  .filter((item) => `${item.id} ${item.release ?? ""} ${item.branch ?? ""} ${item.environment ?? ""} ${item.commit ?? ""}`.toLowerCase().includes(search.value.toLowerCase()))
-  .filter((item) => type.value === "all" || item.type === type.value).filter((item) => status.value === "all" || item.status === status.value)
-  .filter((item) => release.value === "all" || item.release === release.value).filter((item) => environment.value === "all" || item.environment === environment.value)
-  .filter((item) => failure.value === "all" || (failure.value === "contains failures") === (failed(item) > 0))
-  .filter((item) => evidence.value === "all" || (evidence.value === "complete") === Boolean(item.evidence?.complete))
-  .sort((a,b) => sort.value === "oldest" ? time(a)-time(b) : sort.value === "status" ? (severity[a.status]??9)-(severity[b.status]??9) : sort.value === "duration" ? (b.durationMs??-1)-(a.durationMs??-1) : sort.value === "failed" ? failed(b)-failed(a) : time(b)-time(a) || a.id.localeCompare(b.id)));
+const failed = executionFailureCount;
+const filtered = computed(() => sortExecutions(filterExecutions(executions.value, {
+  search: search.value,
+  type: type.value,
+  status: status.value,
+  release: release.value,
+  branch: branch.value,
+  environment: environment.value,
+  failure: failure.value,
+  evidence: evidence.value
+}), sort.value));
 function formatDate(value?: string) { return value && Number.isFinite(Date.parse(value)) ? new Date(value).toLocaleString() : "Unknown"; }
+function timeLabel(execution: UnifiedExecution) { return execution.completedAt ? formatDate(execution.completedAt) : execution.startedAt ? formatDate(execution.startedAt) : execution.reportedAt ? `Report generated ${formatDate(execution.reportedAt)}` : "Unknown"; }
 </script>

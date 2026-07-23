@@ -61,10 +61,12 @@ export function buildTestCase(input: {
   layer: TestLayer;
   status: TestStatus;
   durationMs?: number | undefined;
+  executedAt?: string | undefined;
   retries?: number | undefined;
   message?: string | undefined;
   trace?: string | undefined;
   labels?: Record<string, string[]> | undefined;
+  variant?: Record<string, string> | undefined;
   attachments?: Array<{ name: string; path: string; contentType?: string | undefined }> | undefined;
   requirementPattern: RegExp;
   identityPattern?: RegExp | undefined;
@@ -86,7 +88,10 @@ export function buildTestCase(input: {
     input.suite,
     input.name,
     input.file,
-    input.line
+    input.line,
+    ...Object.entries(input.variant ?? {})
+      .sort(([left], [right]) => left.localeCompare(right))
+      .flat()
   ]);
   const file = safeDisplayPath(input.file);
   const aliases = input.annotationAliases ?? ["testCase", "test-case", "testCaseId", "case"];
@@ -122,6 +127,7 @@ export function buildTestCase(input: {
     layer: input.layer,
     status: input.status,
     ...(input.durationMs !== undefined ? { durationMs: input.durationMs } : {}),
+    ...(input.executedAt ? { executedAt: input.executedAt } : {}),
     retries: input.retries ?? 0,
     requirements,
     identity: { canonicalId, technicalId: id, source, stable: source !== "generated" },
@@ -129,6 +135,7 @@ export function buildTestCase(input: {
     tags,
     links: [],
     labels,
+    ...(input.variant && Object.keys(input.variant).length ? { variant: input.variant } : {}),
     ...(input.message || input.trace
       ? {
           error: {

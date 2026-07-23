@@ -10,21 +10,29 @@ Canonical ID is the only association key. Matching a requirement, title, tag, so
 - **manual** cases, with a Git-tracked manual definition only;
 - **hybrid** cases, where an automated identity and manual definition use the same canonical ID.
 
-Framework, layer, source, suite, and labels remain implementation metadata. Browser or project variants are shown only when the adapter supplied them. Existing retry normalization remains authoritative: retries already collapsed by the normalizer do not become implementations.
+Canonical identity and technical implementation identity serve different purposes. Canonical identity groups a logical case. Technical identity separates executable implementations using framework, layer, suite, title, source location, and explicit adapter-provided variant dimensions. Playwright currently supports project, browser, device, and operating-system/platform variant metadata when those values exist in its report. Requirement, defect, case-identity, tag, ownership, source, and arbitrary annotation labels are not variants.
 
-Conflicted explicit identities preserve every implementation and link to Diagnostics. They are marked unstable and do not claim reliable continuity. Display titles are selected deterministically: approved manual title, stable explicit automated title, newest implementation title, then lexical order.
+Retries are grouped only within an identical technical implementation identity. Explicit adapter attempt metadata takes precedence; otherwise repeated results may be inferred as retries only after the complete variant-aware identity matches. Chromium and Firefox, or desktop and mobile, therefore remain separate implementations and do not increase each other's retry count.
+
+Conflicted explicit identities preserve every implementation and link to Diagnostics. Compatible implementations with the same canonical ID and exact normalized logical title are not conflicts merely because their variants differ. Clearly different normalized logical titles are conflicts, including incompatible approved manual and automated titles. No fuzzy title similarity is used. Conflicts are marked unstable and do not claim reliable continuity. Display titles are selected deterministically: approved manual title, stable explicit automated title, newest implementation title, then lexical order.
 
 ## Current result, stability, and duration
 
-Each implementation selects its latest official available result first. Logical status then uses the most severe active implementation: broken, failed, blocked, not-run, skipped, passed, unknown. A pass cannot hide another implementation's active failure. Draft and deprecated manual definitions do not contribute an active result; only completed, CLI-validated imported manual executions are official.
+Each implementation selects its latest official available result first. Logical status then uses the most severe active implementation: broken, failed, blocked, not-run, skipped, passed, unknown. A pass cannot hide another implementation's active failure. Last executed is calculated independently as the newest valid timestamp across active implementations, so a newer pass updates the date without hiding an older active failure in another variant. Draft and deprecated manual definitions do not contribute an active result; only completed, CLI-validated imported manual executions are official.
 
 Stability uses only samples present in the generated report. One sample is reported as **Insufficient history**. A rate always includes its sample size. A passed normalized result with an explicit retry count may be labelled flaky, because its failed attempt and final pass are present in current adapter semantics. No trend is inferred.
 
-Invalid, negative, or missing durations are ignored. Automated durations are test-result durations. Manual execution wall-clock duration is shown on its execution, not mixed into per-case automated timings. Average and median use deterministic rounding and always show sample counts and measurement source.
+Invalid, negative, or missing durations are ignored. Automated per-test durations are summed and labelled **Summed test time**; concurrent test durations are not presented as wall-clock duration. `durationMs` is reserved for a genuine run-level wall-clock measurement. Manual execution wall-clock duration may be derived from reliable start and completion timestamps and is shown separately. Average and median use deterministic rounding and always show sample counts and measurement source.
 
 ## Unified executions
 
-The current automated report is one execution, never one per test. Its ID uses existing run/workflow metadata, or a deterministic technical ID derived from stable report metadata. Every completed, validated imported manual execution is a separate execution. Browser-local drafts, imported drafts, unknown cases, and results rejected by existing validation are excluded.
+The current automated report is one execution, never one per test. Its ID uses existing run/workflow metadata, or a deterministic technical ID derived from stable report metadata. Report `generatedAt` is retained as `reportedAt` and labelled **Report generated**; it is not test completion evidence and is not used to infer a start time. Run start, completion, and wall-clock duration remain unavailable unless genuine run-level metadata exists.
+
+Every unified execution contains case-result snapshots recorded for that execution. Automated snapshots retain the final normalized implementation ID, status, duration, and evidence references. Manual snapshots retain that execution's status, notes, defects, duration, and evidence. Execution details never substitute the catalogue's newer current result for an older execution's recorded result.
+
+Automated execution status is failed when any result failed or broke, unknown when any unsupported/unknown result exists, passed when at least one test passed and all others passed or skipped, and incomplete when all results are skipped or not run. Blocked is used only when the underlying status genuinely supplies it. Every completed, validated imported manual execution is a separate execution. Browser-local drafts, imported drafts, unknown cases, and results rejected by existing validation are excluded.
+
+Catalogue counts, quick filters, sorting, and filters operate on logical catalogue entries. Requirement navigation uses the catalogue's merged references, so automated-only, manual-only, and hybrid cases appear once even when several variants cover the same requirement. Large catalogues are filtered before pagination and render 50 entries by default, with 25, 50, and 100 entry options.
 
 The static routes are:
 
@@ -33,7 +41,7 @@ The static routes are:
 - `#/history` and the compatibility alias `#/executions`;
 - `#/executions/:executionId`;
 - `#/requirements#requirement-:encodedId`;
-- `#/downloads` and `#/evidence`.
+- `#/downloads#evidence-artifacts` and `#/evidence`.
 
 Route parameters use router encoding and centralized helpers. Requirements, cases, executions, and evidence link to one another. Older manifests without `testCaseCatalogue` or `unifiedExecutions` remain readable: automated cases receive a minimal presentation-only fallback and the executions page shows a focused compatibility message.
 

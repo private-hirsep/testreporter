@@ -24,6 +24,13 @@
           "results": [{ "status": "passed", "duration": 740, "retry": 0 }]
         },
         {
+          "title": "[SHOP-TC-0043] receipt is printable JIRA-302",
+          "projectName": "firefox-desktop",
+          "browserName": "firefox",
+          "location": { "file": "tests/e2e/checkout.spec.ts", "line": 45 },
+          "results": [{ "status": "passed", "duration": 810, "retry": 0 }]
+        },
+        {
           "title": "payment decline shows recovery path JIRA-501",
           "projectName": "firefox-desktop",
           "browserName": "firefox",

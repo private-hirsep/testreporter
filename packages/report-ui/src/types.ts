@@ -9,6 +9,7 @@ export type TestCase = {
   layer: string;
   status: string;
   durationMs?: number;
+  executedAt?: string;
   retries: number;
   requirements: string[];
   identity?: {
@@ -26,6 +27,7 @@ export type TestCase = {
     url: string;
   }>;
   labels?: Record<string, string[]>;
+  variant?: Record<string, string>;
   error?: { message?: string; trace?: string };
   attachments?: Array<{ name: string; path: string; contentType?: string }>;
   sourcePath?: string;
@@ -306,6 +308,7 @@ export type UnifiedExecution = {
   workflowRun?: string;
   startedAt?: string;
   completedAt?: string;
+  reportedAt?: string;
   status: "passed" | "failed" | "blocked" | "incomplete" | "unknown";
   counts: {
     total: number;
@@ -315,9 +318,22 @@ export type UnifiedExecution = {
     blocked?: number;
     skipped?: number;
     notRun?: number;
+    unknown?: number;
   };
   durationMs?: number;
+  testDurationSumMs?: number;
   testCaseIds: string[];
+  caseResults: Array<{
+    testCaseId: string;
+    implementationId?: string;
+    status: CatalogueStatus;
+    durationMs?: number;
+    evidenceCount?: number;
+    evidenceReferences?: string[];
+    defects?: string[];
+    notes?: string[];
+    attempt?: number;
+  }>;
   requirementIds: string[];
   defectIds: string[];
   evidence?: { complete: boolean; referenceCount: number };

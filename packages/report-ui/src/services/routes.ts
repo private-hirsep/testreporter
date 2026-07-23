@@ -10,6 +10,6 @@ export function requirementRoute(id: string) {
   return { path: "/requirements", hash: `#requirement-${encodeURIComponent(id)}` };
 }
 
-export function evidenceRoute(owner?: string) {
-  return { path: "/downloads", query: owner ? { owner } : undefined };
+export function evidenceRoute() {
+  return { path: "/downloads", hash: "#evidence-artifacts" };
 }

@@ -53,7 +53,7 @@ describe("catalogue compatibility", () => {
       path: "/requirements",
       hash: "#requirement-REQ%2F1"
     });
-    expect(evidenceRoute("run/1")).toEqual({ path: "/downloads", query: { owner: "run/1" } });
+    expect(evidenceRoute()).toEqual({ path: "/downloads", hash: "#evidence-artifacts" });
   });
 
   it("handles empty catalogue and executions", () => {

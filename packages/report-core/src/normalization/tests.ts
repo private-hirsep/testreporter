@@ -7,16 +7,26 @@ export function extractRequirementKeys(text: string | undefined, pattern: RegExp
 }
 
 export function testIdentity(test: NormalizedTestCase): string {
-  return stableId([test.framework, test.layer, test.suite, test.name, test.file, test.line]);
+  return stableId([
+    test.framework,
+    test.layer,
+    test.suite,
+    test.name,
+    test.file,
+    test.line,
+    ...Object.entries(test.variant ?? {})
+      .sort(([left], [right]) => left.localeCompare(right))
+      .flat()
+  ]);
 }
 
 export function deduplicateTests(tests: NormalizedTestCase[]): NormalizedTestCase[] {
   const grouped = new Map<string, NormalizedTestCase[]>();
   for (const test of tests) {
     const key = testIdentity(test);
-    const current = grouped.get(key) ?? [];
-    current.push(test);
-    grouped.set(key, current);
+    const current = grouped.get(key);
+    if (current) current.push(test);
+    else grouped.set(key, [test]);
   }
 
   return [...grouped.values()].map((group) => {
@@ -24,7 +34,10 @@ export function deduplicateTests(tests: NormalizedTestCase[]): NormalizedTestCas
     return {
       ...selected,
       id: testIdentity(selected),
-      retries: Math.max(group.length - 1, ...group.map((test) => test.retries)),
+      retries: Math.max(
+        group.some((test) => test.retries > 0) ? 0 : group.length - 1,
+        ...group.map((test) => test.retries)
+      ),
       requirements: [...new Set(group.flatMap((test) => test.requirements))],
       attachments: group.flatMap((test) => test.attachments)
     };
@@ -41,7 +54,9 @@ export function calculateIdentityDiagnostics(
     const source = test.identity?.source ?? "generated";
     counts[source] += 1;
     const canonical = test.identity?.canonicalId ?? test.id;
-    ids.set(canonical, [...(ids.get(canonical) ?? []), test]);
+    const group = ids.get(canonical);
+    if (group) group.push(test);
+    else ids.set(canonical, [test]);
   }
   const duplicateCanonicalIds = [...ids]
     .filter(([, values]) => values.length > 1)
@@ -49,7 +64,18 @@ export function calculateIdentityDiagnostics(
     .sort();
   const duplicateExplicitIds = [...ids]
     .filter(
-      ([, values]) => values.filter((test) => test.identity?.source === "explicit").length > 1
+      ([id, values]) =>
+        new Set(
+          values
+            .filter((test) => test.identity?.source === "explicit")
+            .map((test) =>
+              test.name
+                .replace(new RegExp(`\\[?${escapeRegExp(id)}\\]?`, "giu"), "")
+                .replace(/\s+/gu, " ")
+                .trim()
+                .toLocaleLowerCase()
+            )
+        ).size > 1
     )
     .map(([id]) => id)
     .sort();
@@ -67,4 +93,8 @@ export function calculateIdentityDiagnostics(
     ambiguousMappings: warnings.filter((warning) => warning.code === "identity.mapping.ambiguous")
       .length
   };
+}
+
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&");
 }
