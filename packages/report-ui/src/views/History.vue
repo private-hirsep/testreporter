@@ -2,7 +2,7 @@
   <div v-if="manifest">
     <PageHeader title="Executions" :subtitle="`${filtered.length} automated and manual execution(s) genuinely available in this static report`" />
     <v-alert v-if="!historyData" type="info" variant="tonal" class="mb-4">
-      Historical execution summaries have not been imported for this report.
+      Historical automated runs have not been merged yet. Historical execution summaries have not been imported for this report.
     </v-alert>
     <v-alert v-if="!manifest.unifiedExecutions" type="info" variant="tonal" class="mb-4">
       This older report does not contain unified execution summaries. Its legacy history remains readable, but case-level execution links are unavailable.
@@ -40,8 +40,7 @@ import EmptyState from "../components/EmptyState.vue";
 import PageHeader from "../components/PageHeader.vue";
 import StatusChip from "../components/StatusChip.vue";
 import { formatDuration } from "../format";
-import { executionsFor } from "../services/catalogue";
-import { historicalExecutions } from "../services/history";
+import { allExecutions } from "../services/history";
 import {
   executionFailureCount,
   filterExecutions,
@@ -51,10 +50,7 @@ import { executionRoute } from "../services/routes";
 import type { HistoryArtifact, Manifest, TestCase, UnifiedExecution } from "../types";
 const props = defineProps<{ manifest?: Manifest; tests: TestCase[]; historyData?: HistoryArtifact }>();
 const search = ref(""); const type = ref("all"); const status = ref("all"); const release = ref("all"); const branch = ref("all"); const environment = ref("all"); const failure = ref("all"); const evidence = ref("all"); const sort = ref("newest");
-const executions = computed(() => [
-  ...executionsFor(props.manifest),
-  ...historicalExecutions(props.manifest, props.historyData)
-]);
+const executions = computed(() => allExecutions(props.manifest, props.historyData));
 const options = (values: Array<string | undefined>) => ["all", ...new Set(values.filter((value): value is string => Boolean(value)).sort())];
 const statusOptions = ["all","passed","failed","blocked","incomplete","unknown"];
 const releaseOptions = computed(() => options(executions.value.map((item) => item.release)));

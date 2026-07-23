@@ -2,7 +2,11 @@ import { createHash } from "node:crypto";
 import { readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import fg from "fast-glob";
-import type { NormalizedReport, ProjectQualitySummary } from "@quality-report/report-core";
+import {
+  deriveHistoryArtifact,
+  type NormalizedReport,
+  type ProjectQualitySummary
+} from "@quality-report/report-core";
 import { TOOL_VERSION } from "./version.js";
 
 export async function sha256(file: string) {
@@ -27,7 +31,12 @@ export async function writeEvidence(output: string, report: NormalizedReport) {
       cwd: output,
       onlyFiles: true,
       dot: true,
-      ignore: ["quality-report*.zip", "evidence-manifest.json", "checksums.sha256"]
+      ignore: [
+        "quality-report*.zip",
+        "evidence-manifest.json",
+        "checksums.sha256",
+        "data/history.json"
+      ]
     })
   )
     .map((file) => file.replace(/\\/g, "/"))
@@ -98,7 +107,8 @@ export async function writeEvidence(output: string, report: NormalizedReport) {
 export async function writeProjectSummary(
   output: string,
   report: NormalizedReport,
-  reportUrl?: string
+  reportUrl?: string,
+  history?: ReturnType<typeof deriveHistoryArtifact>
 ) {
   const value: ProjectQualitySummary = {
     schemaVersion: "1.0",
@@ -111,13 +121,61 @@ export async function writeProjectSummary(
     readiness: report.readiness?.status ?? "incomplete",
     passedTests: report.summary.tests.passed,
     failedTests: report.summary.tests.failed + report.summary.tests.broken,
-    newFailures: 0,
+    newFailures: history?.trends.newFailures ?? 0,
     manualRemaining: report.readiness?.manual.notRun ?? report.summary.manual.notRun,
     uncoveredRequirements:
       report.readiness?.requirements.uncovered ?? report.requirements.missing.length,
     securityBlockers: report.readiness?.securityBlockers ?? 0,
     acceptedRisks: report.readiness?.acceptedRisks.length ?? 0,
-    recommendedActions: report.readiness?.actions.length ?? 0
+    recommendedActions: report.readiness?.actions.length ?? 0,
+    ...(history
+      ? {
+          history: {
+            schemaVersion: "1.0" as const,
+            available: history.availability === "available",
+            retainedRunCount: history.runs.length,
+            ...(history.trends.oldestAt ? { oldestRunAt: history.trends.oldestAt } : {}),
+            ...(history.trends.newestAt ? { newestRunAt: history.trends.newestAt } : {}),
+            ...(history.runs[1]?.readiness?.status
+              ? {
+                  previousReadiness: history.runs[1].readiness.status as
+                    | "ready"
+                    | "ready-with-accepted-risks"
+                    | "warning"
+                    | "blocked"
+                    | "incomplete"
+                }
+              : {}),
+            ...(history.runs[1]?.qualityGate?.status
+              ? {
+                  previousQualityGate: history.runs[1].qualityGate.status as
+                    | "passed"
+                    | "failed"
+                    | "skipped"
+                    | "not_evaluated"
+                }
+              : {}),
+            newFailures: history.trends.newFailures,
+            persistentFailures: history.trends.persistentFailures,
+            recovered: history.trends.recovered,
+            removedOrMissing: history.trends.removedOrMissing,
+            unstableCases: history.trends.unstable,
+            slowRegressions: history.trends.slowRegressions,
+            trendAvailable: history.availability === "available",
+            sparkline: [...history.runs]
+              .reverse()
+              .slice(-12)
+              .map((run) => ({
+                runId: run.id,
+                reportedAt: run.reportedAt,
+                status: run.status,
+                passed: run.counts.passed,
+                failed: run.counts.failed,
+                broken: run.counts.broken
+              }))
+          }
+        }
+      : {})
   };
   await writeFile(
     path.join(output, "project-quality-summary.json"),

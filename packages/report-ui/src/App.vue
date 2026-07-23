@@ -25,7 +25,7 @@
         </template>
         <template v-else>
           <ProjectContextHeader :manifest="manifest" />
-          <router-view :manifest="manifest" :tests="tests" :history-data="history" />
+          <router-view :manifest="manifest" :tests="tests" :history-data="history" :history-error="historyError" />
         </template>
       </v-container>
     </v-main>
@@ -43,6 +43,7 @@ import type { HistoryArtifact, Manifest, TestCase } from "./types";
 const manifest = ref<Manifest>();
 const tests = ref<TestCase[]>([]);
 const history = ref<HistoryArtifact>();
+const historyError = ref("");
 const error = ref("");
 const loading = ref(true);
 const drawer = ref(false);
@@ -56,7 +57,12 @@ onMounted(async () => {
   try {
     manifest.value = await loadManifest();
     tests.value = await loadTests(manifest.value);
-    history.value = await loadHistory();
+    try {
+      history.value = await loadHistory();
+    } catch (err) {
+      historyError.value =
+        err instanceof Error ? err.message : "Historical execution summaries could not be loaded";
+    }
   } catch (err) {
     error.value = err instanceof Error ? err.message : "Failed to load report data";
   } finally {

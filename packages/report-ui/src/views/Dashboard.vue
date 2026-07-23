@@ -228,6 +228,7 @@
         <ul class="linked-list">
           <li><strong>{{ history.trends.newFailures }}</strong> newly failing</li>
           <li><strong>{{ history.trends.persistentFailures }}</strong> persistent failures</li>
+          <li><strong>{{ history.trends.removedOrMissing }}</strong> removed or missing cases</li>
           <li><strong>{{ history.trends.unstable }}</strong> historically unstable</li>
           <li><strong>{{ history.trends.slowRegressions }}</strong> slow regressions</li>
         </ul>
@@ -247,7 +248,7 @@
     <SectionCard v-if="!history" title="Execution trends" class="mb-4">
       <EmptyState
         variant="unavailable"
-        message="Historical execution summaries have not been imported for this report."
+        message="Historical execution trends are not available in this report yet. Historical execution summaries have not been imported."
       />
     </SectionCard>
   </div>

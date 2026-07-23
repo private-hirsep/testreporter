@@ -7,11 +7,12 @@
         <dt>Project</dt><dd>{{ execution.project }}</dd><dt>Release</dt><dd>{{ execution.release ?? "n/a" }}</dd>
         <dt>Branch</dt><dd>{{ execution.branch ?? "n/a" }}</dd><dt>Environment</dt><dd>{{ execution.environment ?? "n/a" }}</dd>
         <dt>Commit</dt><dd class="mono">{{ execution.commit ?? "n/a" }}</dd><dt>Workflow run</dt><dd>{{ execution.workflowRun ?? "n/a" }}</dd>
+        <dt>Workflow attempt</dt><dd>{{ execution.workflowAttempt ?? "n/a" }}</dd>
         <dt>Started</dt><dd>{{ formatDate(execution.startedAt) }}</dd><dt>Completed</dt><dd>{{ formatDate(execution.completedAt) }}</dd>
         <dt>Report generated</dt><dd>{{ formatDate(execution.reportedAt) }}</dd>
         <dt>Wall-clock duration</dt><dd>{{ formatDuration(execution.durationMs) }}</dd>
         <dt>Summed test time</dt><dd>{{ formatDuration(execution.testDurationSumMs) }}</dd><dt>Tester</dt><dd>{{ execution.tester ?? "n/a" }}</dd>
-        <dt>Tested build</dt><dd>{{ execution.testedBuild ?? "n/a" }}</dd><dt>Source report</dt><dd>{{ execution.sourceReport ?? "n/a" }}</dd>
+        <dt>Tested build</dt><dd>{{ execution.testedBuild ?? "n/a" }}</dd><dt>Source report</dt><dd><a v-if="sourceReportUrl" :href="sourceReportUrl" target="_blank" rel="noopener noreferrer">Open source report</a><span v-else>unavailable</span></dd>
       </dl></section>
       <section class="portal-card detail-section"><h2>Result summary</h2><dl class="detail-list">
         <dt>Total</dt><dd>{{ execution.counts.total }}</dd><dt>Passed</dt><dd>{{ execution.counts.passed }}</dd>
@@ -44,10 +45,11 @@
 <script setup lang="ts">
 import { computed } from "vue"; import { useRoute } from "vue-router";
 import PageHeader from "../components/PageHeader.vue"; import StatusChip from "../components/StatusChip.vue"; import { formatDuration } from "../format";
-import { catalogueFor, executionsFor } from "../services/catalogue"; import { evidenceRoute, requirementRoute, testCaseRoute } from "../services/routes";
-import type { Manifest, TestCase } from "../types";
-const props = defineProps<{ manifest?: Manifest; tests: TestCase[] }>(); const route = useRoute();
-const execution = computed(() => executionsFor(props.manifest).find((item) => item.id === String(route.params.id ?? "")));
+import { catalogueFor } from "../services/catalogue"; import { allExecutions, safeHistoricalUrl } from "../services/history"; import { evidenceRoute, requirementRoute, testCaseRoute } from "../services/routes";
+import type { HistoryArtifact, Manifest, TestCase } from "../types";
+const props = defineProps<{ manifest?: Manifest; tests: TestCase[]; historyData?: HistoryArtifact }>(); const route = useRoute();
+const execution = computed(() => allExecutions(props.manifest, props.historyData).find((item) => item.id === String(route.params.id ?? "")));
+const sourceReportUrl = computed(() => safeHistoricalUrl(execution.value?.sourceReport));
 const caseById = computed(() => new Map(catalogueFor(props.manifest, props.tests).map((item) => [item.canonicalId,item])));
 const evidenceReferences = computed(() => [...new Set(execution.value?.caseResults.flatMap((result) => result.evidenceReferences ?? []) ?? [])]);
 function formatDate(value?: string) { return value && Number.isFinite(Date.parse(value)) ? new Date(value).toLocaleString() : "Unknown"; }

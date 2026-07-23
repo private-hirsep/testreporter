@@ -18,12 +18,14 @@ quality-history/
 
 Schema version `1.0` is rejected if an unsupported version is supplied. File names contain only portable URL-safe characters. Secrets, absolute paths, logs, stack traces, attachments, and raw reports are excluded.
 
+File names combine an 80-character readable prefix with a 12-character SHA-256 suffix of the original ID. Different IDs with the same sanitized or truncated prefix therefore cannot overwrite each other. Index references are runtime validated: run files must be relative JSON paths under `runs/`, manual files under `manual-executions/`; absolute paths, backslashes, `..`, wrong directories, duplicate paths, and ID mismatches are rejected. The store, every run, every manual execution, and the current report must have the same exact project key. A changed display name for the same key is allowed.
+
 ## Identities and timestamps
 
 An automated report produces at most one run. Its ID is chosen deterministically:
 
 1. explicit normalized `runId`;
-2. workflow run plus attempt;
+2. workflow run plus attempt (`github-<run-id>-<attempt>`, defaulting to attempt 1 only when unavailable);
 3. project, commit, branch, environment, and reported timestamp;
 4. a deterministic technical hash.
 
@@ -41,7 +43,7 @@ npm run quality-report -- history merge `
   --static-output site/data/history.json
 ```
 
-No history directory is required on the first run. Input discovery order does not affect output. Identical runs are idempotent; conflicting duplicate IDs are diagnosed and not overwritten. Output is written to a sibling temporary directory and renamed only after every artifact validates.
+No history directory is required on the first run. Input discovery order does not affect output. Identical runs are idempotent; conflicting duplicate IDs are diagnosed and not overwritten. Output is written to a sibling temporary directory and renamed only after every artifact validates; the previous directory is temporarily backed up and restored if replacement fails.
 
 Conservative defaults are:
 
@@ -51,8 +53,6 @@ history:
   maxRuns: 50
   maxAgeDays: 180
   maxManualExecutions: 200
-  branches: [main, "release/*"]
-  includePullRequests: false
   stability:
     minimumSamples: 5
     flakyTransitionThreshold: 2
@@ -66,7 +66,7 @@ Automated and manual limits are applied independently. Newest items are retained
 
 ## Comparison and trend semantics
 
-Automated implementation variants are aggregated once per logical case per run using the existing worst-state order. A manual result is one sample per execution. Retries, variants, absent results, and repeated imports are not additional historical executions.
+Automated implementation variants are aggregated once per logical case per run using the existing worst-state order. A manual result is one sample per execution. Retries, variants, absent results, and repeated imports are not additional historical executions. Automated comparison streams record explicit `present` or `absent` samples. A previously present case absent from the latest comparable run is `removed-or-missing`; absence is never pass, failure, skip, not-run, or recovery. `not-executed` is reserved for an explicit `not-run` result.
 
 By default, comparisons require the same project, execution type, branch, and environment:
 
@@ -98,6 +98,8 @@ concurrency:
   cancel-in-progress: false
 ```
 
+The operational order is: generate current data, initialize or load history, merge, write `site/data/history.json`, rewrite the project summary with derived metrics, upload the final Pages artifact, and persist the compact branch. Before every commit attempt, fetch the latest branch and rerun the merge against it. Rebasing a precomputed history commit is insufficient.
+
 Before committing, fetch the latest `quality-history` branch, merge again, and commit only changed compact files. Push normally—never force-push. On non-fast-forward failure, refetch and repeat the merge a bounded number of times. Failure to initialize or persist history must warn but need not fail report publication. Protect the history branch against deletion and force pushes while allowing the dedicated trusted job to update it.
 
 ## Audit and privacy
@@ -107,6 +109,18 @@ The history branch is mutable operational trend data. A release audit package is
 History deliberately excludes raw stack traces, logs, screenshots, attachments, tokens, absolute paths, and private environment values. A full report or evidence link is optional; unavailable links are shown honestly.
 
 Older reports and project summaries remain valid. Their overview, case detail, executions, and portfolio pages show current data with explicit history-unavailable states.
+
+The browser loads the manifest and current test chunks before loading history independently. Missing history gives the normal unavailable state. Invalid JSON, unsupported versions, or fetch failures become focused diagnostics without replacing the current report with an application-wide error.
+
+## Requirement-history scope
+
+PR #28 provides project-level and logical test-case history only. Requirement-level state
+transitions are deliberately deferred to a follow-up because the compact run contract does not yet
+retain the release-scope membership and evidence-source snapshots required to distinguish covered,
+uncovered, excluded, and not-in-scope states honestly. The Requirements page continues to show the
+current report’s real traceability data and does not claim that requirement history is available.
+Adding requirement history requires a versioned additive snapshot contract and scope-compatible
+comparison tests; it must not infer requirement transitions from aggregate counts.
 
 ## Recovery
 

@@ -3,6 +3,13 @@ import { z } from "zod";
 import type { NormalizedReport } from "../schema/report.js";
 import { stableId } from "../utils/hash.js";
 
+const HttpUrlSchema = z
+  .string()
+  .url()
+  .refine((value) => ["http:", "https:"].includes(new URL(value).protocol), {
+    message: "historical links must use HTTP or HTTPS"
+  });
+
 export const HISTORY_SCHEMA_VERSION = "1.0";
 
 export const HistoryDiagnosticSchema = z.object({
@@ -85,7 +92,7 @@ export const HistoricalRunSummarySchema = z.object({
     accepted: z.number().int().nonnegative()
   }).optional(),
   caseResults: z.array(HistoricalCaseResultSnapshotSchema),
-  sourceReport: z.object({ url: z.string().optional(), evidenceUrl: z.string().optional() }).optional()
+  sourceReport: z.object({ url: HttpUrlSchema.optional(), evidenceUrl: HttpUrlSchema.optional() }).optional()
 });
 
 export const HistoricalManualExecutionSummarySchema = z.object({
@@ -104,7 +111,7 @@ export const HistoricalManualExecutionSummarySchema = z.object({
       status: z.enum(["passed", "failed", "blocked", "not-run", "skipped", "unknown"])
     })
   ),
-  sourceReport: z.object({ url: z.string().optional(), evidenceUrl: z.string().optional() }).optional()
+  sourceReport: z.object({ url: HttpUrlSchema.optional(), evidenceUrl: HttpUrlSchema.optional() }).optional()
 });
 
 export const HistoryRetentionMetadataSchema = z.object({
@@ -176,11 +183,11 @@ export function deriveCurrentRunSummary(
   const execution = report.unifiedExecutions?.find((item) => item.type === "automated");
   if (!execution) return undefined;
   const projectKey = report.metadata.projectKey ?? report.metadata.projectName;
-  const workflowAttempt = Number(process.env.GITHUB_RUN_ATTEMPT);
+  const workflowAttempt = report.metadata.workflowAttempt;
   const id =
     report.metadata.runId ??
     (report.metadata.workflowRun
-      ? `${report.metadata.workflowRun}${Number.isInteger(workflowAttempt) && workflowAttempt > 0 ? `-${workflowAttempt}` : ""}`
+      ? `github-${report.metadata.workflowRun}-${workflowAttempt ?? 1}`
       : `run-${stableId([
           projectKey,
           report.metadata.commitSha,
@@ -203,7 +210,7 @@ export function deriveCurrentRunSummary(
     environment: execution.environment,
     commit: execution.commit,
     workflowRun: execution.workflowRun,
-    ...(Number.isInteger(workflowAttempt) && workflowAttempt > 0 ? { workflowAttempt } : {}),
+    ...(workflowAttempt ? { workflowAttempt } : {}),
     reportedAt: execution.reportedAt ?? report.metadata.generatedAt,
     startedAt: execution.startedAt,
     completedAt: execution.completedAt,
@@ -338,6 +345,20 @@ export function mergeProjectHistory(
   const store = existing
     ? ProjectHistoryStoreSchema.parse(existing)
     : emptyHistoryStore(project, report.metadata.generatedAt, resolved);
+  if (store.project.key !== project.key)
+    throw new Error(
+      `History project mismatch: existing ${store.project.key}, current ${project.key}.`
+    );
+  for (const run of store.runs)
+    if (run.projectKey !== store.project.key)
+      throw new Error(
+        `History run ${run.id} belongs to ${run.projectKey}, expected ${store.project.key}.`
+      );
+  for (const execution of store.manualExecutions)
+    if (execution.projectKey !== store.project.key)
+      throw new Error(
+        `Manual execution ${execution.executionId} belongs to ${execution.projectKey}, expected ${store.project.key}.`
+      );
   const diagnostics = [...store.diagnostics];
   const runById = new Map(store.runs.map((run) => [run.id, run]));
   const current = deriveCurrentRunSummary(report, sourceReportUrl);
@@ -353,6 +374,10 @@ export function mergeProjectHistory(
   }
   const manualById = new Map(store.manualExecutions.map((item) => [item.executionId, item]));
   for (const item of deriveManualExecutionSummaries(report, sourceReportUrl)) {
+    if (item.projectKey !== project.key)
+      throw new Error(
+        `Manual execution ${item.executionId} belongs to ${item.projectKey}, expected ${project.key}.`
+      );
     const duplicate = manualById.get(item.executionId);
     if (!duplicate) manualById.set(item.executionId, item);
     else if (canonical(duplicate) !== canonical(item)) {
@@ -436,6 +461,7 @@ export interface HistoricalCaseSummary {
     type: "automated" | "manual";
     at: string;
     status: string;
+    presence: "present" | "absent";
     branch?: string;
     environment?: string;
     release?: string;
@@ -472,15 +498,23 @@ export interface HistoricalCaseSummary {
   };
 }
 
-function transition(current: string | undefined, previous: string | undefined): HistoryTransition {
-  if (!current) return previous ? "removed-or-missing" : "not-executed";
+function transition(
+  current: HistoricalCaseSummary["samples"][number] | undefined,
+  previousPresent: HistoricalCaseSummary["samples"][number] | undefined
+): HistoryTransition {
+  if (!current) return "not-executed";
+  if (current.presence === "absent")
+    return previousPresent ? "removed-or-missing" : "unchanged";
+  if (current.status === "not-run") return "not-executed";
+  const currentStatus = current.status;
+  const previous = previousPresent?.status;
   const failing = (value: string | undefined) => value === "failed" || value === "broken";
-  if (!previous) return failing(current) ? "first-observed-failing" : "new-case";
-  if (failing(current) && failing(previous)) return "persistently-failing";
-  if (failing(current) && !failing(previous)) return "newly-failing";
-  if (current === "passed" && failing(previous)) return "recovered";
-  if (current === "blocked" && previous === "blocked") return "still-blocked";
-  if (current === "blocked") return "newly-blocked";
+  if (!previous) return failing(currentStatus) ? "first-observed-failing" : "new-case";
+  if (failing(currentStatus) && failing(previous)) return "persistently-failing";
+  if (failing(currentStatus) && !failing(previous)) return "newly-failing";
+  if (currentStatus === "passed" && failing(previous)) return "recovered";
+  if (currentStatus === "blocked" && previous === "blocked") return "still-blocked";
+  if (currentStatus === "blocked") return "newly-blocked";
   return "unchanged";
 }
 
@@ -491,11 +525,34 @@ export function deriveCaseHistory(
 ): HistoricalCaseSummary[] {
   const resolved = { ...DEFAULT_HISTORY_OPTIONS, ...options };
   const byCase = new Map<string, HistoricalCaseSummary["samples"]>();
+  const streams = new Map<string, HistoricalRunSummary[]>();
   for (const run of [...store.runs].reverse()) {
-    const grouped = new Map<string, HistoricalRunSummary["caseResults"]>();
-    for (const result of run.caseResults)
-      grouped.set(result.testCaseId, [...(grouped.get(result.testCaseId) ?? []), result]);
-    for (const [testCaseId, results] of grouped) {
+    const key = `${run.projectKey}\0${run.branch ?? ""}\0${run.environment ?? ""}`;
+    streams.set(key, [...(streams.get(key) ?? []), run]);
+  }
+  for (const runs of streams.values()) {
+    const knownIds = new Set(runs.flatMap((run) => run.caseResults.map((item) => item.testCaseId)));
+    for (const run of runs) {
+      const grouped = new Map<string, HistoricalRunSummary["caseResults"]>();
+      for (const result of run.caseResults)
+        grouped.set(result.testCaseId, [...(grouped.get(result.testCaseId) ?? []), result]);
+      for (const testCaseId of knownIds) {
+        const results = grouped.get(testCaseId) ?? [];
+        if (!results.length) {
+          (byCase.get(testCaseId) ?? byCase.set(testCaseId, []).get(testCaseId)!).push({
+            executionId: run.id,
+            type: "automated",
+            at: run.completedAt ?? run.startedAt ?? run.reportedAt,
+            status: "absent",
+            presence: "absent",
+            ...(run.branch ? { branch: run.branch } : {}),
+            ...(run.environment ? { environment: run.environment } : {}),
+            ...(run.release ? { release: run.release } : {}),
+            ...(run.commit ? { commit: run.commit } : {}),
+            ...(run.sourceReport ? { sourceReport: run.sourceReport } : {})
+          });
+          continue;
+        }
       const durations = results
         .map((item) => item.durationMs)
         .filter((value): value is number => value !== undefined);
@@ -504,6 +561,7 @@ export function deriveCaseHistory(
         type: "automated",
         at: run.completedAt ?? run.startedAt ?? run.reportedAt,
         status: aggregateStatus(results.map((item) => item.status)),
+        presence: "present",
         ...(run.branch ? { branch: run.branch } : {}),
         ...(run.environment ? { environment: run.environment } : {}),
         ...(run.release ? { release: run.release } : {}),
@@ -514,6 +572,7 @@ export function deriveCaseHistory(
         implementationResults: results,
         ...(run.sourceReport ? { sourceReport: run.sourceReport } : {})
       });
+      }
     }
   }
   for (const execution of [...store.manualExecutions].reverse())
@@ -524,6 +583,7 @@ export function deriveCaseHistory(
         type: "manual",
         at: execution.completedAt,
         status: result.status,
+        presence: "present",
         ...(execution.environment ? { environment: execution.environment } : {}),
         ...(execution.release ? { release: execution.release } : {}),
         ...(execution.sourceReport ? { sourceReport: execution.sourceReport } : {})
@@ -543,18 +603,24 @@ export function deriveCaseHistory(
         )
       : [];
     const current = comparable.at(-1);
-    const previous = comparable.at(-2);
-    const passed = comparable.filter((sample) => sample.status === "passed").length;
-    const failed = comparable.filter(
+    const previous = [...comparable]
+      .slice(0, -1)
+      .reverse()
+      .find((sample) => sample.presence === "present");
+    const presentSamples = comparable.filter((sample) => sample.presence === "present");
+    const passed = presentSamples.filter((sample) => sample.status === "passed").length;
+    const failed = presentSamples.filter(
       (sample) => sample.status === "failed" || sample.status === "broken"
     ).length;
-    const identity = latest?.implementationResults?.[0]?.identity;
+    const identity = [...comparable]
+      .reverse()
+      .find((sample) => sample.presence === "present")?.implementationResults?.[0]?.identity;
     const identityConfidence = identity?.conflict
       ? "conflicted"
       : identity && (!identity.stable || identity.source === "generated")
         ? "generated-low"
         : "trusted";
-    const passFail = comparable.filter((sample) =>
+    const passFail = presentSamples.filter((sample) =>
       ["passed", "failed", "broken"].includes(sample.status)
     );
     let passFailTransitions = 0;
@@ -564,7 +630,7 @@ export function deriveCaseHistory(
         (passFail[index - 1]!.status === "passed")
       )
         passFailTransitions++;
-    const durations = comparable
+    const durations = presentSamples
       .map((sample) => sample.durationMs)
       .filter((value): value is number => value !== undefined && value >= 0);
     const sorted = [...durations].sort((a, b) => a - b);
@@ -585,28 +651,28 @@ export function deriveCaseHistory(
     return {
       testCaseId,
       samples: allSamples,
-      ...(current ? { currentStatus: current.status } : {}),
+      ...(current?.presence === "present" ? { currentStatus: current.status } : {}),
       ...(previous ? { previousStatus: previous.status } : {}),
-      transition: transition(current?.status, previous?.status),
-      sampleSize: comparable.length,
+      transition: transition(current, previous),
+      sampleSize: presentSamples.length,
       passed,
       failed,
-      ...(comparable.length >= resolved.minimumSamples && identityConfidence !== "conflicted"
-        ? { passRate: (passed / comparable.length) * 100 }
+      ...(presentSamples.length >= resolved.minimumSamples && identityConfidence !== "conflicted"
+        ? { passRate: (passed / presentSamples.length) * 100 }
         : {}),
-      consecutiveFailures: [...comparable]
+      consecutiveFailures: [...presentSamples]
         .reverse()
         .findIndex((sample) => !["failed", "broken"].includes(sample.status)) === -1
         ? failed
-        : [...comparable]
+        : [...presentSamples]
             .reverse()
             .findIndex((sample) => !["failed", "broken"].includes(sample.status)),
       ...(() => {
-        const value = [...comparable].reverse().find((sample) => sample.status === "passed")?.at;
+        const value = [...presentSamples].reverse().find((sample) => sample.status === "passed")?.at;
         return value ? { lastPassedAt: value } : {};
       })(),
       ...(() => {
-        const value = [...comparable]
+        const value = [...presentSamples]
           .reverse()
           .find((sample) => ["failed", "broken"].includes(sample.status))?.at;
         return value ? { lastFailedAt: value } : {};
@@ -615,7 +681,7 @@ export function deriveCaseHistory(
       stability:
         identityConfidence === "conflicted"
           ? "identity-conflict"
-          : comparable.length < resolved.minimumSamples
+          : presentSamples.length < resolved.minimumSamples
             ? "insufficient-history"
             : passFailTransitions >= resolved.flakyTransitionThreshold
               ? "historically-unstable"
@@ -661,6 +727,7 @@ export function deriveHistoryArtifact(store: ProjectHistoryStore, options: Histo
       newFailures: counts("newly-failing") + counts("first-observed-failing"),
       persistentFailures: counts("persistently-failing"),
       recovered: counts("recovered"),
+      removedOrMissing: counts("removed-or-missing"),
       unstable: cases.filter((item) => item.stability === "historically-unstable").length,
       slowRegressions: cases.filter((item) => item.duration?.slowRegression).length
     },

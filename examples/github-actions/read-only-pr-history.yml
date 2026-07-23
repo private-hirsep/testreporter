@@ -15,6 +15,6 @@ jobs:
         continue-on-error: true
       - run: npm ci && npm run build
       - run: npm run quality-report -- generate --config quality-report.yml --input quality-artifacts --output site
-      - run: npm run quality-report -- history merge --history-dir read-only-history/quality-history --current-report site/normalized-report.json --output-dir preview-history --static-output site/data/history.json
+      - run: npm run quality-report -- history merge --history-dir read-only-history/quality-history --current-report site/normalized-report.json --output-dir preview-history --static-output site/data/history.json --project-summary-output site/project-quality-summary.json
       - uses: actions/upload-artifact@v4
         with: { name: pr-quality-report, path: site }

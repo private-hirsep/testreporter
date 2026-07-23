@@ -309,6 +309,7 @@ export type UnifiedExecution = {
   environment?: string;
   commit?: string;
   workflowRun?: string;
+  workflowAttempt?: number;
   startedAt?: string;
   completedAt?: string;
   reportedAt?: string;
@@ -368,6 +369,7 @@ export type HistoryArtifact = {
     environment?: string;
     commit?: string;
     workflowRun?: string;
+    workflowAttempt?: number;
     reportedAt: string;
     startedAt?: string;
     completedAt?: string;
@@ -412,6 +414,7 @@ export type HistoryArtifact = {
     newFailures: number;
     persistentFailures: number;
     recovered: number;
+    removedOrMissing: number;
     unstable: number;
     slowRegressions: number;
   };
@@ -425,6 +428,7 @@ export type HistoricalCaseSummary = {
     type: "automated" | "manual";
     at: string;
     status: string;
+    presence: "present" | "absent";
     branch?: string;
     environment?: string;
     release?: string;

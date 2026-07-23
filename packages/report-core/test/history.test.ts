@@ -288,4 +288,144 @@ describe("project history", () => {
       trends: { runCount: 1 }
     });
   });
+
+  it("uses workflow run attempts while preserving explicit execution IDs", () => {
+    const first = report("placeholder", "2026-01-01T00:00:00.000Z", []);
+    delete first.metadata.runId;
+    first.metadata.workflowRun = "123";
+    first.metadata.workflowAttempt = 1;
+    expect(deriveCurrentRunSummary(first)?.id).toBe("github-123-1");
+    first.metadata.workflowAttempt = 2;
+    expect(deriveCurrentRunSummary(first)?.id).toBe("github-123-2");
+    first.metadata.runId = "explicit-run";
+    expect(deriveCurrentRunSummary(first)?.id).toBe("explicit-run");
+  });
+
+  it("marks a previously present case as removed without recovering it", () => {
+    const store = merged([
+      report("one", "2026-01-01T00:00:00.000Z", [
+        { testCaseId: "TC-1", status: "failed" }
+      ]),
+      report("two", "2026-01-02T00:00:00.000Z", [
+        { testCaseId: "TC-2", status: "passed" }
+      ])
+    ]);
+    const item = deriveCaseHistory(store).find((candidate) => candidate.testCaseId === "TC-1");
+    expect(item).toMatchObject({
+      transition: "removed-or-missing",
+      previousStatus: "failed",
+      samples: [{ presence: "present" }, { presence: "absent" }]
+    });
+    expect(item?.currentStatus).toBeUndefined();
+  });
+
+  it("distinguishes explicit not-run and deterministic reappearance", () => {
+    const store = merged([
+      report("one", "2026-01-01T00:00:00.000Z", [
+        { testCaseId: "TC-1", status: "failed" }
+      ]),
+      report("two", "2026-01-02T00:00:00.000Z", []),
+      report("three", "2026-01-03T00:00:00.000Z", [
+        { testCaseId: "TC-1", status: "passed" },
+        { testCaseId: "TC-2", status: "not-run" }
+      ])
+    ]);
+    expect(
+      deriveCaseHistory(store).find((candidate) => candidate.testCaseId === "TC-1")
+    ).toMatchObject({ transition: "recovered", currentStatus: "passed" });
+    expect(
+      deriveCaseHistory(store).find((candidate) => candidate.testCaseId === "TC-2")
+    ).toMatchObject({ transition: "not-executed", currentStatus: "not-run" });
+  });
+
+  it("rejects another project and permits a display-name enrichment", () => {
+    const first = report("one", "2026-01-01T00:00:00.000Z", []);
+    const store = mergeProjectHistory(undefined, first);
+    const renamed = report("two", "2026-01-02T00:00:00.000Z", []);
+    renamed.metadata.projectName = "Renamed Demo";
+    expect(mergeProjectHistory(store, renamed).project.name).toBe("Renamed Demo");
+    const foreign = report("foreign", "2026-01-03T00:00:00.000Z", []);
+    foreign.metadata.projectKey = "OTHER";
+    expect(() => mergeProjectHistory(store, foreign)).toThrow(/project mismatch/i);
+    const inconsistentRun = structuredClone(store);
+    inconsistentRun.runs[0]!.projectKey = "OTHER";
+    expect(() => mergeProjectHistory(inconsistentRun, renamed)).toThrow(/belongs to OTHER/i);
+    const inconsistentManual = structuredClone(store);
+    inconsistentManual.manualExecutions.push({
+      executionId: "foreign-manual",
+      projectKey: "OTHER",
+      startedAt: "2026-01-01T00:00:00.000Z",
+      completedAt: "2026-01-01T01:00:00.000Z",
+      status: "passed",
+      caseResults: []
+    });
+    expect(() => mergeProjectHistory(inconsistentManual, renamed)).toThrow(
+      /manual execution.*belongs to OTHER/i
+    );
+  });
+
+  it("rejects unsafe historical source URLs", () => {
+    const input = report("one", "2026-01-01T00:00:00.000Z", []);
+    expect(() => deriveCurrentRunSummary(input, "javascript:alert(1)")).toThrow();
+    expect(deriveCurrentRunSummary(input, "https://example.test/report")?.sourceReport?.url).toBe(
+      "https://example.test/report"
+    );
+  });
+
+  it("derives a bounded 5,000-case, 50-run, 200-manual fixture", () => {
+    const caseIds = Array.from({ length: 5_000 }, (_, index) => `CASE-${index}`);
+    const runs = Array.from({ length: 50 }, (_, runIndex) => ({
+      id: `scale-${runIndex}`,
+      type: "automated" as const,
+      projectKey: "SCALE",
+      reportedAt: `2026-01-${String((runIndex % 28) + 1).padStart(2, "0")}T${String(
+        Math.floor(runIndex / 28)
+      ).padStart(2, "0")}:00:00.000Z`,
+      status: "passed" as const,
+      counts: {
+        total: caseIds.length,
+        passed: caseIds.length,
+        failed: 0,
+        broken: 0,
+        blocked: 0,
+        skipped: 0,
+        notRun: 0,
+        unknown: 0
+      },
+      caseResults: caseIds.map((testCaseId) => ({
+        testCaseId,
+        status: "passed" as const,
+        identity: { source: "explicit", stable: true, conflict: false }
+      }))
+    })).reverse();
+    const manualExecutions = Array.from({ length: 200 }, (_, index) => ({
+      executionId: `manual-${index}`,
+      projectKey: "SCALE",
+      startedAt: "2026-01-01T00:00:00.000Z",
+      completedAt: "2026-01-01T01:00:00.000Z",
+      status: "passed" as const,
+      caseResults: [{ testCaseId: caseIds[index % caseIds.length]!, status: "passed" as const }]
+    }));
+    const store: ProjectHistoryStore = {
+      schemaVersion: "1.0",
+      project: { key: "SCALE", name: "Scale" },
+      generatedAt: "2026-02-01T00:00:00.000Z",
+      retention: {
+        maxRuns: 50,
+        maxAgeDays: 180,
+        maxManualExecutions: 200,
+        prunedRuns: 0,
+        prunedManualExecutions: 0
+      },
+      runs,
+      manualExecutions,
+      diagnostics: []
+    };
+    const artifact = deriveHistoryArtifact(store);
+    expect(artifact.runs).toHaveLength(50);
+    expect(artifact.manualExecutions).toHaveLength(200);
+    expect(artifact.cases).toHaveLength(5_000);
+    expect(new Set(artifact.manualExecutions.map((item) => item.executionId)).size).toBe(200);
+    expect(JSON.stringify(artifact).length).toBeLessThan(100_000_000);
+  });
 });

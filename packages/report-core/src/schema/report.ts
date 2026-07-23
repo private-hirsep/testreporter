@@ -160,6 +160,7 @@ export const RunMetadataSchema = z.object({
   branch: z.string().optional(),
   commitSha: z.string().optional(),
   runId: z.string().optional(),
+  workflowAttempt: z.number().int().positive().optional(),
   release: z.string().optional(),
   testedBuild: z.string().optional(),
   environment: z.string().optional(),

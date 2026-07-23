@@ -103,8 +103,6 @@ export const QualityReportConfigSchema = z.object({
       maxRuns: z.number().int().positive().default(50),
       maxAgeDays: z.number().int().positive().default(180),
       maxManualExecutions: z.number().int().positive().default(200),
-      branches: z.array(z.string().min(1)).default(["main", "release/*"]),
-      includePullRequests: z.boolean().default(false),
       stability: z
         .object({
           minimumSamples: z.number().int().min(2).default(5),

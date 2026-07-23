@@ -63,6 +63,7 @@ export type GenerateOptions = {
   branch?: string;
   environment?: string;
   workflowRun?: string;
+  executionId?: string;
   releaseDate?: string;
   releaseScope?: string;
 };
@@ -131,7 +132,11 @@ function metadata(config: QualityReportConfig, options: GenerateOptions) {
         process.env.GITHUB_SHA ??
         config.release.commitSha
     ),
-    runId: redactSecrets(process.env.GITHUB_RUN_ID),
+    runId: redactSecrets(options.executionId ?? process.env.QR_RUN_ID),
+    workflowAttempt: (() => {
+      const value = Number(process.env.GITHUB_RUN_ATTEMPT);
+      return Number.isInteger(value) && value > 0 ? value : undefined;
+    })(),
     actor: redactSecrets(process.env.GITHUB_ACTOR),
     release: redactSecrets(options.release ?? process.env.QR_RELEASE ?? config.release.name),
     testedBuild: redactSecrets(

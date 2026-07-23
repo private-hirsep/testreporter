@@ -9,6 +9,8 @@ import { buildReport } from "./generator.js";
 import { buildPortfolio } from "./portfolio.js";
 import { TOOL_VERSION } from "./version.js";
 import { mergeHistoryDirectory } from "./history.js";
+import { deriveHistoryArtifact } from "@quality-report/report-core";
+import { writeEvidence, writeProjectSummary } from "./evidence.js";
 
 const program = new Command();
 
@@ -21,6 +23,7 @@ historyCommand
   .requiredOption("--output-dir <path>", "Atomically written next history directory")
   .option("--static-output <path>", "Optimized static history.json output")
   .option("--source-report-url <url>", "Stable URL of the full report")
+  .option("--project-summary-output <path>", "Write project summary with derived history")
   .option("--max-runs <count>", "Maximum retained automated runs", "50")
   .option("--max-age-days <days>", "Maximum automated run age", "180")
   .option("--max-manual-executions <count>", "Maximum retained manual executions", "200")
@@ -31,6 +34,7 @@ historyCommand
       outputDir: string;
       staticOutput?: string;
       sourceReportUrl?: string;
+      projectSummaryOutput?: string;
       maxRuns: string;
       maxAgeDays: string;
       maxManualExecutions: string;
@@ -42,6 +46,9 @@ historyCommand
           ...(options.historyDir ? { historyDir: options.historyDir } : {}),
           ...(options.staticOutput ? { staticOutput: options.staticOutput } : {}),
           ...(options.sourceReportUrl ? { sourceReportUrl: options.sourceReportUrl } : {}),
+          ...(options.projectSummaryOutput
+            ? { projectSummaryOutput: options.projectSummaryOutput }
+            : {}),
           retention: {
             maxRuns: Number(options.maxRuns),
             maxAgeDays: Number(options.maxAgeDays),
@@ -184,6 +191,7 @@ program
   .option("--branch <name>", "Branch")
   .option("--environment <name>", "Test environment")
   .option("--workflow-run <id>", "Workflow run identifier or URL")
+  .option("--execution-id <id>", "Explicit execution identity")
   .option("--release-date <date>", "Release date")
   .option("--release-scope <path>", "Release scope YAML or JSON")
   .option("--history-dir <path>", "Existing Git-friendly history directory")
@@ -200,7 +208,7 @@ program
       prCommentMarker?: string;
       failOnQualityGate?: boolean;
       zip?: boolean;
-      release?: string; testedBuild?: string; commitSha?: string; branch?: string; environment?: string; workflowRun?: string; releaseDate?: string; releaseScope?: string; historyDir?: string; historyOutputDir?: string;
+      release?: string; testedBuild?: string; commitSha?: string; branch?: string; environment?: string; workflowRun?: string; executionId?: string; releaseDate?: string; releaseScope?: string; historyDir?: string; historyOutputDir?: string;
     }) => {
       try {
         const config = await loadConfig(
@@ -219,10 +227,10 @@ program
           publishMode: options.publishMode,
           prCommentMode: options.prCommentMode,
           prCommentMarker: options.prCommentMarker
-          ,...(options.release ? { release: options.release } : {}), ...(options.testedBuild ? { testedBuild: options.testedBuild } : {}), ...(options.commitSha ? { commitSha: options.commitSha } : {}), ...(options.branch ? { branch: options.branch } : {}), ...(options.environment ? { environment: options.environment } : {}), ...(options.workflowRun ? { workflowRun: options.workflowRun } : {}), ...(options.releaseDate ? { releaseDate: options.releaseDate } : {}), ...(options.releaseScope ? { releaseScope: options.releaseScope } : {})
+          ,...(options.release ? { release: options.release } : {}), ...(options.testedBuild ? { testedBuild: options.testedBuild } : {}), ...(options.commitSha ? { commitSha: options.commitSha } : {}), ...(options.branch ? { branch: options.branch } : {}), ...(options.environment ? { environment: options.environment } : {}), ...(options.workflowRun ? { workflowRun: options.workflowRun } : {}), ...(options.executionId ? { executionId: options.executionId } : {}), ...(options.releaseDate ? { releaseDate: options.releaseDate } : {}), ...(options.releaseScope ? { releaseScope: options.releaseScope } : {})
         });
         if (config.history.enabled && options.historyOutputDir) {
-          await mergeHistoryDirectory({
+          const store = await mergeHistoryDirectory({
             ...(options.historyDir ? { historyDir: options.historyDir } : {}),
             currentReport: path.join(options.output, "normalized-report.json"),
             outputDir: options.historyOutputDir,
@@ -239,6 +247,19 @@ program
               durationMinimumIncreaseMs: config.history.duration.minimumIncreaseMs
             }
           });
+          await writeProjectSummary(
+            options.output,
+            report,
+            config.project.reportUrl,
+            deriveHistoryArtifact(store, {
+              minimumSamples: config.history.stability.minimumSamples,
+              flakyTransitionThreshold: config.history.stability.flakyTransitionThreshold,
+              durationMinimumSamples: config.history.duration.minimumSamples,
+              durationRegressionPercent: config.history.duration.regressionPercent,
+              durationMinimumIncreaseMs: config.history.duration.minimumIncreaseMs
+            })
+          );
+          await writeEvidence(options.output, report);
         }
         console.log(`Generated report for ${report.metadata.projectName}: ${options.output}`);
         console.log(`Quality gate: ${report.qualityGate.status.toUpperCase()}`);

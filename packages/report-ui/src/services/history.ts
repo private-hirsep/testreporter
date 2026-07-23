@@ -1,4 +1,5 @@
 import type { HistoryArtifact, Manifest, UnifiedExecution } from "../types";
+import { executionsFor, type ResolvedUnifiedExecution } from "./catalogue";
 
 export function historicalExecutions(
   manifest: Manifest | undefined,
@@ -17,6 +18,7 @@ export function historicalExecutions(
         ...(run.environment ? { environment: run.environment } : {}),
         ...(run.commit ? { commit: run.commit } : {}),
         ...(run.workflowRun ? { workflowRun: run.workflowRun } : {}),
+        ...(run.workflowAttempt ? { workflowAttempt: run.workflowAttempt } : {}),
         ...(run.startedAt ? { startedAt: run.startedAt } : {}),
         ...(run.completedAt ? { completedAt: run.completedAt } : {}),
         reportedAt: run.reportedAt,
@@ -75,4 +77,33 @@ export function historicalExecutions(
       })
     );
   return [...automated, ...manual];
+}
+
+export function allExecutions(
+  manifest: Manifest | undefined,
+  history: HistoryArtifact | undefined
+): ResolvedUnifiedExecution[] {
+  const ordered = [
+    ...executionsFor(manifest),
+    ...historicalExecutions(manifest, history)
+  ];
+  const byId = new Map<string, ResolvedUnifiedExecution>();
+  for (const execution of ordered)
+    if (!byId.has(execution.id))
+      byId.set(execution.id, {
+        ...execution,
+        caseResultsAvailable: execution.caseResultsAvailable ?? true,
+        caseResults: execution.caseResults ?? []
+      });
+  return [...byId.values()];
+}
+
+export function safeHistoricalUrl(value: string | undefined) {
+  if (!value) return undefined;
+  try {
+    const url = new URL(value, globalThis.location?.href ?? "https://invalid.local/");
+    return ["http:", "https:"].includes(url.protocol) ? url.toString() : undefined;
+  } catch {
+    return undefined;
+  }
 }

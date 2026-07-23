@@ -6,15 +6,34 @@ concurrency:
   group: quality-history-${{ github.repository }}
   cancel-in-progress: false
 jobs:
-  generate:
-    uses: ./.github/workflows/publish-quality-report.yml
-    with:
-      artifact-pattern: quality-*
-      release: ${{ github.event.release.tag_name }}
-  persist:
-    needs: generate
-    permissions: { contents: write }
-    uses: ./.github/workflows/history-persistence.yml
-    with:
-      trusted-event: release
-      report-artifact: quality-report
+  trusted-release:
+    runs-on: ubuntu-latest
+    permissions: { contents: write, pages: write, id-token: write }
+    steps:
+      - uses: actions/checkout@v5
+        with: { persist-credentials: false }
+      - run: npm ci && npm run build
+      - run: npm run quality-report -- generate --config quality-report.yml --input quality-artifacts --output site --release "${{ github.event.release.tag_name }}"
+      - name: Initialize readable history checkout
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p history-checkout
+          git -C history-checkout init
+          git -C history-checkout remote add origin "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
+          git -C history-checkout fetch --depth=1 origin quality-history || true
+          git -C history-checkout checkout -B quality-history FETCH_HEAD || git -C history-checkout checkout --orphan quality-history
+          mkdir -p history-checkout/quality-history/v1
+      - run: npm run quality-report -- history merge --history-dir history-checkout/quality-history --current-report site/normalized-report.json --output-dir next/quality-history --static-output site/data/history.json --project-summary-output site/project-quality-summary.json
+      - uses: actions/upload-pages-artifact@v3
+        with: { path: site }
+      - name: Commit compact release history
+        shell: bash
+        run: |
+          rm -rf history-checkout/quality-history
+          cp -R next/quality-history history-checkout/quality-history
+          git -C history-checkout add quality-history
+          git -C history-checkout diff --cached --quiet && exit 0
+          git -C history-checkout -c user.name=github-actions -c user.email=41898282+github-actions[bot]@users.noreply.github.com commit -m "chore(history): record release ${{ github.event.release.tag_name }}"
+          git -C history-checkout push origin HEAD:quality-history

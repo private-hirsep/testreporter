@@ -27,15 +27,27 @@ export const ProjectQualitySummarySchema = z.object({
   recommendedActions: z.number().int().nonnegative()
   ,history: z.object({
     schemaVersion: z.literal("1.0"),
+    available: z.boolean(),
     retainedRunCount: z.number().int().nonnegative(),
+    oldestRunAt: z.string().optional(),
+    newestRunAt: z.string().optional(),
     previousReadiness: z.enum(["ready", "ready-with-accepted-risks", "warning", "blocked", "incomplete"]).optional(),
+    previousQualityGate: z.enum(["passed", "failed", "skipped", "not_evaluated"]).optional(),
     newFailures: z.number().int().nonnegative().default(0),
     persistentFailures: z.number().int().nonnegative().default(0),
     recovered: z.number().int().nonnegative().default(0),
+    removedOrMissing: z.number().int().nonnegative().default(0),
     unstableCases: z.number().int().nonnegative().default(0),
     slowRegressions: z.number().int().nonnegative().default(0),
     trendAvailable: z.boolean(),
-    sparkline: z.array(z.object({ at: z.string(), passed: z.number().int().nonnegative(), failed: z.number().int().nonnegative() })).max(12)
+    sparkline: z.array(z.object({
+      runId: z.string(),
+      reportedAt: z.string(),
+      status: z.string(),
+      passed: z.number().int().nonnegative(),
+      failed: z.number().int().nonnegative(),
+      broken: z.number().int().nonnegative()
+    })).max(12)
   }).optional()
 });
 export type ProjectQualitySummary = z.infer<typeof ProjectQualitySummarySchema>;

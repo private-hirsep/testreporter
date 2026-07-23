@@ -100,7 +100,7 @@
             </div>
             <v-alert v-if="historical.duration?.slowRegression" type="warning" variant="tonal" class="mb-3">Duration regression: {{ historical.duration.percentageChange?.toFixed(1) }}% / {{ formatDuration(historical.duration.absoluteChangeMs) }} increase.</v-alert>
             <div class="table-scroll"><v-table density="compact" aria-label="Historical case results"><thead><tr><th scope="col">Execution</th><th scope="col">Type</th><th scope="col">Result</th><th scope="col">Branch / environment</th><th scope="col">Observed</th><th scope="col">Case duration</th><th scope="col">Source report</th></tr></thead>
-              <tbody><tr v-for="sample in [...historical.samples].reverse()" :key="`${sample.type}-${sample.executionId}`"><td class="mono">{{ sample.executionId }}</td><td>{{ sample.type }}</td><td><StatusChip :status="sample.status" /></td><td>{{ sample.branch ?? "n/a" }} / {{ sample.environment ?? "n/a" }}</td><td>{{ formatDate(sample.at) }}</td><td>{{ formatDuration(sample.durationMs) }}</td><td><a v-if="sample.sourceReport?.url" :href="sample.sourceReport.url">Open report</a><span v-else>Unavailable</span></td></tr></tbody>
+              <tbody><tr v-for="sample in [...historical.samples].reverse()" :key="`${sample.type}-${sample.executionId}`"><td class="mono">{{ sample.executionId }}</td><td>{{ sample.type }}</td><td><StatusChip :status="sample.status" /></td><td>{{ sample.branch ?? "n/a" }} / {{ sample.environment ?? "n/a" }}</td><td>{{ formatDate(sample.at) }}</td><td>{{ formatDuration(sample.durationMs) }}</td><td><a v-if="safeHistoricalUrl(sample.sourceReport?.url)" :href="safeHistoricalUrl(sample.sourceReport?.url)" target="_blank" rel="noopener noreferrer">Open report</a><span v-else>Unavailable</span></td></tr></tbody>
             </v-table></div>
           </template>
         </section>
@@ -133,6 +133,7 @@ import PageHeader from "../components/PageHeader.vue";
 import StatusChip from "../components/StatusChip.vue";
 import { formatDuration } from "../format";
 import { catalogueFor, executionsFor } from "../services/catalogue";
+import { safeHistoricalUrl } from "../services/history";
 import type { ResolvedUnifiedExecution } from "../services/catalogue";
 import { evidenceRoute, executionRoute, requirementRoute } from "../services/routes";
 import type { HistoryArtifact, Manifest, TestCase, TestCaseImplementation } from "../types";
