@@ -51,8 +51,7 @@ function gateChip(item: PortfolioProject) {
 /**
  * Card-level tone, independent of sort priority. A stale-but-otherwise-ready
  * project must read as a warning, not as a hard failure, so this cannot
- * simply reuse `item.priority` (which clamps stale reports into the top
- * failure band purely to keep them sorted first).
+ * simply reuse `item.priority`.
  */
 function projectTone(item: PortfolioProject): "fail" | "warn" | "pass" | "neutral" {
   if (item.readiness === "blocked" || item.qualityGate === "failed") return "fail";

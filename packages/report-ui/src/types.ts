@@ -423,7 +423,11 @@ export type HistoryArtifact = {
 
 export type HistoricalCaseSummary = {
   testCaseId: string;
-  samples: Array<{
+  streams: HistoricalCaseStreamSummary[];
+  automated?: HistoricalCaseStreamSummary;
+  manual?: HistoricalCaseStreamSummary[];
+  aggregateCurrentStatus?: string;
+  samples?: Array<{
     executionId: string;
     type: "automated" | "manual";
     at: string;
@@ -459,6 +463,16 @@ export type HistoricalCaseSummary = {
     recentMedianMs: number;
     slowRegression: boolean;
   };
+};
+
+export type HistoricalCaseStreamSummary = Omit<
+  HistoricalCaseSummary,
+  "testCaseId" | "streams" | "automated" | "manual" | "aggregateCurrentStatus" | "identityConfidence"
+> & {
+  key: string;
+  type: "automated" | "manual";
+  branch?: string;
+  environment?: string;
 };
 
 export type RequirementCoverage = {

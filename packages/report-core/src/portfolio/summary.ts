@@ -51,7 +51,11 @@ export const ProjectQualitySummarySchema = z.object({
   }).optional()
 });
 export type ProjectQualitySummary = z.infer<typeof ProjectQualitySummarySchema>;
-export type PortfolioProject = ProjectQualitySummary & { stale: boolean; priority: number };
+export type PortfolioProject = ProjectQualitySummary & {
+  stale: boolean;
+  priority: number;
+  severeIssueCount: number;
+};
 export function portfolioPriority(
   item: ProjectQualitySummary,
   now = new Date(),
@@ -82,7 +86,17 @@ export function portfolioPriority(
                         : item.readiness === "warning" || item.readiness === "incomplete"
                           ? 11
                           : 12;
-  return { ...item, stale, priority: stale ? Math.min(priority, 2) : priority };
+  const severeIssueCount =
+    Number(item.readiness === "blocked") +
+    Number(item.qualityGate === "failed") +
+    (item.history?.newFailures ?? item.newFailures) +
+    (item.history?.persistentFailures ?? 0) +
+    item.manualRemaining +
+    item.uncoveredRequirements +
+    item.securityBlockers +
+    (item.history?.slowRegressions ?? 0) +
+    (item.history?.unstableCases ?? 0);
+  return { ...item, stale, priority, severeIssueCount };
 }
 export function sortPortfolio(items: ProjectQualitySummary[], now = new Date(), staleDays = 7) {
   return items
@@ -90,7 +104,10 @@ export function sortPortfolio(items: ProjectQualitySummary[], now = new Date(), 
     .sort(
       (a, b) =>
         a.priority - b.priority ||
-        Number(b.stale) - Number(a.stale) ||
+        b.severeIssueCount - a.severeIssueCount ||
+        (a.stale && b.stale
+          ? new Date(a.generatedAt).getTime() - new Date(b.generatedAt).getTime()
+          : 0) ||
         a.projectKey.localeCompare(b.projectKey)
     );
 }

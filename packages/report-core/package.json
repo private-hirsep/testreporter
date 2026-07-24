@@ -8,6 +8,10 @@
     ".": {
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js"
+    },
+    "./history": {
+      "types": "./dist/history/history.d.ts",
+      "import": "./dist/history/history.js"
     }
   },
   "scripts": {

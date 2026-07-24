@@ -66,6 +66,38 @@ function artifact() {
     cases: [
       {
         testCaseId: caseId,
+        streams: [
+          {
+            key: "automated\u0000main\u0000ci",
+            type: "automated",
+            branch: "main",
+            environment: "ci",
+            samples: [
+              {
+                executionId: "historical-auto",
+                type: "automated",
+                at: "2026-07-23T00:00:00.000Z",
+                status: "failed",
+                presence: "present"
+              },
+              {
+                executionId: "latest-auto",
+                type: "automated",
+                at: "2026-07-24T00:00:00.000Z",
+                status: "absent",
+                presence: "absent"
+              }
+            ],
+            previousStatus: "failed",
+            transition: "removed-or-missing",
+            sampleSize: 1,
+            passed: 0,
+            failed: 1,
+            consecutiveFailures: 1,
+            stability: "insufficient-history",
+            passFailTransitions: 0
+          }
+        ],
         samples: [
           {
             executionId: "historical-auto",

@@ -53,6 +53,7 @@ export type GenerateOptions = {
   inputPath: string;
   outputPath: string;
   zip?: boolean | undefined;
+  deferZip?: boolean | undefined;
   qualityProfile?: string | undefined;
   publishMode?: string | undefined;
   prCommentMode?: string | undefined;
@@ -626,6 +627,13 @@ async function zipDirectory(source: string, target: string) {
   });
 }
 
+export async function finalizeReportArchive(outputPath: string) {
+  const zipPath = path.join(outputPath, "quality-report.zip");
+  const tmpZip = path.join(path.dirname(outputPath), `quality-report-${Date.now()}.zip`);
+  await zipDirectory(outputPath, tmpZip);
+  await rename(tmpZip, zipPath);
+}
+
 async function cleanOutput(outputPath: string) {
   await rm(outputPath, { recursive: true, force: true });
   await mkdir(outputPath, { recursive: true });
@@ -1097,11 +1105,6 @@ export async function buildReport(options: GenerateOptions): Promise<NormalizedR
     `${JSON.stringify(report, null, 2)}\n`
   );
   await writeEvidence(options.outputPath, report);
-  if (options.zip) {
-    const zipPath = path.join(options.outputPath, "quality-report.zip");
-    const tmpZip = path.join(path.dirname(options.outputPath), `quality-report-${Date.now()}.zip`);
-    await zipDirectory(options.outputPath, tmpZip);
-    await rename(tmpZip, zipPath);
-  }
+  if (options.zip && !options.deferZip) await finalizeReportArchive(options.outputPath);
   return report;
 }

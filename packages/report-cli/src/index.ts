@@ -5,7 +5,7 @@ import { Command } from "commander";
 import { ZodError } from "zod";
 import { loadConfig } from "./config.js";
 import { discoverArtifacts } from "./discovery.js";
-import { buildReport } from "./generator.js";
+import { buildReport, finalizeReportArchive } from "./generator.js";
 import { buildPortfolio } from "./portfolio.js";
 import { TOOL_VERSION } from "./version.js";
 import { mergeHistoryDirectory } from "./history.js";
@@ -19,6 +19,7 @@ const historyCommand = program.command("history").description("Manage compact Gi
 historyCommand
   .command("merge")
   .option("--history-dir <path>", "Existing Git-friendly history directory")
+  .option("--config <path>", "Project configuration supplying history thresholds")
   .requiredOption("--current-report <path>", "Current normalized-report.json")
   .requiredOption("--output-dir <path>", "Atomically written next history directory")
   .option("--static-output <path>", "Optimized static history.json output")
@@ -27,9 +28,15 @@ historyCommand
   .option("--max-runs <count>", "Maximum retained automated runs", "50")
   .option("--max-age-days <days>", "Maximum automated run age", "180")
   .option("--max-manual-executions <count>", "Maximum retained manual executions", "200")
+  .option("--stability-minimum-samples <count>", "Samples required for stability (default: 5)")
+  .option("--flaky-transition-threshold <count>", "Pass/fail transitions considered unstable (default: 2)")
+  .option("--duration-minimum-samples <count>", "Duration samples required (default: 3)")
+  .option("--duration-regression-percent <percent>", "Minimum duration increase percent (default: 30)")
+  .option("--duration-minimum-increase-ms <ms>", "Minimum absolute duration increase (default: 500)")
   .action(
     async (options: {
       historyDir?: string;
+      config?: string;
       currentReport: string;
       outputDir: string;
       staticOutput?: string;
@@ -38,8 +45,26 @@ historyCommand
       maxRuns: string;
       maxAgeDays: string;
       maxManualExecutions: string;
+      stabilityMinimumSamples?: string;
+      flakyTransitionThreshold?: string;
+      durationMinimumSamples?: string;
+      durationRegressionPercent?: string;
+      durationMinimumIncreaseMs?: string;
     }) => {
       try {
+        const configured = options.config ? (await loadConfig(options.config)).history : undefined;
+        const positive = (value: string | undefined, fallback: number, label: string) => {
+          const resolved = value === undefined ? fallback : Number(value);
+          if (!Number.isFinite(resolved) || resolved <= 0)
+            throw new Error(`${label} must be greater than zero.`);
+          return resolved;
+        };
+        const nonnegative = (value: string | undefined, fallback: number, label: string) => {
+          const resolved = value === undefined ? fallback : Number(value);
+          if (!Number.isFinite(resolved) || resolved < 0)
+            throw new Error(`${label} must be zero or greater.`);
+          return resolved;
+        };
         const store = await mergeHistoryDirectory({
           currentReport: options.currentReport,
           outputDir: options.outputDir,
@@ -52,7 +77,32 @@ historyCommand
           retention: {
             maxRuns: Number(options.maxRuns),
             maxAgeDays: Number(options.maxAgeDays),
-            maxManualExecutions: Number(options.maxManualExecutions)
+            maxManualExecutions: Number(options.maxManualExecutions),
+            minimumSamples: positive(
+              options.stabilityMinimumSamples,
+              configured?.stability.minimumSamples ?? 5,
+              "stability minimum samples"
+            ),
+            flakyTransitionThreshold: positive(
+              options.flakyTransitionThreshold,
+              configured?.stability.flakyTransitionThreshold ?? 2,
+              "flaky transition threshold"
+            ),
+            durationMinimumSamples: positive(
+              options.durationMinimumSamples,
+              configured?.duration.minimumSamples ?? 3,
+              "duration minimum samples"
+            ),
+            durationRegressionPercent: positive(
+              options.durationRegressionPercent,
+              configured?.duration.regressionPercent ?? 30,
+              "duration regression percent"
+            ),
+            durationMinimumIncreaseMs: nonnegative(
+              options.durationMinimumIncreaseMs,
+              configured?.duration.minimumIncreaseMs ?? 500,
+              "duration minimum increase"
+            )
           }
         });
         console.log(
@@ -223,6 +273,7 @@ program
           inputPath: options.input,
           outputPath: options.output,
           zip: options.zip,
+          deferZip: Boolean(options.zip && config.history.enabled && options.historyOutputDir),
           qualityProfile: options.qualityProfile,
           publishMode: options.publishMode,
           prCommentMode: options.prCommentMode,
@@ -261,6 +312,8 @@ program
           );
           await writeEvidence(options.output, report);
         }
+        if (options.zip && config.history.enabled && options.historyOutputDir)
+          await finalizeReportArchive(options.output);
         console.log(`Generated report for ${report.metadata.projectName}: ${options.output}`);
         console.log(`Quality gate: ${report.qualityGate.status.toUpperCase()}`);
         if (report.warnings.length > 0)

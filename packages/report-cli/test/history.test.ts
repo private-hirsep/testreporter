@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, readFile, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, symlink, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
@@ -14,6 +14,22 @@ import {
 } from "../src/history.js";
 
 describe("history filesystem", () => {
+  it("rejects an index symlink that resolves outside the history root", async () => {
+    const temp = await mkdtemp(path.join(os.tmpdir(), "quality-history-link-"));
+    const history = path.join(temp, "history");
+    await mkdir(path.join(history, "v1"), { recursive: true });
+    const outside = path.join(temp, "outside-index.json");
+    await writeFile(outside, "{}");
+    try {
+      await symlink(outside, path.join(history, "v1/index.json"), "file");
+    } catch (error) {
+      const code = (error as NodeJS.ErrnoException).code;
+      if (code === "EPERM" || code === "EACCES") return;
+      throw error;
+    }
+    await expect(loadHistoryDirectory(history)).rejects.toThrow(/symbolic link|escapes/i);
+  });
+
   it("uses collision-safe deterministic filenames", () => {
     expect(safeHistoryFilename("run/a", "run")).not.toBe(
       safeHistoryFilename("run:a", "run")
@@ -156,7 +172,7 @@ describe("history filesystem", () => {
 
     const second = structuredClone(first);
     second.metadata.runId = "summary-two";
-    second.metadata.generatedAt = "2026-07-24T00:00:00.000Z";
+    second.metadata.generatedAt = "2026-07-25T00:00:00.000Z";
     const secondAutomated = second.unifiedExecutions.find((item) => item.type === "automated")!;
     secondAutomated.id = "summary-two";
     secondAutomated.reportedAt = second.metadata.generatedAt;

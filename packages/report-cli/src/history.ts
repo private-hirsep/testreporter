@@ -1,4 +1,4 @@
-import { mkdir, readFile, realpath, rename, rm, stat, writeFile } from "node:fs/promises";
+import { lstat, mkdir, readFile, realpath, rename, rm, stat, writeFile } from "node:fs/promises";
 import { createHash } from "node:crypto";
 import path from "node:path";
 import { z } from "zod";
@@ -103,14 +103,27 @@ async function exists(file: string) {
 async function assertNoSymlinkEscape(root: string, file: string) {
   const actualRoot = await realpath(root);
   const actualFile = await realpath(file);
-  if (!actualFile.startsWith(`${actualRoot}${path.sep}`))
+  if (actualFile !== actualRoot && !actualFile.startsWith(`${actualRoot}${path.sep}`))
     throw new Error(`History path escapes root through a symbolic link: ${file}`);
+  const target = await stat(file);
+  if (!target.isFile()) throw new Error(`History path is not a regular file: ${file}`);
 }
 
 export async function loadHistoryDirectory(directory: string): Promise<ProjectHistoryStore | undefined> {
   const root = path.join(directory, "v1");
   const indexFile = path.join(root, "index.json");
   if (!(await exists(indexFile))) return undefined;
+  const lexicalRoot = path.resolve(directory);
+  const lexicalIndex = path.resolve(indexFile);
+  if (!lexicalIndex.startsWith(`${lexicalRoot}${path.sep}`))
+    throw new Error("History index escapes the configured history root.");
+  const rootInfo = await lstat(directory);
+  if (!rootInfo.isDirectory()) throw new Error("History root is not a directory.");
+  const versionInfo = await lstat(root);
+  if (!versionInfo.isDirectory() && !versionInfo.isSymbolicLink())
+    throw new Error("History v1 path is not a directory.");
+  await lstat(indexFile);
+  await assertNoSymlinkEscape(directory, indexFile);
   const index = HistoryIndexSchema.parse(JSON.parse(await readFile(indexFile, "utf8")));
   assertUniqueReferences(
     index.runs.map((item) => ({ id: item.id, file: item.file })),

@@ -8,6 +8,11 @@
 
 <script setup lang="ts">
 import { computed } from "vue";
-const props = defineProps<{ label: string; percent: number; display: string | number; tone?: "" | "low" | "medium" }>();
+const props = defineProps<{
+  label: string;
+  percent: number;
+  display: string | number;
+  tone?: "" | "low" | "medium";
+}>();
 const width = computed(() => `${Math.min(Math.max(props.percent, 0), 100)}%`);
 </script>

@@ -37,11 +37,60 @@ Completed, valid manual executions use their validated `executionId`. Reimportin
 
 ```powershell
 npm run quality-report -- history merge `
+  --config quality-report.yml `
   --history-dir .quality-history `
   --current-report site/normalized-report.json `
   --output-dir .quality-history-next `
   --static-output site/data/history.json
 ```
+
+The same project configuration is used by integrated generation and standalone merge. Explicit
+threshold flags override configuration; retention defaults are 50 runs, 180 days, and 200 manual
+executions. Stability defaults to 5 samples and 2 pass/fail transitions. Duration defaults to 3
+samples, a 30% increase, and a 500 ms absolute increase. Invalid sample counts, percentages, and
+increases are rejected.
+
+## Trusted persistence and publication
+
+Trusted main and release examples both call `scripts/persist-history.sh`. Each bounded attempt
+creates a fresh checkout, configures the authenticated `origin`, fetches `quality-history` when it
+exists (or creates an orphan branch), reruns the merge against that remote state, and pushes without
+force. A no-diff result is successful only when the fetched index already contains the current run.
+After three conflicts the persistence job fails with an explicit diagnostic.
+
+The final Pages artifact is uploaded only after that merge updates `site/data/history.json` and the
+project summary. Uploading is staging, not deployment: a separate least-privilege job calls
+`actions/deploy-pages@v4`. The persistence job has `contents: write`; the deployment job alone has
+`pages: write` and `id-token: write`. Pull-request workflows remain read-only.
+
+The central portfolio checks out a configured `quality-summaries` branch/repository and recursively
+loads `projects/**/project-quality-summary.json`. Set `QUALITY_SUMMARY_REPOSITORY` and, for private
+repositories, provide `QUALITY_SUMMARY_READ_TOKEN` as a GitHub App installation token or
+fine-grained token with read-only Contents permission. The token is used only by Actions and is
+never copied into summaries or browser assets.
+
+## Comparison streams and finalization
+
+Logical cases contain independent automated and manual streams keyed by execution type, branch,
+and environment. Automated transitions alone drive new, persistent, recovered, and missing-case
+portfolio metrics. Manual environments remain separate and cannot erase automated state; aggregate
+status is display-only.
+
+When integrated generation requests a ZIP, history and manual executions are merged first, then
+the optimized history and historical project summary are written, evidence and checksums are
+regenerated, and `quality-report.zip` is created last. The ZIP therefore contains the same final
+history, summary, manifests, and checksums as the output directory. Without history, existing ZIP
+behavior remains compatible.
+
+The browser parses the complete optimized artifact with the report-core runtime schema. Invalid
+nested statuses, timestamps, durations, transitions, URLs, counts, or duplicate execution IDs
+make history unavailable while the current report remains usable. Filesystem loading validates
+lexical and real paths for the root, `v1`, index, run files, and manual files; an index or parent
+symlink may not escape the configured root.
+
+Portfolio attention is deterministic: blocked, failed gate, new failures, persistent failures,
+manual work, uncovered requirements, security blockers, slow regressions, unstable cases, stale
+data, warning/incomplete readiness, then healthy. Staleness never outranks an active issue.
 
 No history directory is required on the first run. Input discovery order does not affect output. Identical runs are idempotent; conflicting duplicate IDs are diagnosed and not overwritten. Output is written to a sibling temporary directory and renamed only after every artifact validates; the previous directory is temporarily backed up and restored if replacement fails.
 

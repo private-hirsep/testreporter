@@ -5,14 +5,15 @@ import { describe, expect, it } from "vitest";
 import { buildPortfolio } from "../src/portfolio.js";
 
 describe("portfolio generator", () => {
-  it("keeps downloaded project artifacts in separate directories", async () => {
+  it("collects summaries from a configured Git branch rather than same-run artifacts", async () => {
     const root = path.resolve(import.meta.dirname, "../../..");
     const workflow = await readFile(
       path.join(root, ".github/workflows/portfolio-example.yml"),
       "utf8"
     );
-    expect(workflow).toContain("merge-multiple: false");
-    expect(workflow).not.toContain("merge-multiple: true");
+    expect(workflow).toContain("QUALITY_SUMMARY_REPOSITORY");
+    expect(workflow).toContain("ref: quality-summaries");
+    expect(workflow).not.toContain("actions/download-artifact");
   });
 
   it("validates, sorts and renders three local summaries", async () => {
@@ -24,7 +25,7 @@ describe("portfolio generator", () => {
       7,
       new Date("2026-07-15T12:00:00Z")
     );
-    expect(items.map((item) => item.projectKey)).toEqual(["ALPHA", "GAMMA", "BETA"]);
+    expect(items.map((item) => item.projectKey)).toEqual(["ALPHA", "BETA", "GAMMA"]);
     expect(items.find((item) => item.projectKey === "GAMMA")?.stale).toBe(true);
     const html = await readFile(path.join(output, "index.html"), "utf8");
     expect(html).toContain("Alpha");
@@ -45,8 +46,7 @@ describe("portfolio generator", () => {
     expect(html).not.toContain("metric-alert");
 
     // Card border tone is a distinct semantic signal from sort priority.
-    // GAMMA is stale (clamped into the top sort-priority band alongside
-    // genuine blockers) but is otherwise ready-with-accepted-risks, so its
+    // GAMMA is stale but otherwise ready-with-accepted-risks, so its
     // card must border as a warning, not as a failure.
     const cardTones = new Map(
       [...html.matchAll(/data-priority="(\d+)" data-tone="(\w+)">.*?<h2>(?:<a[^>]*>)?([A-Za-z]+)/gs)]

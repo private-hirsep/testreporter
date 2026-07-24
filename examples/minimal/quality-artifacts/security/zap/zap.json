@@ -13,7 +13,9 @@
           "wascid": "15",
           "desc": "Example ZAP alert",
           "solution": "Set a suitable Content-Security-Policy frame-ancestors directive.",
-          "instances": [{ "uri": "http://localhost:3000/", "evidence": "X-Frame-Options header missing" }]
+          "instances": [
+            { "uri": "http://localhost:3000/", "evidence": "X-Frame-Options header missing" }
+          ]
         }
       ]
     }

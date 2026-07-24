@@ -53,9 +53,17 @@ describe("CLI config and discovery", () => {
     const dir = await mkdtemp(path.join(os.tmpdir(), "quality-config-links-"));
     const valid = path.join(dir, "valid.yml");
     const invalid = path.join(dir, "invalid.yml");
-    await writeFile(valid, "project:\n  name: Links\nlinks:\n  requirement:\n    baseUrl: https://example.test/browse\n");
-    await writeFile(invalid, "project:\n  name: Links\nlinks:\n  defect:\n    baseUrl: javascript:alert(1)\n");
-    expect((await loadConfig(valid)).links.requirement?.baseUrl).toBe("https://example.test/browse/");
+    await writeFile(
+      valid,
+      "project:\n  name: Links\nlinks:\n  requirement:\n    baseUrl: https://example.test/browse\n"
+    );
+    await writeFile(
+      invalid,
+      "project:\n  name: Links\nlinks:\n  defect:\n    baseUrl: javascript:alert(1)\n"
+    );
+    expect((await loadConfig(valid)).links.requirement?.baseUrl).toBe(
+      "https://example.test/browse/"
+    );
     await expect(loadConfig(invalid)).rejects.toThrow(/http or https/);
   });
 

@@ -117,6 +117,41 @@ describe("history UI data", () => {
     expect(validateHistoryArtifact(history()).project.key).toBe("DEMO");
   });
 
+  it.each([
+    ["null run", (value: HistoryArtifact) => value.runs.push(null as never)],
+    [
+      "negative duration",
+      (value: HistoryArtifact) =>
+        value.runs.push({
+          id: "bad",
+          type: "automated",
+          projectKey: "DEMO",
+          reportedAt: "2026-01-01T00:00:00.000Z",
+          status: "passed",
+          counts: { total: 0, passed: 0, failed: 0, broken: 0, blocked: 0, skipped: 0, notRun: 0, unknown: 0 },
+          wallClockDurationMs: -1,
+          caseResults: []
+        })
+    ],
+    [
+      "unsafe URL",
+      (value: HistoryArtifact) =>
+        value.manualExecutions.push({
+          executionId: "bad",
+          projectKey: "DEMO",
+          startedAt: "2026-01-01T00:00:00.000Z",
+          completedAt: "2026-01-01T01:00:00.000Z",
+          status: "passed",
+          caseResults: [],
+          sourceReport: { url: "javascript:alert(1)" }
+        })
+    ]
+  ])("rejects invalid nested history: %s", (_label, mutate) => {
+    const value = history();
+    mutate(value);
+    expect(() => validateHistoryArtifact(value)).toThrow(/history artifact/i);
+  });
+
   it("does not expose unsafe historical links", () => {
     expect(safeHistoricalUrl("javascript:alert(1)")).toBeUndefined();
     expect(safeHistoricalUrl("https://example.test/report")).toBe(

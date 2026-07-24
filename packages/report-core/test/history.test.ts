@@ -234,6 +234,68 @@ describe("project history", () => {
     });
   });
 
+  it("keeps an automated regression visible after a later manual pass", () => {
+    const store = merged([
+      report("auto-pass", "2026-01-01T00:00:00.000Z", [
+        { testCaseId: "TC-1", status: "passed" }
+      ]),
+      report("auto-fail", "2026-01-02T00:00:00.000Z", [
+        { testCaseId: "TC-1", status: "failed" }
+      ])
+    ]);
+    store.manualExecutions.push({
+      executionId: "manual-pass",
+      projectKey: "DEMO",
+      environment: "uat",
+      startedAt: "2026-01-03T00:00:00.000Z",
+      completedAt: "2026-01-03T01:00:00.000Z",
+      status: "passed",
+      caseResults: [{ testCaseId: "TC-1", status: "passed" }]
+    });
+    const item = deriveCaseHistory(store)[0]!;
+    expect(item.automated?.transition).toBe("newly-failing");
+    expect(item.manual?.[0]?.transition).toBe("new-case");
+    expect(deriveHistoryArtifact(store).trends.newFailures).toBe(1);
+  });
+
+  it("keeps automated recovery and manual environments independent of input order", () => {
+    const store = merged([
+      report("auto-fail", "2026-01-01T00:00:00.000Z", [
+        { testCaseId: "TC-1", status: "failed" }
+      ]),
+      report("auto-pass", "2026-01-02T00:00:00.000Z", [
+        { testCaseId: "TC-1", status: "passed" }
+      ])
+    ]);
+    store.manualExecutions.push(
+      {
+        executionId: "manual-prod",
+        projectKey: "DEMO",
+        environment: "prod",
+        startedAt: "2026-01-04T00:00:00.000Z",
+        completedAt: "2026-01-04T01:00:00.000Z",
+        status: "failed",
+        caseResults: [{ testCaseId: "TC-1", status: "failed" }]
+      },
+      {
+        executionId: "manual-uat",
+        projectKey: "DEMO",
+        environment: "uat",
+        startedAt: "2026-01-03T00:00:00.000Z",
+        completedAt: "2026-01-03T01:00:00.000Z",
+        status: "passed",
+        caseResults: [{ testCaseId: "TC-1", status: "passed" }]
+      }
+    );
+    const first = deriveCaseHistory(store)[0]!;
+    store.manualExecutions.reverse();
+    const reordered = deriveCaseHistory(store)[0]!;
+    expect(first.automated?.transition).toBe("recovered");
+    expect(first.manual?.map((stream) => stream.environment).sort()).toEqual(["prod", "uat"]);
+    expect(reordered.streams).toEqual(first.streams);
+    expect(deriveHistoryArtifact(store).trends.recovered).toBe(1);
+  });
+
   it("counts variants as one execution sample using worst state", () => {
     const store = merged([
       report("one", "2026-01-01T00:00:00.000Z", [

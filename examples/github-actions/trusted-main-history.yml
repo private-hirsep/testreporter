@@ -17,71 +17,34 @@ jobs:
       - run: npm run quality-report -- generate --config quality-report.yml --input quality-artifacts --output site
       - uses: actions/upload-artifact@v4
         with: { name: quality-report-unmerged, path: site }
-  merge-publish-persist:
+  persist:
     needs: generate
     runs-on: ubuntu-latest
     permissions:
       contents: write
-      pages: write
-      id-token: write
     steps:
       - uses: actions/download-artifact@v4
         with: { name: quality-report-unmerged, path: site }
       - uses: actions/checkout@v5
         with: { path: tool, persist-credentials: false }
       - run: cd tool && npm ci && npm run build
-      - name: Load or initialize history branch
+      - name: Persist history from latest remote state
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
-        run: |
-          mkdir -p history-checkout
-          cd history-checkout
-          git init
-          git remote add origin "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
-          if git fetch --depth=1 origin quality-history; then
-            git checkout -B quality-history FETCH_HEAD
-          else
-            git checkout --orphan quality-history
-            mkdir -p quality-history/v1
-          fi
-      - name: Merge latest history into final site
-        shell: bash
-        run: |
-          node tool/packages/report-cli/dist/index.js history merge \
-            --history-dir history-checkout/quality-history \
-            --current-report site/normalized-report.json \
-            --output-dir next/quality-history \
-            --static-output site/data/history.json \
-            --project-summary-output site/project-quality-summary.json
+        run: bash tool/scripts/persist-history.sh site/normalized-report.json site tool quality-report.yml
       - uses: actions/upload-pages-artifact@v3
         with: { path: site }
-      - name: Persist with bounded refetch and remerge
-        shell: bash
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          for attempt in 1 2 3; do
-            cd "${GITHUB_WORKSPACE}/history-checkout"
-            git fetch origin quality-history || true
-            if git rev-parse --verify FETCH_HEAD >/dev/null 2>&1; then
-              git reset --hard FETCH_HEAD
-            fi
-            cd "${GITHUB_WORKSPACE}"
-            node tool/packages/report-cli/dist/index.js history merge \
-              --history-dir history-checkout/quality-history \
-              --current-report site/normalized-report.json \
-              --output-dir retry/quality-history
-            rm -rf history-checkout/quality-history
-            cp -R retry/quality-history history-checkout/quality-history
-            cd history-checkout
-            git add quality-history
-            git diff --cached --quiet && exit 0
-            run_id="$(jq -r '.runs[0].id' quality-history/v1/index.json)"
-            git -c user.name=github-actions \
-                -c user.email=41898282+github-actions[bot]@users.noreply.github.com \
-                commit -m "chore(history): record quality run ${run_id}"
-            git push origin HEAD:quality-history && exit 0
-          done
-          echo "::warning::History persistence failed after three refetch-and-remerge attempts"
-          exit 1
+  deploy:
+    needs: persist
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    permissions:
+      pages: write
+      id-token: write
+    steps:
+      - name: Deploy GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4

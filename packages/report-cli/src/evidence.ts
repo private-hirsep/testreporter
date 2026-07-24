@@ -34,8 +34,7 @@ export async function writeEvidence(output: string, report: NormalizedReport) {
       ignore: [
         "quality-report*.zip",
         "evidence-manifest.json",
-        "checksums.sha256",
-        "data/history.json"
+        "checksums.sha256"
       ]
     })
   )

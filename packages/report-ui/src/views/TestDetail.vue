@@ -99,9 +99,13 @@
               <div><strong>{{ formatDuration(historical.duration?.medianMs) }}</strong><span>Median summed implementation time</span></div>
             </div>
             <v-alert v-if="historical.duration?.slowRegression" type="warning" variant="tonal" class="mb-3">Duration regression: {{ historical.duration.percentageChange?.toFixed(1) }}% / {{ formatDuration(historical.duration.absoluteChangeMs) }} increase.</v-alert>
-            <div class="table-scroll"><v-table density="compact" aria-label="Historical case results"><thead><tr><th scope="col">Execution</th><th scope="col">Type</th><th scope="col">Result</th><th scope="col">Branch / environment</th><th scope="col">Observed</th><th scope="col">Case duration</th><th scope="col">Source report</th></tr></thead>
-              <tbody><tr v-for="sample in [...historical.samples].reverse()" :key="`${sample.type}-${sample.executionId}`"><td class="mono">{{ sample.executionId }}</td><td>{{ sample.type }}</td><td><StatusChip :status="sample.status" /></td><td>{{ sample.branch ?? "n/a" }} / {{ sample.environment ?? "n/a" }}</td><td>{{ formatDate(sample.at) }}</td><td>{{ formatDuration(sample.durationMs) }}</td><td><a v-if="safeHistoricalUrl(sample.sourceReport?.url)" :href="safeHistoricalUrl(sample.sourceReport?.url)" target="_blank" rel="noopener noreferrer">Open report</a><span v-else>Unavailable</span></td></tr></tbody>
-            </v-table></div>
+            <section v-for="stream in historical.streams" :key="stream.key" class="mb-4">
+              <h3>{{ stream.type === "automated" ? "Automated" : "Manual" }} · {{ stream.branch ?? "all branches" }} / {{ stream.environment ?? "default environment" }}</h3>
+              <p>Transition: <strong>{{ stream.transition }}</strong> · Stability: {{ stream.stability }}</p>
+              <div class="table-scroll"><v-table density="compact" :aria-label="`${stream.type} historical case results`"><thead><tr><th scope="col">Execution</th><th scope="col">Result</th><th scope="col">Observed</th><th scope="col">Case duration</th><th scope="col">Source report</th></tr></thead>
+                <tbody><tr v-for="sample in [...stream.samples].reverse()" :key="`${stream.key}-${sample.executionId}`"><td class="mono">{{ sample.executionId }}</td><td><StatusChip :status="sample.status" /></td><td>{{ formatDate(sample.at) }}</td><td>{{ formatDuration(sample.durationMs) }}</td><td><a v-if="safeHistoricalUrl(sample.sourceReport?.url)" :href="safeHistoricalUrl(sample.sourceReport?.url)" target="_blank" rel="noopener noreferrer">Open report</a><span v-else>Unavailable</span></td></tr></tbody>
+              </v-table></div>
+            </section>
           </template>
         </section>
       </v-window-item>
