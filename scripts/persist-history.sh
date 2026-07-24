@@ -12,7 +12,22 @@ branch="${HISTORY_BRANCH:-quality-history}"
 attempts="${HISTORY_PUSH_ATTEMPTS:-3}"
 workspace="${GITHUB_WORKSPACE:-$PWD}"
 remote="https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
-run_id="$(jq -er '.metadata.runId // (.unifiedExecutions[] | select(.type == "automated") | .id)' "$report")"
+run_id="$(
+  jq -r '
+    .metadata.runId //
+    ([.unifiedExecutions[]? | select(.type == "automated") | .id][0]) //
+    empty
+  ' "$report"
+)"
+manual_count="$(
+  jq '[.manualExecutions[]? | select(.executionId and .completedAt)] | length' "$report"
+)"
+history_label="${run_id:-manual-executions}"
+
+if [[ -z "$run_id" && "$manual_count" -eq 0 ]]; then
+  echo "No new automated or manual executions to persist."
+  exit 0
+fi
 
 if [[ -f "$config" ]]; then
   config="$(cd "$(dirname "$config")" && pwd)/$(basename "$config")"
@@ -60,20 +75,26 @@ for attempt in $(seq 1 "$attempts"); do
 
   if git -C "${workspace}/history-checkout" diff --cached --quiet; then
     if verify_remote; then
-      echo "History already persisted remotely for ${run_id}."
+      echo "History already persisted remotely for ${history_label}."
       exit 0
     fi
-    echo "::warning::No local history diff, but remote lacks the exact content for ${run_id}; retrying."
+    echo "::warning::No local history diff, but remote lacks the exact content for ${history_label}; retrying."
     continue
   fi
 
   git -C "${workspace}/history-checkout" \
     -c user.name=github-actions \
     -c user.email=41898282+github-actions[bot]@users.noreply.github.com \
-    commit -m "chore(history): record quality run ${run_id}"
+    commit -m "$(
+      if [[ -n "$run_id" ]]; then
+        printf 'chore(history): record quality run %s' "$run_id"
+      else
+        printf 'chore(history): record manual executions'
+      fi
+    )"
   if git -C "${workspace}/history-checkout" push origin "HEAD:${branch}"; then
     if verify_remote; then
-      echo "History persisted and verified for ${run_id}."
+      echo "History persisted and verified for ${history_label}."
       exit 0
     fi
     echo "::warning::Push completed but exact remote verification failed; retrying."

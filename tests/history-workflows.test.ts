@@ -40,6 +40,9 @@ describe("history workflow examples", () => {
     expect(persistence).not.toContain("'.runs[] | select(.id == $id)'");
     expect(persistence).toContain("refetching and remerging");
     expect(persistence).not.toMatch(/push[^\n]*--force|push[^\n]*-f(?:\s|$)/);
+    expect(persistence).toContain("manual-executions");
+    expect(persistence).toContain("No new automated or manual executions to persist.");
+    expect(persistence).not.toContain("jq -er '.metadata.runId");
   });
 
   it("keeps pull requests read-only and isolates trusted write permission", async () => {

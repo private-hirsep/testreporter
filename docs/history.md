@@ -63,6 +63,9 @@ requirement/coverage/security summaries, case snapshots, and source links. Both 
 resolve the source URL from an explicit CLI value first and `project.reportUrl` second. A same-ID
 content conflict fails merge and persistence.
 After three conflicts the persistence job fails with an explicit diagnostic.
+Automated run IDs are optional: a manual-only report persists every completed validated manual
+execution and exact verification checks their IDs and immutable content. A report with neither an
+automated run nor a completed manual execution exits successfully without creating a commit.
 
 The final Pages artifact is uploaded only after that merge updates `site/data/history.json` and the
 project summary. Uploading is staging, not deployment: a separate least-privilege job calls
@@ -143,6 +146,12 @@ removed/missing transitions. `not-executed` is reserved for an explicit `not-run
 Diagnostics use deterministic IDs and are deduplicated. Legacy optional observation fields remain
 readable, but this implementation does not update occurrence counters or claim occurrence tracking.
 
+Stream transition, stability, pass/fail-transition, and duration fields are produced and checked by
+one canonical derivation helper. Automated run status is derived from implementation-result counts;
+manual execution status is derived only from that execution's case results. Project trend totals are
+recomputed from the selected automated streams, so later manual activity cannot erase an automated
+regression or recovery.
+
 By default, comparisons require the same project, execution type, branch, and environment:
 
 - newly failing: current failed/broken after a comparable non-failing state;
@@ -159,6 +168,10 @@ Case duration is summed implementation time within an automated run, clearly lab
 Wall-clock duration may differ from `completedAt - startedAt` because adapters can report the
 runner's measured interval while timestamps come from the surrounding workflow; both must still be
 finite and non-negative, and completion may not precede start.
+
+`oldestAt` and `newestAt` always mean the minimum and maximum parsed `reportedAt` instant. They do
+not use completion time or array position; equal instants use run ID as a deterministic tie-breaker.
+Execution lists may independently sort by completion, start, then report time.
 
 One retained run produces “One execution is available. More executions are required for trends.” No history produces “Historical execution summaries have not been imported for this report.” No synthetic points are generated.
 

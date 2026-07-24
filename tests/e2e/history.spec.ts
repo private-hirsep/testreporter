@@ -94,6 +94,7 @@ function artifact() {
             passed: 0,
             failed: 1,
             consecutiveFailures: 1,
+            lastFailedAt: "2026-07-23T00:00:00.000Z",
             stability: "insufficient-history",
             passFailTransitions: 0
           }
@@ -124,6 +125,7 @@ function artifact() {
         passed: 0,
         failed: 1,
         consecutiveFailures: 1,
+        lastFailedAt: "2026-07-23T00:00:00.000Z",
         identityConfidence: "trusted",
         stability: "insufficient-history",
         passFailTransitions: 0
@@ -237,6 +239,20 @@ for (const [name, mutate, diagnostic] of [
       });
     },
     /absent sample must have absent status/
+  ],
+  [
+    "contradictory run status",
+    (value: ReturnType<typeof artifact>) => {
+      value.runs[0]!.status = "passed";
+    },
+    /contradicts result counts/
+  ],
+  [
+    "invalid project trend",
+    (value: ReturnType<typeof artifact>) => {
+      value.trends.recovered = 1;
+    },
+    /does not match canonical automated streams/
   ]
 ] as const) {
   test(`${name} leaves current executions usable`, async ({ page }) => {

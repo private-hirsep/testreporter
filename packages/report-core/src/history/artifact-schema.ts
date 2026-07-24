@@ -47,6 +47,56 @@ export const HistoryDiagnosticSeveritySchema = z.enum([
   "information"
 ]);
 
+export function deriveAutomatedHistoryStatus(counts: {
+  total: number;
+  passed: number;
+  failed: number;
+  broken: number;
+  blocked: number;
+  skipped: number;
+  notRun: number;
+  unknown: number;
+}) {
+  if (counts.failed > 0 || counts.broken > 0) return "failed" as const;
+  if (counts.blocked > 0) return "blocked" as const;
+  if (counts.unknown > 0) return "unknown" as const;
+  if (counts.passed > 0 && counts.passed + counts.skipped === counts.total)
+    return "passed" as const;
+  if (counts.total === 0 || counts.skipped + counts.notRun === counts.total)
+    return "incomplete" as const;
+  return "unknown" as const;
+}
+
+export function deriveManualHistoryStatus(
+  results: Array<{ status: string }>
+) {
+  const statuses = results.map((result) => result.status);
+  if (statuses.includes("failed")) return "failed" as const;
+  if (statuses.includes("blocked")) return "blocked" as const;
+  if (statuses.includes("unknown")) return "unknown" as const;
+  if (statuses.length > 0 && statuses.every((status) => status === "passed"))
+    return "passed" as const;
+  return "incomplete" as const;
+}
+
+export function reportedTimestamp(run: { reportedAt: string }) {
+  return Date.parse(run.reportedAt);
+}
+
+export function historyReportedRange(
+  runs: Array<{ id: string; reportedAt: string }>
+): { oldestAt?: string; newestAt?: string } {
+  const ordered = [...runs].sort(
+    (left, right) =>
+      reportedTimestamp(left) - reportedTimestamp(right) ||
+      left.id.localeCompare(right.id)
+  );
+  return {
+    ...(ordered[0] ? { oldestAt: ordered[0].reportedAt } : {}),
+    ...(ordered.at(-1) ? { newestAt: ordered.at(-1)!.reportedAt } : {})
+  };
+}
+
 const HttpUrlSchema = z
   .string()
   .url()
@@ -79,66 +129,6 @@ function uniqueBy<T>(
 }
 
 const failedStatuses = new Set(["failed", "broken"]);
-
-function validateDerivedSampleSummary(
-  summary: {
-    samples: Array<{ presence: "present" | "absent"; status: string; at: string }>;
-    sampleSize: number;
-    passed: number;
-    failed: number;
-    passRate?: number | undefined;
-    consecutiveFailures: number;
-    lastPassedAt?: string | undefined;
-    lastFailedAt?: string | undefined;
-  },
-  context: z.RefinementCtx
-) {
-  const present = summary.samples.filter((sample) => sample.presence === "present");
-  const passed = present.filter((sample) => sample.status === "passed").length;
-  const failed = present.filter((sample) => failedStatuses.has(sample.status)).length;
-  let consecutiveFailures = 0;
-  for (const sample of [...present].reverse()) {
-    if (!failedStatuses.has(sample.status)) break;
-    consecutiveFailures++;
-  }
-  const lastPassedAt = [...present].reverse().find((sample) => sample.status === "passed")?.at;
-  const lastFailedAt = [...present]
-    .reverse()
-    .find((sample) => failedStatuses.has(sample.status))?.at;
-  const derived: Array<[keyof typeof summary, unknown, unknown]> = [
-    ["sampleSize", summary.sampleSize, present.length],
-    ["passed", summary.passed, passed],
-    ["failed", summary.failed, failed],
-    ["consecutiveFailures", summary.consecutiveFailures, consecutiveFailures]
-  ];
-  for (const [field, actual, expected] of derived)
-    if (actual !== expected)
-      context.addIssue({
-        code: "custom",
-        path: [field],
-        message: `${String(field)} ${String(actual)} does not match derived value ${String(expected)}`
-      });
-  for (const [field, actual, expected] of [
-    ["lastPassedAt", summary.lastPassedAt, lastPassedAt],
-    ["lastFailedAt", summary.lastFailedAt, lastFailedAt]
-  ] as const)
-    if (actual !== undefined && actual !== expected)
-      context.addIssue({
-        code: "custom",
-        path: [field],
-        message: `${field} does not match the latest relevant sample timestamp`
-      });
-  if (
-    summary.passRate !== undefined &&
-    Math.abs(summary.passRate - (present.length ? (passed / present.length) * 100 : 0)) >
-      0.000_001
-  )
-    context.addIssue({
-      code: "custom",
-      path: ["passRate"],
-      message: "Pass rate does not match passed samples divided by comparable present samples"
-    });
-}
 
 export const HistoryDiagnosticSchema = z
   .object({
@@ -323,6 +313,12 @@ export const HistoricalRunSummarySchema = z
         path: ["counts", "total"],
         message: `Run count total ${run.counts.total} does not equal case result snapshot count ${run.caseResults.length}`
       });
+    if (run.status !== deriveAutomatedHistoryStatus(run.counts))
+      context.addIssue({
+        code: "custom",
+        path: ["status"],
+        message: `Automated run status ${run.status} contradicts result counts`
+      });
     uniqueBy(
       run.caseResults,
       (result) => `${result.testCaseId}\0${result.implementationId ?? ""}`,
@@ -359,6 +355,12 @@ export const HistoricalManualExecutionSummarySchema = z
         code: "custom",
         path: ["completedAt"],
         message: "completedAt must not precede startedAt"
+      });
+    if (execution.status !== deriveManualHistoryStatus(execution.caseResults))
+      context.addIssue({
+        code: "custom",
+        path: ["status"],
+        message: `Manual execution status ${execution.status} contradicts case results`
       });
     uniqueBy(
       execution.caseResults,
@@ -442,6 +444,162 @@ export const HistoricalDurationSummarySchema = z
   })
   .strict();
 
+export const HistoricalThresholdsSchema = z
+  .object({
+    minimumSamples: z.number().int().positive(),
+    flakyTransitionThreshold: z.number().int().nonnegative(),
+    durationMinimumSamples: z.number().int().positive(),
+    durationRegressionPercent: z.number().finite().positive(),
+    durationMinimumIncreaseMs: z.number().finite().nonnegative()
+  })
+  .strict();
+
+export const DEFAULT_HISTORICAL_THRESHOLDS = {
+  minimumSamples: 5,
+  flakyTransitionThreshold: 2,
+  durationMinimumSamples: 3,
+  durationRegressionPercent: 30,
+  durationMinimumIncreaseMs: 500
+};
+
+function historicalTransition(
+  current: { presence: string; status: string } | undefined,
+  previous: { status: string } | undefined
+) {
+  if (!current) return "unknown" as const;
+  if (current.presence === "absent")
+    return previous ? ("removed-or-missing" as const) : ("unchanged" as const);
+  if (current.status === "not-run") return "not-executed" as const;
+  const failing = (status: string | undefined) =>
+    status === "failed" || status === "broken";
+  if (!previous)
+    return failing(current.status) ? ("first-observed-failing" as const) : ("new-case" as const);
+  if (failing(current.status) && failing(previous.status))
+    return "persistently-failing" as const;
+  if (failing(current.status)) return "newly-failing" as const;
+  if (current.status === "passed" && failing(previous.status)) return "recovered" as const;
+  if (current.status === "blocked" && previous.status === "blocked")
+    return "still-blocked" as const;
+  if (current.status === "blocked") return "newly-blocked" as const;
+  return "unchanged" as const;
+}
+
+const median = (values: number[]) =>
+  values.length % 2
+    ? values[Math.floor(values.length / 2)]!
+    : (values[values.length / 2 - 1]! + values[values.length / 2]!) / 2;
+
+export function deriveHistoricalStreamSemantics(
+  inputSamples: Array<z.infer<typeof HistoricalSampleSchema>>,
+  thresholds = DEFAULT_HISTORICAL_THRESHOLDS,
+  identityConfidence: z.infer<typeof HistoricalIdentityConfidenceSchema> = "trusted"
+) {
+  const samples = [...inputSamples].sort(
+    (left, right) =>
+      Date.parse(left.at) - Date.parse(right.at) ||
+      left.executionId.localeCompare(right.executionId)
+  );
+  const current = samples.at(-1);
+  const previous = [...samples]
+    .slice(0, -1)
+    .reverse()
+    .find((sample) => sample.presence === "present");
+  const present = samples.filter((sample) => sample.presence === "present");
+  const passed = present.filter((sample) => sample.status === "passed").length;
+  const failed = present.filter((sample) => failedStatuses.has(sample.status)).length;
+  const passFail = present.filter(
+    (sample) => sample.status === "passed" || failedStatuses.has(sample.status)
+  );
+  let passFailTransitions = 0;
+  for (let index = 1; index < passFail.length; index++)
+    if (
+      (passFail[index]!.status === "passed") !==
+      (passFail[index - 1]!.status === "passed")
+    )
+      passFailTransitions++;
+  let consecutiveFailures = 0;
+  for (const sample of [...present].reverse()) {
+    if (!failedStatuses.has(sample.status)) break;
+    consecutiveFailures++;
+  }
+  const durations = present
+    .map((sample) => sample.durationMs)
+    .filter((duration): duration is number => Number.isFinite(duration) && duration !== undefined && duration >= 0);
+  const latestMs = durations.at(-1);
+  const previousMs = durations.at(-2);
+  const absoluteChangeMs =
+    latestMs !== undefined && previousMs !== undefined ? latestMs - previousMs : undefined;
+  const percentageChange =
+    absoluteChangeMs !== undefined && previousMs
+      ? (absoluteChangeMs / previousMs) * 100
+      : undefined;
+  const inRunFlaky = present.some((sample) =>
+    sample.implementationResults?.some((result) => result.flakyInRun)
+  );
+  return {
+    ...(current?.presence === "present"
+      ? {
+          currentStatus: current.status as Exclude<
+            z.infer<typeof HistoricalSampleStatusSchema>,
+            "absent"
+          >
+        }
+      : {}),
+    ...(previous
+      ? {
+          previousStatus: previous.status as Exclude<
+            z.infer<typeof HistoricalSampleStatusSchema>,
+            "absent"
+          >
+        }
+      : {}),
+    transition: historicalTransition(current, previous),
+    sampleSize: present.length,
+    passed,
+    failed,
+    ...(present.length >= thresholds.minimumSamples && identityConfidence !== "conflicted"
+      ? { passRate: (passed / present.length) * 100 }
+      : {}),
+    consecutiveFailures,
+    ...(() => {
+      const at = [...present].reverse().find((sample) => sample.status === "passed")?.at;
+      return at ? { lastPassedAt: at } : {};
+    })(),
+    ...(() => {
+      const at = [...present].reverse().find((sample) => failedStatuses.has(sample.status))?.at;
+      return at ? { lastFailedAt: at } : {};
+    })(),
+    stability:
+      identityConfidence === "conflicted"
+        ? ("identity-conflict" as const)
+        : inRunFlaky
+          ? ("in-run-flaky" as const)
+          : present.length < thresholds.minimumSamples
+            ? ("insufficient-history" as const)
+            : passed > 0 &&
+                failed > 0 &&
+                passFailTransitions >= thresholds.flakyTransitionThreshold
+              ? ("historically-unstable" as const)
+              : ("stable" as const),
+    passFailTransitions,
+    ...(durations.length >= thresholds.durationMinimumSamples && latestMs !== undefined
+      ? {
+          duration: {
+            latestMs,
+            medianMs: median([...durations].sort((left, right) => left - right)),
+            ...(previousMs !== undefined ? { previousMs } : {}),
+            ...(absoluteChangeMs !== undefined ? { absoluteChangeMs } : {}),
+            ...(percentageChange !== undefined ? { percentageChange } : {}),
+            recentMedianMs: median(durations.slice(-5).sort((left, right) => left - right)),
+            slowRegression:
+              (absoluteChangeMs ?? 0) >= thresholds.durationMinimumIncreaseMs &&
+              (percentageChange ?? 0) >= thresholds.durationRegressionPercent
+          }
+        }
+      : {})
+  };
+}
+
 export const HistoricalCaseStreamSummarySchema = z
   .object({
     key: z.string().min(1),
@@ -471,7 +629,23 @@ export const HistoricalCaseStreamSummarySchema = z
       "stream sample execution ID",
       context
     );
-    validateDerivedSampleSummary(stream, context);
+    if (stream.stability === "historically-unstable" && stream.sampleSize < 2)
+      context.addIssue({
+        code: "custom",
+        path: ["stability"],
+        message: "Historically unstable requires at least two comparable samples"
+      });
+    if (
+      stream.stability === "in-run-flaky" &&
+      !stream.samples.some((sample) =>
+        sample.implementationResults?.some((result) => result.flakyInRun)
+      )
+    )
+      context.addIssue({
+        code: "custom",
+        path: ["stability"],
+        message: "In-run flaky requires explicit retry-flakiness evidence"
+      });
   });
 
 export const HistoricalCaseSummarySchema = z
@@ -583,6 +757,7 @@ export const OptimizedHistoryArtifactSchema = z
     project: z.object({ key: z.string().min(1), name: z.string().min(1) }).strict(),
     generatedAt: DateTimeSchema,
     retention: HistoryRetentionMetadataSchema,
+    thresholds: HistoricalThresholdsSchema.optional(),
     availability: z.enum(["unavailable", "insufficient", "available"]),
     runs: z.array(HistoricalRunSummarySchema),
     manualExecutions: z.array(HistoricalManualExecutionSummarySchema),
@@ -613,16 +788,60 @@ export const OptimizedHistoryArtifactSchema = z
     );
     uniqueBy(artifact.cases, (summary) => summary.testCaseId, "case ID", context);
     uniqueBy(artifact.diagnostics, (diagnostic) => diagnostic.id, "diagnostic ID", context);
+    const thresholds = artifact.thresholds ?? DEFAULT_HISTORICAL_THRESHOLDS;
+    for (const [caseIndex, summary] of artifact.cases.entries())
+      for (const [streamIndex, stream] of summary.streams.entries()) {
+        const expected = deriveHistoricalStreamSemantics(
+          stream.samples,
+          thresholds,
+          summary.identityConfidence
+        );
+        const fields = [
+          "currentStatus",
+          "previousStatus",
+          "transition",
+          "sampleSize",
+          "passed",
+          "failed",
+          "passRate",
+          "consecutiveFailures",
+          "lastPassedAt",
+          "lastFailedAt",
+          "passFailTransitions"
+        ] as const;
+        for (const field of fields)
+          if (stream[field] !== expected[field])
+            context.addIssue({
+              code: "custom",
+              path: ["cases", caseIndex, "streams", streamIndex, field],
+              message: `${field} does not match canonical stream semantics`
+            });
+        if (artifact.thresholds && stream.stability !== expected.stability)
+          context.addIssue({
+            code: "custom",
+            path: ["cases", caseIndex, "streams", streamIndex, "stability"],
+            message: "stability does not match canonical stream semantics"
+          });
+        if (
+          artifact.thresholds &&
+          JSON.stringify(stream.duration) !== JSON.stringify(expected.duration)
+        )
+          context.addIssue({
+            code: "custom",
+            path: ["cases", caseIndex, "streams", streamIndex, "duration"],
+            message: "Duration summary does not match canonical stream semantics"
+          });
+      }
     if (artifact.trends.runCount !== artifact.runs.length)
       context.addIssue({
         code: "custom",
         path: ["trends", "runCount"],
         message: `Trend run count ${artifact.trends.runCount} does not equal retained run count ${artifact.runs.length}`
       });
-    const reportedTimes = artifact.runs.map((run) => run.reportedAt).sort();
+    const reportedRange = historyReportedRange(artifact.runs);
     if (
       artifact.trends.oldestAt !== undefined &&
-      artifact.trends.oldestAt !== reportedTimes.at(0)
+      artifact.trends.oldestAt !== reportedRange.oldestAt
     )
       context.addIssue({
         code: "custom",
@@ -631,7 +850,7 @@ export const OptimizedHistoryArtifactSchema = z
       });
     if (
       artifact.trends.newestAt !== undefined &&
-      artifact.trends.newestAt !== reportedTimes.at(-1)
+      artifact.trends.newestAt !== reportedRange.newestAt
     )
       context.addIssue({
         code: "custom",
@@ -652,6 +871,51 @@ export const OptimizedHistoryArtifactSchema = z
           code: "custom",
           path: ["trends", field],
           message: `Trend metric ${field} exceeds retained logical case count ${caseCount}`
+        });
+    const automatedStreams = artifact.cases
+      .map((summary) => ({
+        summary,
+        stream: summary.streams
+          .filter((stream) => stream.type === "automated")
+          .sort(
+            (left, right) =>
+              Date.parse(right.samples.at(-1)?.at ?? "1970-01-01T00:00:00.000Z") -
+                Date.parse(left.samples.at(-1)?.at ?? "1970-01-01T00:00:00.000Z") ||
+              left.key.localeCompare(right.key)
+          )[0]
+      }))
+      .filter(
+        (item): item is typeof item & { stream: NonNullable<typeof item.stream> } =>
+          item.stream !== undefined
+      );
+    const expectedTrends = {
+      newFailures: automatedStreams.filter((item) =>
+        ["newly-failing", "first-observed-failing"].includes(item.stream.transition)
+      ).length,
+      persistentFailures: automatedStreams.filter(
+        (item) => item.stream.transition === "persistently-failing"
+      ).length,
+      recovered: automatedStreams.filter(
+        (item) => item.stream.transition === "recovered"
+      ).length,
+      removedOrMissing: automatedStreams.filter(
+        (item) => item.stream.transition === "removed-or-missing"
+      ).length,
+      unstable: automatedStreams.filter(
+        (item) => item.stream.stability === "historically-unstable"
+      ).length,
+      slowRegressions: automatedStreams.filter(
+        (item) => item.stream.duration?.slowRegression
+      ).length
+    };
+    for (const field of Object.keys(expectedTrends) as Array<
+      keyof typeof expectedTrends
+    >)
+      if (artifact.trends[field] !== expectedTrends[field])
+        context.addIssue({
+          code: "custom",
+          path: ["trends", field],
+          message: `Trend metric ${field} does not match canonical automated streams`
         });
   });
 

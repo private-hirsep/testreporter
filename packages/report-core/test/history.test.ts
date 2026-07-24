@@ -212,7 +212,11 @@ describe("project history", () => {
     expect(historicalRunContentHash(original)).toBe(historicalRunContentHash(reordered));
     for (const changed of [
       { ...original, commit: "different" },
-      { ...original, status: "failed" as const },
+      {
+        ...original,
+        status: "failed" as const,
+        counts: { ...original.counts, passed: 0, failed: 1 }
+      },
       { ...original, sourceReport: { url: "https://example.test/other" } },
       {
         ...original,
@@ -308,7 +312,7 @@ describe("project history", () => {
       environment: "uat",
       startedAt: "2026-01-03T00:00:00.000Z",
       completedAt: "2026-01-03T01:00:00.000Z",
-      status: "passed",
+      status: "incomplete",
       caseResults: [{ testCaseId: "TC-1", status: "passed" }]
     });
     const item = deriveCaseHistory(store)[0]!;
@@ -477,7 +481,7 @@ describe("project history", () => {
       projectKey: "OTHER",
       startedAt: "2026-01-01T00:00:00.000Z",
       completedAt: "2026-01-01T01:00:00.000Z",
-      status: "passed",
+      status: "incomplete",
       caseResults: []
     });
     expect(() => mergeProjectHistory(inconsistentManual, renamed)).toThrow(

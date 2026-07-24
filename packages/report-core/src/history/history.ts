@@ -6,10 +6,18 @@ import {
   HistoricalRunSummarySchema,
   HistoricalManualExecutionSummarySchema,
   ProjectHistoryStoreSchema,
+  deriveAutomatedHistoryStatus,
+  deriveManualHistoryStatus,
+  deriveHistoricalStreamSemantics,
+  historyReportedRange,
   type HistoricalRunSummary,
   type HistoricalManualExecutionSummary,
   type ProjectHistoryStore,
-  type HistoryDiagnostic
+  type HistoryDiagnostic,
+  type HistoricalCaseExecutionSample,
+  type HistoricalCaseSummary as CanonicalHistoricalCaseSummary,
+  type HistoricalCaseStreamSummary,
+  type HistoricalTransition as HistoryTransition
 } from "./artifact-schema.js";
 export * from "./artifact-schema.js";
 
@@ -104,9 +112,14 @@ function deduplicateDiagnostics(diagnostics: HistoryDiagnostic[]) {
   );
 }
 
-function aggregateStatus(statuses: string[]) {
+function aggregateStatus(
+  statuses: string[]
+): Exclude<HistoricalCaseExecutionSample["status"], "absent"> {
   const order = ["broken", "failed", "blocked", "not-run", "skipped", "passed", "unknown"];
-  return order.find((status) => statuses.includes(status)) ?? "unknown";
+  return (order.find((status) => statuses.includes(status)) ?? "unknown") as Exclude<
+    HistoricalCaseExecutionSample["status"],
+    "absent"
+  >;
 }
 
 export function deriveCurrentRunSummary(
@@ -159,7 +172,7 @@ export function deriveCurrentRunSummary(
     completedAt: execution.completedAt,
     wallClockDurationMs: execution.durationMs,
     testDurationSumMs: execution.testDurationSumMs,
-    status: execution.status,
+    status: deriveAutomatedHistoryStatus(historicalCounts),
     counts: historicalCounts,
     qualityGate: { status: report.qualityGate.status, profile: report.qualityGate.profile },
     readiness: report.readiness
@@ -218,14 +231,7 @@ export function deriveManualExecutionSummaries(
         item.state === "completed" && Boolean(item.completedAt) && validIds.has(item.executionId)
     )
     .map((item) => {
-      const statuses = item.cases.map((result) => result.status);
-      const status = statuses.includes("failed")
-        ? "failed"
-        : statuses.includes("blocked")
-          ? "blocked"
-          : statuses.length && statuses.every((value) => value === "passed" || value === "skipped")
-            ? "passed"
-            : "incomplete";
+      const status = deriveManualHistoryStatus(item.cases);
       return HistoricalManualExecutionSummarySchema.parse({
         executionId: item.executionId,
         projectKey: item.projectKey,
@@ -436,86 +442,14 @@ export function mergeProjectHistory(
   return mergeProjectHistoryResult(existing, report, options, sourceReportUrl).store;
 }
 
-export type HistoryTransition =
-  | "newly-failing"
-  | "first-observed-failing"
-  | "persistently-failing"
-  | "recovered"
-  | "still-blocked"
-  | "newly-blocked"
-  | "not-executed"
-  | "new-case"
-  | "removed-or-missing"
-  | "unchanged";
-
-export interface HistoricalCaseSummary {
-  testCaseId: string;
-  streams: HistoricalCaseStreamSummary[];
+type HistoricalCaseSummary = Omit<
+  CanonicalHistoricalCaseSummary,
+  "samples" | "automated" | "manual"
+> & {
+  samples: HistoricalCaseExecutionSample[];
   automated?: HistoricalCaseStreamSummary;
   manual?: HistoricalCaseStreamSummary[];
-  aggregateCurrentStatus?: string;
-  samples: Array<{
-    executionId: string;
-    type: "automated" | "manual";
-    at: string;
-    status: string;
-    presence: "present" | "absent";
-    branch?: string;
-    environment?: string;
-    release?: string;
-    commit?: string;
-    durationMs?: number;
-    implementationResults?: HistoricalRunSummary["caseResults"];
-    sourceReport?: { url?: string | undefined; evidenceUrl?: string | undefined };
-  }>;
-  currentStatus?: string;
-  previousStatus?: string;
-  transition: HistoryTransition;
-  sampleSize: number;
-  passed: number;
-  failed: number;
-  passRate?: number;
-  consecutiveFailures: number;
-  lastPassedAt?: string;
-  lastFailedAt?: string;
-  identityConfidence: "trusted" | "generated-low" | "conflicted";
-  stability:
-    | "insufficient-history"
-    | "stable"
-    | "historically-unstable"
-    | "identity-conflict";
-  passFailTransitions: number;
-  duration?: {
-    latestMs: number;
-    medianMs: number;
-    previousMs?: number;
-    absoluteChangeMs?: number;
-    percentageChange?: number;
-    recentMedianMs: number;
-    slowRegression: boolean;
-  };
-}
-
-export interface HistoricalCaseStreamSummary {
-  key: string;
-  type: "automated" | "manual";
-  branch?: string;
-  environment?: string;
-  samples: HistoricalCaseSummary["samples"];
-  currentStatus?: string;
-  previousStatus?: string;
-  transition: HistoryTransition;
-  sampleSize: number;
-  passed: number;
-  failed: number;
-  passRate?: number;
-  consecutiveFailures: number;
-  lastPassedAt?: string;
-  lastFailedAt?: string;
-  stability: HistoricalCaseSummary["stability"];
-  passFailTransitions: number;
-  duration?: HistoricalCaseSummary["duration"];
-}
+};
 
 function transition(
   current: HistoricalCaseSummary["samples"][number] | undefined,
@@ -670,8 +604,22 @@ export function deriveCaseHistory(
     const legacy = {
       testCaseId,
       samples: allSamples,
-      ...(current?.presence === "present" ? { currentStatus: current.status } : {}),
-      ...(previous ? { previousStatus: previous.status } : {}),
+      ...(current?.presence === "present"
+        ? {
+            currentStatus: current.status as Exclude<
+              HistoricalCaseExecutionSample["status"],
+              "absent"
+            >
+          }
+        : {}),
+      ...(previous
+        ? {
+            previousStatus: previous.status as Exclude<
+              HistoricalCaseExecutionSample["status"],
+              "absent"
+            >
+          }
+        : {}),
       transition: transition(current, previous),
       sampleSize: presentSamples.length,
       passed,
@@ -733,37 +681,7 @@ export function deriveCaseHistory(
     const streamSummaries: HistoricalCaseStreamSummary[] = [...streamGroups.entries()]
       .map(([key, samples]) => {
         const streamCurrent = samples.at(-1);
-        const streamPrevious = [...samples]
-          .slice(0, -1)
-          .reverse()
-          .find((sample) => sample.presence === "present");
         const present = samples.filter((sample) => sample.presence === "present");
-        const streamPassed = present.filter((sample) => sample.status === "passed").length;
-        const streamFailed = present.filter((sample) =>
-          ["failed", "broken"].includes(sample.status)
-        ).length;
-        const passFailSamples = present.filter((sample) =>
-          ["passed", "failed", "broken"].includes(sample.status)
-        );
-        let transitions = 0;
-        for (let index = 1; index < passFailSamples.length; index++)
-          if (
-            (passFailSamples[index]!.status === "passed") !==
-            (passFailSamples[index - 1]!.status === "passed")
-          )
-            transitions++;
-        const streamDurations = present
-          .map((sample) => sample.durationMs)
-          .filter((value): value is number => value !== undefined);
-        const latestMs = streamDurations.at(-1);
-        const previousMs = streamDurations.at(-2);
-        const absoluteChangeMs =
-          latestMs !== undefined && previousMs !== undefined ? latestMs - previousMs : undefined;
-        const percentage =
-          absoluteChangeMs !== undefined && previousMs
-            ? (absoluteChangeMs / previousMs) * 100
-            : undefined;
-        const orderedDurations = [...streamDurations].sort((a, b) => a - b);
         const streamIdentity = [...present].reverse()[0]?.implementationResults?.[0]?.identity;
         const streamConfidence = streamIdentity?.conflict
           ? "conflicted"
@@ -776,59 +694,7 @@ export function deriveCaseHistory(
           ...(streamCurrent?.branch ? { branch: streamCurrent.branch } : {}),
           ...(streamCurrent?.environment ? { environment: streamCurrent.environment } : {}),
           samples,
-          ...(streamCurrent?.presence === "present"
-            ? { currentStatus: streamCurrent.status }
-            : {}),
-          ...(streamPrevious ? { previousStatus: streamPrevious.status } : {}),
-          transition: transition(streamCurrent, streamPrevious),
-          sampleSize: present.length,
-          passed: streamPassed,
-          failed: streamFailed,
-          ...(present.length >= resolved.minimumSamples && streamConfidence !== "conflicted"
-            ? { passRate: (streamPassed / present.length) * 100 }
-            : {}),
-          consecutiveFailures:
-            [...present]
-              .reverse()
-              .findIndex((sample) => !["failed", "broken"].includes(sample.status)) === -1
-              ? streamFailed
-              : [...present]
-                  .reverse()
-                  .findIndex((sample) => !["failed", "broken"].includes(sample.status)),
-          ...(() => {
-            const value = [...present].reverse().find((sample) => sample.status === "passed")?.at;
-            return value ? { lastPassedAt: value } : {};
-          })(),
-          ...(() => {
-            const value = [...present]
-              .reverse()
-              .find((sample) => ["failed", "broken"].includes(sample.status))?.at;
-            return value ? { lastFailedAt: value } : {};
-          })(),
-          stability:
-            streamConfidence === "conflicted"
-              ? "identity-conflict"
-              : present.length < resolved.minimumSamples
-                ? "insufficient-history"
-                : transitions >= resolved.flakyTransitionThreshold
-                  ? "historically-unstable"
-                  : "stable",
-          passFailTransitions: transitions,
-          ...(streamDurations.length >= resolved.durationMinimumSamples && latestMs !== undefined
-            ? {
-                duration: {
-                  latestMs,
-                  medianMs: median(orderedDurations),
-                  ...(previousMs !== undefined ? { previousMs } : {}),
-                  ...(absoluteChangeMs !== undefined ? { absoluteChangeMs } : {}),
-                  ...(percentage !== undefined ? { percentageChange: percentage } : {}),
-                  recentMedianMs: median(streamDurations.slice(-5).sort((a, b) => a - b)),
-                  slowRegression:
-                    (absoluteChangeMs ?? 0) >= resolved.durationMinimumIncreaseMs &&
-                    (percentage ?? 0) >= resolved.durationRegressionPercent
-                }
-              }
-            : {})
+          ...deriveHistoricalStreamSemantics(samples, resolved, streamConfidence)
         } satisfies HistoricalCaseStreamSummary;
       })
       .sort((a, b) => a.key.localeCompare(b.key));
@@ -843,7 +709,12 @@ export function deriveCaseHistory(
     const aggregateCurrentStatus = aggregateStatus(
       streamSummaries
         .map((item) => item.currentStatus)
-        .filter((status): status is string => status !== undefined)
+        .filter(
+          (
+            status
+          ): status is Exclude<HistoricalCaseExecutionSample["status"], "absent"> =>
+            status !== undefined
+        )
     );
     const preferred = automated ?? [...manual].sort(
       (a, b) => validTime(b.samples.at(-1)?.at) - validTime(a.samples.at(-1)?.at)
@@ -876,6 +747,7 @@ export function deriveCaseHistory(
 }
 
 export function deriveHistoryArtifact(store: ProjectHistoryStore, options: HistoryOptions = {}) {
+  const resolved = { ...DEFAULT_HISTORY_OPTIONS, ...options };
   const cases = deriveCaseHistory(store, [], options);
   const counts = (name: HistoryTransition) =>
     cases.filter((item) => item.automated?.transition === name).length;
@@ -884,6 +756,13 @@ export function deriveHistoryArtifact(store: ProjectHistoryStore, options: Histo
     project: store.project,
     generatedAt: store.generatedAt,
     retention: store.retention,
+    thresholds: {
+      minimumSamples: resolved.minimumSamples,
+      flakyTransitionThreshold: resolved.flakyTransitionThreshold,
+      durationMinimumSamples: resolved.durationMinimumSamples,
+      durationRegressionPercent: resolved.durationRegressionPercent,
+      durationMinimumIncreaseMs: resolved.durationMinimumIncreaseMs
+    },
     availability:
       store.runs.length === 0 ? "unavailable" : store.runs.length === 1 ? "insufficient" : "available",
     runs: store.runs,
@@ -896,8 +775,7 @@ export function deriveHistoryArtifact(store: ProjectHistoryStore, options: Histo
     }),
     trends: {
       runCount: store.runs.length,
-      oldestAt: store.runs.at(-1)?.reportedAt,
-      newestAt: store.runs[0]?.reportedAt,
+      ...historyReportedRange(store.runs),
       newFailures: counts("newly-failing") + counts("first-observed-failing"),
       persistentFailures: counts("persistently-failing"),
       recovered: counts("recovered"),

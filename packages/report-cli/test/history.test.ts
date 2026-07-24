@@ -16,6 +16,62 @@ import {
 } from "../src/history.js";
 
 describe("history filesystem", () => {
+  it("persists, verifies, and deduplicates a manual-only report", async () => {
+    const temp = await mkdtemp(path.join(os.tmpdir(), "quality-history-manual-only-"));
+    const site = path.join(temp, "site");
+    const historyDir = path.join(temp, "history");
+    const configPath = path.resolve("examples/minimal/quality-report.yml");
+    const config = await loadConfig(configPath);
+    await buildReport({
+      config,
+      configPath,
+      inputPath: path.resolve("examples/minimal/quality-artifacts"),
+      outputPath: site
+    });
+    const reportFile = path.join(site, "normalized-report.json");
+    const report = JSON.parse(await readFile(reportFile, "utf8")) as {
+      metadata: { runId?: string };
+      unifiedExecutions: Array<{ id: string; type: string }>;
+      manualExecutions: Array<{
+        executionId: string;
+        projectKey: string;
+        testedBuild?: string;
+        cases: Array<{ status: string; steps: Array<{ status: string }> }>;
+      }>;
+    };
+    delete report.metadata.runId;
+    report.unifiedExecutions = report.unifiedExecutions.filter(
+      (execution) => execution.type === "manual"
+    );
+    expect(report.manualExecutions).toHaveLength(2);
+    for (const execution of report.manualExecutions)
+      execution.projectKey = config.project.key ?? config.project.name;
+    await writeFile(reportFile, JSON.stringify(report));
+    await mergeHistoryDirectory({ currentReport: reportFile, outputDir: historyDir });
+    expect((await loadHistoryDirectory(historyDir))?.manualExecutions).toHaveLength(2);
+    await expect(
+      verifyHistoryContainsCurrentInput({ historyDir, currentReport: reportFile })
+    ).resolves.toMatchObject({
+      runId: undefined,
+      manualExecutionIds: expect.arrayContaining(
+        report.manualExecutions.map((execution) => execution.executionId)
+      )
+    });
+    await mergeHistoryDirectory({
+      historyDir,
+      currentReport: reportFile,
+      outputDir: historyDir
+    });
+    expect((await loadHistoryDirectory(historyDir))?.manualExecutions).toHaveLength(2);
+    report.manualExecutions[0]!.cases[0]!.status = "passed";
+    for (const step of report.manualExecutions[0]!.cases[0]!.steps)
+      step.status = "passed";
+    await writeFile(reportFile, JSON.stringify(report));
+    await expect(
+      mergeHistoryDirectory({ historyDir, currentReport: reportFile, outputDir: historyDir })
+    ).rejects.toThrow(/HISTORY_MANUAL_CONFLICT/);
+  });
+
   it("rejects an index symlink that resolves outside the history root", async () => {
     const temp = await mkdtemp(path.join(os.tmpdir(), "quality-history-link-"));
     const history = path.join(temp, "history");

@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  deriveAutomatedHistoryStatus,
+  deriveHistoricalStreamSemantics,
+  deriveManualHistoryStatus,
+  historyReportedRange,
   HistoricalSampleSchema,
   OptimizedHistoryArtifactSchema,
   parseOptimizedHistoryArtifact
@@ -94,6 +98,7 @@ function artifact() {
             passed: 1,
             failed: 0,
             consecutiveFailures: 0,
+            lastPassedAt: "2026-07-24T00:00:00.000Z",
             stability: "insufficient-history" as const,
             passFailTransitions: 0
           }
@@ -105,6 +110,7 @@ function artifact() {
         passed: 1,
         failed: 0,
         consecutiveFailures: 0,
+        lastPassedAt: "2026-07-24T00:00:00.000Z",
         identityConfidence: "trusted" as const,
         stability: "insufficient-history" as const,
         passFailTransitions: 0
@@ -134,6 +140,66 @@ function artifact() {
 }
 
 describe("optimized history artifact schema", () => {
+  it("derives canonical automated and manual aggregate statuses", () => {
+    const counts = {
+      total: 1, passed: 1, failed: 0, broken: 0, blocked: 0,
+      skipped: 0, notRun: 0, unknown: 0
+    };
+    expect(deriveAutomatedHistoryStatus(counts)).toBe("passed");
+    expect(deriveAutomatedHistoryStatus({ ...counts, passed: 0, failed: 1 })).toBe("failed");
+    expect(deriveAutomatedHistoryStatus({ ...counts, passed: 0, broken: 1 })).toBe("failed");
+    expect(deriveAutomatedHistoryStatus({ ...counts, passed: 0, blocked: 1 })).toBe("blocked");
+    expect(deriveAutomatedHistoryStatus({ ...counts, passed: 0, unknown: 1 })).toBe("unknown");
+    expect(deriveAutomatedHistoryStatus({ ...counts, passed: 0, skipped: 1 })).toBe("incomplete");
+    expect(deriveAutomatedHistoryStatus({ ...counts, total: 0, passed: 0 })).toBe("incomplete");
+    expect(deriveManualHistoryStatus([{ status: "passed" }])).toBe("passed");
+    expect(deriveManualHistoryStatus([{ status: "failed" }])).toBe("failed");
+    expect(deriveManualHistoryStatus([{ status: "blocked" }])).toBe("blocked");
+    expect(deriveManualHistoryStatus([{ status: "not-run" }])).toBe("incomplete");
+    expect(deriveManualHistoryStatus([{ status: "unknown" }])).toBe("unknown");
+  });
+
+  it("derives stream transition, stability, and duration independently of input order", () => {
+    const samples = [
+      { executionId: "one", type: "automated" as const, at: "2026-01-01T00:00:00Z", status: "passed" as const, presence: "present" as const, durationMs: 100 },
+      { executionId: "two", type: "automated" as const, at: "2026-01-02T00:00:00Z", status: "failed" as const, presence: "present" as const, durationMs: 200 }
+    ];
+    const thresholds = {
+      minimumSamples: 2, flakyTransitionThreshold: 1, durationMinimumSamples: 2,
+      durationRegressionPercent: 50, durationMinimumIncreaseMs: 50
+    };
+    const expected = deriveHistoricalStreamSemantics(samples, thresholds);
+    expect(expected).toMatchObject({
+      currentStatus: "failed",
+      previousStatus: "passed",
+      transition: "newly-failing",
+      passFailTransitions: 1,
+      stability: "historically-unstable",
+      duration: {
+        latestMs: 200,
+        previousMs: 100,
+        medianMs: 150,
+        percentageChange: 100,
+        slowRegression: true
+      }
+    });
+    expect(deriveHistoricalStreamSemantics([...samples].reverse(), thresholds)).toEqual(expected);
+  });
+
+  it("derives reported ranges by parsed report instant with deterministic ties", () => {
+    const runs = [
+      { id: "b", reportedAt: "2026-01-01T01:00:00+01:00" },
+      { id: "a", reportedAt: "2026-01-01T00:00:00Z" },
+      { id: "later", reportedAt: "2026-01-02T00:00:00Z" }
+    ];
+    expect(historyReportedRange(runs)).toEqual({
+      oldestAt: "2026-01-01T00:00:00Z",
+      newestAt: "2026-01-02T00:00:00Z"
+    });
+    expect(historyReportedRange([...runs].reverse())).toEqual(historyReportedRange(runs));
+    expect(historyReportedRange([])).toEqual({});
+  });
+
   it("round-trips every supported run metadata field without stripping", () => {
     const parsed = parseOptimizedHistoryArtifact(
       JSON.parse(JSON.stringify(artifact())) as unknown
@@ -196,6 +262,22 @@ describe("optimized history artifact schema", () => {
     expect(OptimizedHistoryArtifactSchema.safeParse(value).success).toBe(false);
   });
 
+  it("rejects contradictory automated and manual aggregate statuses", () => {
+    const automated = artifact();
+    automated.runs[0]!.status = "failed";
+    expect(OptimizedHistoryArtifactSchema.safeParse(automated).success).toBe(false);
+    const manual = artifact();
+    manual.manualExecutions.push({
+      executionId: "manual-1",
+      projectKey: "DEMO",
+      startedAt: "2026-07-23T00:00:00.000Z",
+      completedAt: "2026-07-23T01:00:00.000Z",
+      status: "passed",
+      caseResults: [{ testCaseId: "CASE-1", status: "failed" }]
+    });
+    expect(OptimizedHistoryArtifactSchema.safeParse(manual).success).toBe(false);
+  });
+
   it.each([
     ["sample size", "sampleSize", 2],
     ["passed count", "passed", 0],
@@ -205,6 +287,38 @@ describe("optimized history artifact schema", () => {
   ] as const)("rejects inconsistent stream %s", (_label, field, replacement) => {
     const value = artifact();
     Object.assign(value.cases[0]!.streams[0]!, { [field]: replacement });
+    expect(OptimizedHistoryArtifactSchema.safeParse(value).success).toBe(false);
+  });
+
+  it.each([
+    ["current status", "currentStatus", "failed"],
+    ["previous status", "previousStatus", "passed"],
+    ["transition", "transition", "recovered"],
+    ["pass/fail transitions", "passFailTransitions", 1],
+    ["stability", "stability", "historically-unstable"]
+  ] as const)("rejects corrupt stream %s semantics", (_label, field, replacement) => {
+    const value = artifact();
+    Object.assign(value.cases[0]!.streams[0]!, { [field]: replacement });
+    expect(OptimizedHistoryArtifactSchema.safeParse(value).success).toBe(false);
+  });
+
+  it("rejects a corrupt stream duration summary", () => {
+    const value = artifact();
+    Object.assign(value, {
+      thresholds: {
+        minimumSamples: 5,
+        flakyTransitionThreshold: 2,
+        durationMinimumSamples: 3,
+        durationRegressionPercent: 30,
+        durationMinimumIncreaseMs: 500
+      }
+    });
+    value.cases[0]!.streams[0]!.duration = {
+      latestMs: 999,
+      medianMs: 999,
+      recentMedianMs: 999,
+      slowRegression: true
+    };
     expect(OptimizedHistoryArtifactSchema.safeParse(value).success).toBe(false);
   });
 
@@ -246,6 +360,7 @@ describe("optimized history artifact schema", () => {
     value.runs[0]!.caseResults = [];
     expect(OptimizedHistoryArtifactSchema.safeParse(value).success).toBe(false);
     value.runs[0]!.counts = { total: 0, passed: 0, failed: 0, broken: 0, blocked: 0, skipped: 0, notRun: 0, unknown: 0 };
+    value.runs[0]!.status = "incomplete";
     expect(OptimizedHistoryArtifactSchema.safeParse(value).success).toBe(true);
   });
 
