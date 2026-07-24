@@ -41,7 +41,7 @@ For complete history in Actions:
     fetch-depth: 0
 ```
 
-Shallow and non-Git directories still generate reports; history is best-effort and records its limitation.
+Shallow and non-Git directories still generate reports; definition history is best-effort and records its limitation.
 
 ## Audit package
 
@@ -49,12 +49,14 @@ Shallow and non-Git directories still generate reports; history is best-effort a
 
 ## Project summary and central portfolio
 
-Every report emits versioned `project-quality-summary.json`. A central workflow downloads those small artifacts and runs:
+Every report emits versioned `project-quality-summary.json`. Trusted project workflows publish the validated summary to a configured `quality-summaries` branch or repository at `projects/<project-key>/project-quality-summary.json`; see `examples/github-actions/project-summary-producer.yml`. The central workflow checks out that store and runs:
 
 ```bash
-quality-report portfolio --input downloaded-summaries --output portfolio --stale-days 7
+quality-report portfolio --input summary-store/projects --output portfolio --stale-days 7
 ```
 
-The generated site embeds local validated data and needs no cross-origin fetch. Ordering is blocker, failed gate, manual work, uncovered requirement, new failure, security warning, healthy; stale summaries are escalated and explicitly labelled. Project key/name, patterns, Jira link base, report URL, scope, quality profile, and stale threshold are configuration-driven. Report links must use HTTP(S). Duplicate project keys stop generation and identify all conflicting summary paths. Artifact downloads keep each project in a separate directory so equal summary filenames cannot overwrite each other.
+The generated site embeds local validated data and needs no cross-origin fetch. Ordering is release blocked, failed gate, new failures, persistent failures, required manual work, uncovered requirements, security blockers, slow regressions, historically unstable cases, stale data, warning/incomplete readiness, then healthy. Staleness never outranks an active issue. Report links must use HTTP(S). Duplicate project keys stop generation and identify all conflicting summary paths.
 
-Static limitations: history depends on checkout depth; “new failure” remains zero until comparison input is supplied; external links are references, not bundled proof; locally drafted manual executions are not official evidence. Publish summaries only where their project/release metadata is appropriate to disclose.
+For private summary stores, prefer a GitHub App installation token. A fine-grained PAT is acceptable with only the necessary repository Contents permission. Producers use `QUALITY_SUMMARY_WRITE_TOKEN`; consumers use `QUALITY_SUMMARY_READ_TOKEN`. Neither token is placed in static output.
+
+Historical requirement-state transitions, consecutive uncovered-requirement history, and requirement scope-transition history are deferred. Current requirement traceability and automated/manual/hybrid case links remain available. External links are references, not bundled proof; locally drafted manual executions are not official evidence.

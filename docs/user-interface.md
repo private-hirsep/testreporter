@@ -72,8 +72,10 @@ the report was built from, grouped by category.
 
 `quality-report portfolio` renders a static multi-project page from
 `project-quality-summary.json` files using the same design language as the report. Projects
-are sorted by the existing deterministic attention priority (blocked first), stale summaries
-are labeled and never shown as healthy, and each card links to the full project report.
+are sorted by deterministic attention priority: blocked, failed gate, new failures, persistent
+failures, manual work, uncovered requirements, security blockers, slow regressions, unstable
+history, stale data, warning/incomplete readiness, then healthy. Stale summaries are labelled but
+never outrank active failures, and each card links to the full project report.
 See [release-readiness.md](release-readiness.md) for the summary format.
 
 ## Responsive behavior

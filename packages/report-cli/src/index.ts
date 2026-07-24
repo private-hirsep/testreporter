@@ -8,8 +8,14 @@ import { discoverArtifacts } from "./discovery.js";
 import { buildReport, finalizeReportArchive } from "./generator.js";
 import { buildPortfolio } from "./portfolio.js";
 import { TOOL_VERSION } from "./version.js";
-import { mergeHistoryDirectory } from "./history.js";
-import { deriveHistoryArtifact } from "@quality-report/report-core";
+import {
+  mergeHistoryDirectory,
+  verifyHistoryContainsCurrentInput
+} from "./history.js";
+import {
+  deriveHistoryArtifact
+} from "@quality-report/report-core";
+import { resolveHistoryOptions } from "./history-options.js";
 import { writeEvidence, writeProjectSummary } from "./evidence.js";
 
 const program = new Command();
@@ -25,9 +31,9 @@ historyCommand
   .option("--static-output <path>", "Optimized static history.json output")
   .option("--source-report-url <url>", "Stable URL of the full report")
   .option("--project-summary-output <path>", "Write project summary with derived history")
-  .option("--max-runs <count>", "Maximum retained automated runs", "50")
-  .option("--max-age-days <days>", "Maximum automated run age", "180")
-  .option("--max-manual-executions <count>", "Maximum retained manual executions", "200")
+  .option("--max-runs <count>", "Maximum retained automated runs (default: 50)")
+  .option("--max-age-days <days>", "Maximum automated run age (default: 180)")
+  .option("--max-manual-executions <count>", "Maximum retained manual executions (default: 200)")
   .option("--stability-minimum-samples <count>", "Samples required for stability (default: 5)")
   .option("--flaky-transition-threshold <count>", "Pass/fail transitions considered unstable (default: 2)")
   .option("--duration-minimum-samples <count>", "Duration samples required (default: 3)")
@@ -42,9 +48,9 @@ historyCommand
       staticOutput?: string;
       sourceReportUrl?: string;
       projectSummaryOutput?: string;
-      maxRuns: string;
-      maxAgeDays: string;
-      maxManualExecutions: string;
+      maxRuns?: string;
+      maxAgeDays?: string;
+      maxManualExecutions?: string;
       stabilityMinimumSamples?: string;
       flakyTransitionThreshold?: string;
       durationMinimumSamples?: string;
@@ -53,18 +59,6 @@ historyCommand
     }) => {
       try {
         const configured = options.config ? (await loadConfig(options.config)).history : undefined;
-        const positive = (value: string | undefined, fallback: number, label: string) => {
-          const resolved = value === undefined ? fallback : Number(value);
-          if (!Number.isFinite(resolved) || resolved <= 0)
-            throw new Error(`${label} must be greater than zero.`);
-          return resolved;
-        };
-        const nonnegative = (value: string | undefined, fallback: number, label: string) => {
-          const resolved = value === undefined ? fallback : Number(value);
-          if (!Number.isFinite(resolved) || resolved < 0)
-            throw new Error(`${label} must be zero or greater.`);
-          return resolved;
-        };
         const store = await mergeHistoryDirectory({
           currentReport: options.currentReport,
           outputDir: options.outputDir,
@@ -74,39 +68,33 @@ historyCommand
           ...(options.projectSummaryOutput
             ? { projectSummaryOutput: options.projectSummaryOutput }
             : {}),
-          retention: {
-            maxRuns: Number(options.maxRuns),
-            maxAgeDays: Number(options.maxAgeDays),
-            maxManualExecutions: Number(options.maxManualExecutions),
-            minimumSamples: positive(
-              options.stabilityMinimumSamples,
-              configured?.stability.minimumSamples ?? 5,
-              "stability minimum samples"
-            ),
-            flakyTransitionThreshold: positive(
-              options.flakyTransitionThreshold,
-              configured?.stability.flakyTransitionThreshold ?? 2,
-              "flaky transition threshold"
-            ),
-            durationMinimumSamples: positive(
-              options.durationMinimumSamples,
-              configured?.duration.minimumSamples ?? 3,
-              "duration minimum samples"
-            ),
-            durationRegressionPercent: positive(
-              options.durationRegressionPercent,
-              configured?.duration.regressionPercent ?? 30,
-              "duration regression percent"
-            ),
-            durationMinimumIncreaseMs: nonnegative(
-              options.durationMinimumIncreaseMs,
-              configured?.duration.minimumIncreaseMs ?? 500,
-              "duration minimum increase"
-            )
-          }
+          retention: resolveHistoryOptions(configured, options)
         });
         console.log(
           `History contains ${store.runs.length} automated run(s) and ${store.manualExecutions.length} manual execution(s): ${options.outputDir}`
+        );
+      } catch (error) {
+        handleError(error);
+      }
+    }
+  );
+
+historyCommand
+  .command("verify")
+  .description("Verify that retained history contains the exact current run content")
+  .requiredOption("--history-dir <path>", "Git-friendly history directory")
+  .requiredOption("--current-report <path>", "Current normalized-report.json")
+  .option("--source-report-url <url>", "Stable URL included in the persisted summary")
+  .action(
+    async (options: {
+      historyDir: string;
+      currentReport: string;
+      sourceReportUrl?: string;
+    }) => {
+      try {
+        const verified = await verifyHistoryContainsCurrentInput(options);
+        console.log(
+          `Verified exact persisted history for ${verified.runId ?? `${verified.manualExecutionIds.length} manual execution(s)`}.`
         );
       } catch (error) {
         handleError(error);

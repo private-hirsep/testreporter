@@ -1,143 +1,16 @@
-import { z } from "zod";
-
 import type { NormalizedReport } from "../schema/report.js";
 import { stableId } from "../utils/hash.js";
-
-const HttpUrlSchema = z
-  .string()
-  .url()
-  .refine((value) => ["http:", "https:"].includes(new URL(value).protocol), {
-    message: "historical links must use HTTP or HTTPS"
-  });
-
-export const HISTORY_SCHEMA_VERSION = "1.0";
-
-export const HistoryDiagnosticSchema = z.object({
-  severity: z.enum(["error", "warning", "information"]),
-  code: z.string(),
-  message: z.string(),
-  artifact: z.string().optional()
-});
-
-export const HistoricalCaseResultSnapshotSchema = z.object({
-  testCaseId: z.string(),
-  implementationId: z.string().optional(),
-  status: z.enum(["passed", "failed", "broken", "blocked", "not-run", "skipped", "unknown"]),
-  durationMs: z.number().nonnegative().optional(),
-  attemptCount: z.number().int().positive().optional(),
-  flakyInRun: z.boolean().optional(),
-  identity: z.object({
-    source: z.string(),
-    stable: z.boolean(),
-    conflict: z.boolean()
-  })
-});
-
-const CountsSchema = z.object({
-  total: z.number().int().nonnegative(),
-  passed: z.number().int().nonnegative(),
-  failed: z.number().int().nonnegative(),
-  broken: z.number().int().nonnegative(),
-  blocked: z.number().int().nonnegative(),
-  skipped: z.number().int().nonnegative(),
-  notRun: z.number().int().nonnegative(),
-  unknown: z.number().int().nonnegative()
-});
-
-export const HistoricalRunSummarySchema = z.object({
-  id: z.string(),
-  type: z.literal("automated"),
-  projectKey: z.string(),
-  release: z.string().optional(),
-  branch: z.string().optional(),
-  environment: z.string().optional(),
-  commit: z.string().optional(),
-  workflowRun: z.string().optional(),
-  workflowAttempt: z.number().int().positive().optional(),
-  reportedAt: z.string().datetime(),
-  startedAt: z.string().datetime().optional(),
-  completedAt: z.string().datetime().optional(),
-  wallClockDurationMs: z.number().nonnegative().optional(),
-  testDurationSumMs: z.number().nonnegative().optional(),
-  status: z.enum(["passed", "failed", "blocked", "incomplete", "unknown"]),
-  counts: CountsSchema,
-  qualityGate: z.object({ status: z.string(), profile: z.string().optional() }).optional(),
-  readiness: z
-    .object({
-      status: z.string(),
-      blockers: z.number().int().nonnegative(),
-      warnings: z.number().int().nonnegative(),
-      acceptedRisks: z.number().int().nonnegative()
-    })
-    .optional(),
-  requirements: z
-    .object({
-      covered: z.number().int().nonnegative(),
-      uncovered: z.number().int().nonnegative(),
-      excluded: z.number().int().nonnegative(),
-      total: z.number().int().nonnegative()
-    })
-    .optional(),
-  coverage: z
-    .object({
-      line: z.number().min(0).max(100).optional(),
-      branch: z.number().min(0).max(100).optional(),
-      function: z.number().min(0).max(100).optional(),
-      statement: z.number().min(0).max(100).optional()
-    })
-    .optional(),
-  security: z.object({
-    blockers: z.number().int().nonnegative(),
-    warnings: z.number().int().nonnegative(),
-    accepted: z.number().int().nonnegative()
-  }).optional(),
-  caseResults: z.array(HistoricalCaseResultSnapshotSchema),
-  sourceReport: z.object({ url: HttpUrlSchema.optional(), evidenceUrl: HttpUrlSchema.optional() }).optional()
-});
-
-export const HistoricalManualExecutionSummarySchema = z.object({
-  executionId: z.string(),
-  projectKey: z.string(),
-  release: z.string().optional(),
-  environment: z.string().optional(),
-  testedBuild: z.string().optional(),
-  tester: z.string().optional(),
-  startedAt: z.string().datetime(),
-  completedAt: z.string().datetime(),
-  status: z.enum(["passed", "failed", "blocked", "incomplete", "unknown"]),
-  caseResults: z.array(
-    z.object({
-      testCaseId: z.string(),
-      status: z.enum(["passed", "failed", "blocked", "not-run", "skipped", "unknown"])
-    })
-  ),
-  sourceReport: z.object({ url: HttpUrlSchema.optional(), evidenceUrl: HttpUrlSchema.optional() }).optional()
-});
-
-export const HistoryRetentionMetadataSchema = z.object({
-  maxRuns: z.number().int().positive(),
-  maxAgeDays: z.number().int().positive(),
-  maxManualExecutions: z.number().int().positive(),
-  prunedRuns: z.number().int().nonnegative().default(0),
-  prunedManualExecutions: z.number().int().nonnegative().default(0)
-});
-
-export const ProjectHistoryStoreSchema = z.object({
-  schemaVersion: z.literal(HISTORY_SCHEMA_VERSION),
-  project: z.object({ key: z.string(), name: z.string() }),
-  generatedAt: z.string().datetime(),
-  retention: HistoryRetentionMetadataSchema,
-  runs: z.array(HistoricalRunSummarySchema),
-  manualExecutions: z.array(HistoricalManualExecutionSummarySchema),
-  diagnostics: z.array(HistoryDiagnosticSchema).default([])
-});
-
-export type HistoricalRunSummary = z.infer<typeof HistoricalRunSummarySchema>;
-export type HistoricalManualExecutionSummary = z.infer<
-  typeof HistoricalManualExecutionSummarySchema
->;
-export type ProjectHistoryStore = z.infer<typeof ProjectHistoryStoreSchema>;
-export type HistoryDiagnostic = z.infer<typeof HistoryDiagnosticSchema>;
+import {
+  HISTORY_SCHEMA_VERSION,
+  HistoricalRunSummarySchema,
+  HistoricalManualExecutionSummarySchema,
+  ProjectHistoryStoreSchema,
+  type HistoricalRunSummary,
+  type HistoricalManualExecutionSummary,
+  type ProjectHistoryStore,
+  type HistoryDiagnostic
+} from "./artifact-schema.js";
+export * from "./artifact-schema.js";
 
 export interface HistoryOptions {
   maxRuns?: number;
@@ -169,7 +42,62 @@ const validTime = (value: string | undefined) => {
 const runTime = (run: HistoricalRunSummary) =>
   validTime(run.completedAt ?? run.startedAt ?? run.reportedAt);
 
-const canonical = (value: unknown) => JSON.stringify(value);
+function canonicalValue(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(canonicalValue);
+  if (value && typeof value === "object")
+    return Object.fromEntries(
+      Object.entries(value)
+        .filter(([, item]) => item !== undefined)
+        .sort(([left], [right]) => left.localeCompare(right))
+        .map(([key, item]) => [key, canonicalValue(item)])
+    );
+  return value;
+}
+
+export const canonicalHistoricalContent = (value: unknown) =>
+  JSON.stringify(canonicalValue(value));
+
+export function historicalRunContentHash(run: HistoricalRunSummary) {
+  const normalized = HistoricalRunSummarySchema.parse(run);
+  return stableId([canonicalHistoricalContent(normalized)]);
+}
+
+export function historicalManualContentHash(execution: HistoricalManualExecutionSummary) {
+  const normalized = HistoricalManualExecutionSummarySchema.parse(execution);
+  return stableId([canonicalHistoricalContent(normalized)]);
+}
+
+function diagnosticIdentity(
+  diagnostic: Omit<HistoryDiagnostic, "id" | "occurrences" | "firstObservedAt" | "lastObservedAt">
+) {
+  return stableId([
+    diagnostic.severity,
+    diagnostic.code,
+    diagnostic.projectKey,
+    diagnostic.runId,
+    diagnostic.manualExecutionId,
+    diagnostic.testCaseId,
+    diagnostic.artifact,
+    diagnostic.message
+  ]);
+}
+
+function deduplicateDiagnostics(diagnostics: HistoryDiagnostic[]) {
+  const byId = new Map<string, HistoryDiagnostic>();
+  for (const diagnostic of diagnostics) {
+    const id = diagnostic.id ?? diagnosticIdentity(diagnostic);
+    if (!byId.has(id)) byId.set(id, { ...diagnostic, id });
+  }
+  return [...byId.values()].sort(
+    (left, right) =>
+      left.severity.localeCompare(right.severity) ||
+      left.code.localeCompare(right.code) ||
+      (left.runId ?? left.manualExecutionId ?? left.testCaseId ?? "").localeCompare(
+        right.runId ?? right.manualExecutionId ?? right.testCaseId ?? ""
+      ) ||
+      left.id!.localeCompare(right.id!)
+  );
+}
 
 function aggregateStatus(statuses: string[]) {
   const order = ["broken", "failed", "blocked", "not-run", "skipped", "passed", "unknown"];
@@ -201,6 +129,16 @@ export function deriveCurrentRunSummary(
   const securityBlockers =
     (report.summary.security.critical ?? 0) + (report.summary.security.high ?? 0);
   const readinessActions = report.readiness?.actions ?? [];
+  const historicalCounts = {
+    total: execution.caseResults.length,
+    passed: execution.caseResults.filter((item) => item.status === "passed").length,
+    failed: execution.caseResults.filter((item) => item.status === "failed").length,
+    broken: execution.caseResults.filter((item) => item.status === "broken").length,
+    blocked: execution.caseResults.filter((item) => item.status === "blocked").length,
+    skipped: execution.caseResults.filter((item) => item.status === "skipped").length,
+    notRun: execution.caseResults.filter((item) => item.status === "not-run").length,
+    unknown: execution.caseResults.filter((item) => item.status === "unknown").length
+  };
   return HistoricalRunSummarySchema.parse({
     id,
     type: "automated",
@@ -217,16 +155,7 @@ export function deriveCurrentRunSummary(
     wallClockDurationMs: execution.durationMs,
     testDurationSumMs: execution.testDurationSumMs,
     status: execution.status,
-    counts: {
-      total: execution.counts.total,
-      passed: execution.counts.passed,
-      failed: execution.counts.failed,
-      broken: execution.counts.broken ?? 0,
-      blocked: execution.counts.blocked ?? 0,
-      skipped: execution.counts.skipped ?? 0,
-      notRun: execution.counts.notRun ?? 0,
-      unknown: execution.counts.unknown ?? 0
-    },
+    counts: historicalCounts,
     qualityGate: { status: report.qualityGate.status, profile: report.qualityGate.profile },
     readiness: report.readiness
       ? {
@@ -240,7 +169,10 @@ export function deriveCurrentRunSummary(
       covered: report.requirements.covered.length,
       uncovered: report.requirements.missing.length,
       excluded: report.releaseScope?.excludedRequirements?.length ?? 0,
-      total: report.requirements.expected.length
+      total:
+        report.requirements.covered.length +
+        report.requirements.missing.length +
+        (report.releaseScope?.excludedRequirements?.length ?? 0)
     },
     coverage: { line: report.summary.coverage.totalPercentage },
     security: {
@@ -331,12 +263,19 @@ export function emptyHistoryStore(
   };
 }
 
-export function mergeProjectHistory(
+export interface HistoryMergeResult {
+  store: ProjectHistoryStore;
+  diagnostics: HistoryDiagnostic[];
+  currentInputConflicts: HistoryDiagnostic[];
+  changed: boolean;
+}
+
+export function mergeProjectHistoryResult(
   existing: ProjectHistoryStore | undefined,
   report: NormalizedReport,
   options: HistoryOptions = {},
   sourceReportUrl?: string
-): ProjectHistoryStore {
+): HistoryMergeResult {
   const resolved = { ...DEFAULT_HISTORY_OPTIONS, ...options };
   const project = {
     key: report.metadata.projectKey ?? report.metadata.projectName,
@@ -360,16 +299,29 @@ export function mergeProjectHistory(
         `Manual execution ${execution.executionId} belongs to ${execution.projectKey}, expected ${store.project.key}.`
       );
   const diagnostics = [...store.diagnostics];
+  const currentInputConflicts: HistoryDiagnostic[] = [];
   const runById = new Map(store.runs.map((run) => [run.id, run]));
   const current = deriveCurrentRunSummary(report, sourceReportUrl);
   if (current) {
     const duplicate = runById.get(current.id);
-    if (duplicate && canonical(duplicate) !== canonical(current))
-      diagnostics.push({
+    if (duplicate && historicalRunContentHash(duplicate) !== historicalRunContentHash(current)) {
+      const conflict: HistoryDiagnostic = {
+        id: diagnosticIdentity({
+          severity: "error",
+          code: "HISTORY_RUN_CONFLICT",
+          message: `Run ${current.id} already exists with conflicting immutable content.`,
+          projectKey: project.key,
+          runId: current.id
+        }),
         severity: "error",
         code: "HISTORY_RUN_CONFLICT",
-        message: `Run ${current.id} already exists with conflicting immutable content.`
-      });
+        message: `Run ${current.id} already exists with conflicting immutable content.`,
+        projectKey: project.key,
+        runId: current.id
+      };
+      diagnostics.push(conflict);
+      currentInputConflicts.push(conflict);
+    }
     else runById.set(current.id, current);
   }
   const manualById = new Map(store.manualExecutions.map((item) => [item.executionId, item]));
@@ -380,7 +332,7 @@ export function mergeProjectHistory(
       );
     const duplicate = manualById.get(item.executionId);
     if (!duplicate) manualById.set(item.executionId, item);
-    else if (canonical(duplicate) !== canonical(item)) {
+    else if (historicalManualContentHash(duplicate) !== historicalManualContentHash(item)) {
       const immutable = (value: HistoricalManualExecutionSummary) => ({
         executionId: value.executionId,
         projectKey: value.projectKey,
@@ -389,12 +341,27 @@ export function mergeProjectHistory(
         status: value.status,
         caseResults: value.caseResults
       });
-      if (canonical(immutable(duplicate)) !== canonical(immutable(item)))
-        diagnostics.push({
+      if (
+        canonicalHistoricalContent(immutable(duplicate)) !==
+        canonicalHistoricalContent(immutable(item))
+      ) {
+        const conflict: HistoryDiagnostic = {
+          id: diagnosticIdentity({
+            severity: "error",
+            code: "HISTORY_MANUAL_CONFLICT",
+            message: `Manual execution ${item.executionId} has conflicting result data.`,
+            projectKey: project.key,
+            manualExecutionId: item.executionId
+          }),
           severity: "error",
           code: "HISTORY_MANUAL_CONFLICT",
-          message: `Manual execution ${item.executionId} has conflicting result data.`
-        });
+          message: `Manual execution ${item.executionId} has conflicting result data.`,
+          projectKey: project.key,
+          manualExecutionId: item.executionId
+        };
+        diagnostics.push(conflict);
+        currentInputConflicts.push(conflict);
+      }
       else
         manualById.set(item.executionId, {
           ...duplicate,
@@ -421,11 +388,18 @@ export function mergeProjectHistory(
   const prunedManualExecutions = sortedManual.length - retainedManual.length;
   if (prunedRuns || prunedManualExecutions)
     diagnostics.push({
+      id: diagnosticIdentity({
+        severity: "information",
+        code: "HISTORY_RETENTION_PRUNED",
+        message: `Retention pruned ${prunedRuns} automated run(s) and ${prunedManualExecutions} manual execution(s).`,
+        projectKey: project.key
+      }),
       severity: "information",
       code: "HISTORY_RETENTION_PRUNED",
-      message: `Retention pruned ${prunedRuns} automated run(s) and ${prunedManualExecutions} manual execution(s).`
+      message: `Retention pruned ${prunedRuns} automated run(s) and ${prunedManualExecutions} manual execution(s).`,
+      projectKey: project.key
     });
-  return ProjectHistoryStoreSchema.parse({
+  const merged = ProjectHistoryStoreSchema.parse({
     ...store,
     project,
     generatedAt: report.metadata.generatedAt,
@@ -438,8 +412,23 @@ export function mergeProjectHistory(
     },
     runs: retainedRuns,
     manualExecutions: retainedManual,
-    diagnostics
+    diagnostics: deduplicateDiagnostics(diagnostics)
   });
+  return {
+    store: merged,
+    diagnostics: merged.diagnostics,
+    currentInputConflicts: deduplicateDiagnostics(currentInputConflicts),
+    changed: canonicalHistoricalContent(store) !== canonicalHistoricalContent(merged)
+  };
+}
+
+export function mergeProjectHistory(
+  existing: ProjectHistoryStore | undefined,
+  report: NormalizedReport,
+  options: HistoryOptions = {},
+  sourceReportUrl?: string
+): ProjectHistoryStore {
+  return mergeProjectHistoryResult(existing, report, options, sourceReportUrl).store;
 }
 
 export type HistoryTransition =
@@ -522,138 +511,6 @@ export interface HistoricalCaseStreamSummary {
   passFailTransitions: number;
   duration?: HistoricalCaseSummary["duration"];
 }
-
-const HistoryTransitionSchema = z.enum([
-  "newly-failing",
-  "first-observed-failing",
-  "persistently-failing",
-  "recovered",
-  "still-blocked",
-  "newly-blocked",
-  "not-executed",
-  "new-case",
-  "removed-or-missing",
-  "unchanged"
-]);
-const HistoricalSampleSchema = z.object({
-  executionId: z.string().min(1),
-  type: z.enum(["automated", "manual"]),
-  at: z.string().datetime(),
-  status: z.enum(["passed", "failed", "broken", "blocked", "not-run", "skipped", "unknown", "absent"]),
-  presence: z.enum(["present", "absent"]),
-  branch: z.string().optional(),
-  environment: z.string().optional(),
-  release: z.string().optional(),
-  commit: z.string().optional(),
-  durationMs: z.number().nonnegative().optional(),
-  implementationResults: z.array(HistoricalCaseResultSnapshotSchema).optional(),
-  sourceReport: z.object({ url: HttpUrlSchema.optional(), evidenceUrl: HttpUrlSchema.optional() }).optional()
-});
-const DurationSummarySchema = z.object({
-  latestMs: z.number().nonnegative(),
-  medianMs: z.number().nonnegative(),
-  previousMs: z.number().nonnegative().optional(),
-  absoluteChangeMs: z.number().optional(),
-  percentageChange: z.number().finite().optional(),
-  recentMedianMs: z.number().nonnegative(),
-  slowRegression: z.boolean()
-});
-const StreamSummarySchema = z.object({
-  key: z.string(),
-  type: z.enum(["automated", "manual"]),
-  branch: z.string().optional(),
-  environment: z.string().optional(),
-  samples: z.array(HistoricalSampleSchema),
-  currentStatus: z.string().optional(),
-  previousStatus: z.string().optional(),
-  transition: HistoryTransitionSchema,
-  sampleSize: z.number().int().nonnegative(),
-  passed: z.number().int().nonnegative(),
-  failed: z.number().int().nonnegative(),
-  passRate: z.number().min(0).max(100).optional(),
-  consecutiveFailures: z.number().int().nonnegative(),
-  lastPassedAt: z.string().datetime().optional(),
-  lastFailedAt: z.string().datetime().optional(),
-  stability: z.enum([
-    "insufficient-history",
-    "stable",
-    "historically-unstable",
-    "identity-conflict"
-  ]),
-  passFailTransitions: z.number().int().nonnegative(),
-  duration: DurationSummarySchema.optional()
-});
-
-export const OptimizedHistoryArtifactSchema = z.object({
-  schemaVersion: z.literal(HISTORY_SCHEMA_VERSION),
-  project: z.object({ key: z.string().min(1), name: z.string().min(1) }),
-  generatedAt: z.string().datetime(),
-  retention: HistoryRetentionMetadataSchema,
-  availability: z.enum(["unavailable", "insufficient", "available"]),
-  runs: z.array(HistoricalRunSummarySchema).superRefine((runs, context) => {
-    const ids = new Set<string>();
-    for (const [index, run] of runs.entries()) {
-      if (ids.has(run.id))
-        context.addIssue({ code: "custom", path: [index, "id"], message: "Duplicate run ID" });
-      ids.add(run.id);
-    }
-  }),
-  manualExecutions: z
-    .array(HistoricalManualExecutionSummarySchema)
-    .superRefine((executions, context) => {
-      const ids = new Set<string>();
-      for (const [index, execution] of executions.entries()) {
-        if (ids.has(execution.executionId))
-          context.addIssue({
-            code: "custom",
-            path: [index, "executionId"],
-            message: "Duplicate manual execution ID"
-          });
-        ids.add(execution.executionId);
-      }
-    }),
-  cases: z.array(
-    z.object({
-      testCaseId: z.string().min(1),
-      streams: z.array(StreamSummarySchema),
-      automated: StreamSummarySchema.optional(),
-      manual: z.array(StreamSummarySchema).optional(),
-      aggregateCurrentStatus: z.string().optional(),
-      samples: z.array(HistoricalSampleSchema).optional(),
-      currentStatus: z.string().optional(),
-      previousStatus: z.string().optional(),
-      transition: HistoryTransitionSchema,
-      sampleSize: z.number().int().nonnegative(),
-      passed: z.number().int().nonnegative(),
-      failed: z.number().int().nonnegative(),
-      passRate: z.number().min(0).max(100).optional(),
-      consecutiveFailures: z.number().int().nonnegative(),
-      lastPassedAt: z.string().datetime().optional(),
-      lastFailedAt: z.string().datetime().optional(),
-      identityConfidence: z.enum(["trusted", "generated-low", "conflicted"]),
-      stability: z.enum([
-        "insufficient-history",
-        "stable",
-        "historically-unstable",
-        "identity-conflict"
-      ]),
-      passFailTransitions: z.number().int().nonnegative(),
-      duration: DurationSummarySchema.optional()
-    })
-  ),
-  trends: z.object({
-    runCount: z.number().int().nonnegative(),
-    oldestAt: z.string().datetime().optional(),
-    newestAt: z.string().datetime().optional(),
-    newFailures: z.number().int().nonnegative(),
-    persistentFailures: z.number().int().nonnegative(),
-    recovered: z.number().int().nonnegative(),
-    removedOrMissing: z.number().int().nonnegative(),
-    unstable: z.number().int().nonnegative(),
-    slowRegressions: z.number().int().nonnegative()
-  }),
-  diagnostics: z.array(HistoryDiagnosticSchema)
-});
 
 function transition(
   current: HistoricalCaseSummary["samples"][number] | undefined,

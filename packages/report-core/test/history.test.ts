@@ -5,7 +5,9 @@ import {
   deriveCurrentRunSummary,
   deriveHistoryArtifact,
   emptyHistoryStore,
+  historicalRunContentHash,
   mergeProjectHistory,
+  mergeProjectHistoryResult,
   type NormalizedReport,
   type ProjectHistoryStore
 } from "../src/index.js";
@@ -194,6 +196,62 @@ describe("project history", () => {
     );
     expect(conflict.runs[0]!.caseResults[0]!.status).toBe("passed");
     expect(conflict.diagnostics.some((item) => item.code === "HISTORY_RUN_CONFLICT")).toBe(true);
+  });
+
+  it("hashes normalized run content deterministically and includes immutable changes", () => {
+    const original = deriveCurrentRunSummary(
+      report("hash-run", "2026-01-01T00:00:00.000Z", [
+        { testCaseId: "TC-1", status: "passed" }
+      ]),
+      "https://example.test/report"
+    )!;
+    const reordered = Object.fromEntries(
+      Object.entries(original).reverse()
+    ) as typeof original;
+    expect(historicalRunContentHash(original)).toBe(historicalRunContentHash(reordered));
+    for (const changed of [
+      { ...original, commit: "different" },
+      { ...original, status: "failed" as const },
+      { ...original, sourceReport: { url: "https://example.test/other" } },
+      {
+        ...original,
+        caseResults: [{ ...original.caseResults[0]!, status: "failed" as const }]
+      }
+    ])
+      expect(historicalRunContentHash(changed)).not.toBe(
+        historicalRunContentHash(original)
+      );
+  });
+
+  it("reports only current-input conflicts and deduplicates repeated diagnostics", () => {
+    const first = report("same", "2026-01-01T00:00:00.000Z", [
+      { testCaseId: "TC-1", status: "passed" }
+    ]);
+    const conflicting = report("same", "2026-01-01T00:00:00.000Z", [
+      { testCaseId: "TC-1", status: "failed" }
+    ]);
+    const initial = mergeProjectHistory(undefined, first);
+    const once = mergeProjectHistoryResult(initial, conflicting);
+    const twice = mergeProjectHistoryResult(once.store, conflicting);
+    expect(once.currentInputConflicts).toHaveLength(1);
+    expect(twice.currentInputConflicts).toHaveLength(1);
+    expect(
+      twice.store.diagnostics.filter((item) => item.code === "HISTORY_RUN_CONFLICT")
+    ).toHaveLength(1);
+    expect(twice.store.diagnostics[0]?.runId).toBe("same");
+  });
+
+  it("does not fail an exact duplicate or an unrelated older diagnostic", () => {
+    const input = report("same", "2026-01-01T00:00:00.000Z", []);
+    const initial = mergeProjectHistory(undefined, input);
+    initial.diagnostics.push({
+      severity: "warning",
+      code: "OLDER_WARNING",
+      message: "An older unrelated warning."
+    });
+    const result = mergeProjectHistoryResult(initial, input);
+    expect(result.currentInputConflicts).toHaveLength(0);
+    expect(result.store.runs).toHaveLength(1);
   });
 
   it("sorts and prunes deterministically while retaining the current run", () => {

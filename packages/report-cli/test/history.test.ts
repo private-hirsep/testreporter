@@ -10,7 +10,8 @@ import {
   loadHistoryDirectory,
   mergeHistoryDirectory,
   resolveContainedPath,
-  safeHistoryFilename
+  safeHistoryFilename,
+  verifyHistoryContainsCurrentInput
 } from "../src/history.js";
 
 describe("history filesystem", () => {
@@ -204,5 +205,63 @@ describe("history filesystem", () => {
     expect(await readFile(path.join(portfolio, "index.html"), "utf8")).toContain(
       "Investigate 1 newly failing case(s)"
     );
+  });
+
+  it("verifies exact retained content and fails a same-ID conflict before writing", async () => {
+    const temp = await mkdtemp(path.join(os.tmpdir(), "quality-history-exact-"));
+    const site = path.join(temp, "site");
+    const historyDir = path.join(temp, "history");
+    const configPath = path.resolve("examples/minimal/quality-report.yml");
+    await buildReport({
+      config: await loadConfig(configPath),
+      configPath,
+      inputPath: path.resolve("examples/minimal/quality-artifacts"),
+      outputPath: site
+    });
+    const reportFile = path.join(site, "normalized-report.json");
+    const report = JSON.parse(await readFile(reportFile, "utf8")) as {
+      metadata: { runId?: string };
+      manualExecutions: unknown[];
+      unifiedExecutions: Array<{
+        type: string;
+        caseResults: Array<{ status: string }>;
+        status: string;
+      }>;
+    };
+    report.metadata.runId = "exact-run";
+    report.manualExecutions = [];
+    report.unifiedExecutions = report.unifiedExecutions.filter(
+      (execution) => execution.type === "automated"
+    );
+    await writeFile(reportFile, JSON.stringify(report));
+    await mergeHistoryDirectory({ currentReport: reportFile, outputDir: historyDir });
+    await expect(
+      verifyHistoryContainsCurrentInput({
+        historyDir,
+        currentReport: reportFile
+      })
+    ).resolves.toMatchObject({ runId: "exact-run" });
+
+    const conflicting = structuredClone(report);
+    conflicting.unifiedExecutions[0]!.caseResults[0]!.status = "failed";
+    conflicting.unifiedExecutions[0]!.status = "failed";
+    await writeFile(reportFile, JSON.stringify(conflicting));
+    const indexBefore = await readFile(path.join(historyDir, "v1/index.json"), "utf8");
+    await expect(
+      mergeHistoryDirectory({
+        historyDir,
+        currentReport: reportFile,
+        outputDir: historyDir
+      })
+    ).rejects.toThrow(/HISTORY_RUN_CONFLICT.*exact-run/s);
+    expect(await readFile(path.join(historyDir, "v1/index.json"), "utf8")).toBe(
+      indexBefore
+    );
+    await expect(
+      verifyHistoryContainsCurrentInput({
+        historyDir,
+        currentReport: reportFile
+      })
+    ).rejects.toThrow(/conflicting immutable content/i);
   });
 });

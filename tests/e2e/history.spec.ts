@@ -187,3 +187,28 @@ test("invalid optional history leaves the current report usable", async ({ page 
   await page.goto("/#/history");
   await expect(page.getByText("demo-release-17-follow-up")).toBeVisible();
 });
+
+test("invalid nested stream status does not partially render history", async ({ page }) => {
+  const invalid = artifact();
+  invalid.cases[0]!.streams[0]!.samples[0]!.status = "banana" as never;
+  await provideHistory(page, invalid);
+  await page.goto("/#/executions");
+  await expect(page.getByText("demo-release-17-follow-up")).toBeVisible();
+  await page.goto(`/#/tests/${caseId}`);
+  await page.getByRole("tab", { name: "History", exact: true }).click();
+  await expect(
+    page.getByText("Historical execution summaries have not been imported for this case.")
+  ).toBeVisible();
+  await page.goto("/#/diagnostics");
+  await expect(page.getByText(/cases\.0\.streams\.0\.samples\.0\.status/)).toBeVisible();
+});
+
+test("duplicate historical cases leave current readiness available", async ({ page }) => {
+  const invalid = artifact();
+  invalid.cases.push(structuredClone(invalid.cases[0]!));
+  await provideHistory(page, invalid);
+  await page.goto("/#/readiness");
+  await expect(page.getByRole("heading", { name: "Release Readiness" })).toBeVisible();
+  await page.goto("/#/diagnostics");
+  await expect(page.getByText(/Duplicate case ID/)).toBeVisible();
+});

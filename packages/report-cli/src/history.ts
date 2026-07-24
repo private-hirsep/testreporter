@@ -6,9 +6,15 @@ import { z } from "zod";
 import {
   HistoricalManualExecutionSummarySchema,
   HistoricalRunSummarySchema,
+  HistoryDiagnosticSchema,
   ProjectHistoryStoreSchema,
+  deriveCurrentRunSummary,
+  deriveManualExecutionSummaries,
   deriveHistoryArtifact,
-  mergeProjectHistory,
+  historicalManualContentHash,
+  historicalRunContentHash,
+  mergeProjectHistoryResult,
+  parseOptimizedHistoryArtifact,
   type HistoryOptions,
   type NormalizedReport,
   NormalizedReportSchema,
@@ -33,14 +39,7 @@ const HistoryIndexSchema = z.object({
   manualExecutions: z.array(
     z.object({ executionId: z.string(), file: z.string(), completedAt: z.string().datetime() })
   ),
-  diagnostics: z.array(
-    z.object({
-      severity: z.enum(["error", "warning", "information"]),
-      code: z.string(),
-      message: z.string(),
-      artifact: z.string().optional()
-    })
-  )
+  diagnostics: z.array(HistoryDiagnosticSchema)
 });
 type HistoryIndex = z.infer<typeof HistoryIndexSchema>;
 
@@ -235,12 +234,15 @@ export async function mergeHistoryDirectory(options: {
   const existing = options.historyDir
     ? await loadHistoryDirectory(options.historyDir)
     : undefined;
-  const store = mergeProjectHistory(
+  const result = mergeProjectHistoryResult(
     existing,
     report,
     options.retention,
     options.sourceReportUrl
   );
+  if (result.currentInputConflicts.length)
+    throw new HistoryInputConflictError(result.currentInputConflicts);
+  const store = result.store;
   const parent = path.dirname(path.resolve(options.outputDir));
   const temporary = path.join(
     parent,
@@ -261,10 +263,13 @@ export async function mergeHistoryDirectory(options: {
     throw error;
   }
   if (options.staticOutput) {
+    const artifact = parseOptimizedHistoryArtifact(
+      deriveHistoryArtifact(store, options.retention)
+    );
     await mkdir(path.dirname(options.staticOutput), { recursive: true });
     await writeFile(
       options.staticOutput,
-      `${JSON.stringify(deriveHistoryArtifact(store, options.retention), null, 2)}\n`
+      `${JSON.stringify(artifact, null, 2)}\n`
     );
   }
   if (options.projectSummaryOutput) {
@@ -280,4 +285,69 @@ export async function mergeHistoryDirectory(options: {
     await writeEvidence(path.dirname(options.projectSummaryOutput), report);
   }
   return store;
+}
+
+export class HistoryInputConflictError extends Error {
+  constructor(
+    public readonly conflicts: Array<{
+      code: string;
+      runId?: string | undefined;
+      manualExecutionId?: string | undefined;
+      message: string;
+    }>
+  ) {
+    super(
+      `Current history input conflicts with retained immutable content:\n${conflicts
+        .map(
+          (item) =>
+            `- ${item.code} ${item.runId ?? item.manualExecutionId ?? "unknown"}: ${item.message}`
+        )
+        .join("\n")}`
+    );
+    this.name = "HistoryInputConflictError";
+  }
+}
+
+export async function verifyHistoryContainsCurrentInput(options: {
+  historyDir: string;
+  currentReport: string;
+  sourceReportUrl?: string;
+}) {
+  const report = NormalizedReportSchema.parse(
+    JSON.parse(await readFile(options.currentReport, "utf8"))
+  ) as NormalizedReport;
+  const store = await loadHistoryDirectory(options.historyDir);
+  if (!store) throw new Error(`History store is missing: ${options.historyDir}`);
+  const current = deriveCurrentRunSummary(report, options.sourceReportUrl);
+  if (current) {
+    const retained = store.runs.find((run) => run.id === current.id);
+    if (!retained)
+      throw new Error(`Remote history does not contain current run ${current.id}.`);
+    if (historicalRunContentHash(retained) !== historicalRunContentHash(current))
+      throw new Error(
+        `Remote history run ${current.id} has conflicting immutable content.`
+      );
+  }
+  for (const currentManual of deriveManualExecutionSummaries(report, options.sourceReportUrl)) {
+    const retained = store.manualExecutions.find(
+      (execution) => execution.executionId === currentManual.executionId
+    );
+    if (!retained)
+      throw new Error(
+        `Remote history does not contain manual execution ${currentManual.executionId}.`
+      );
+    if (
+      historicalManualContentHash(retained) !== historicalManualContentHash(currentManual)
+    )
+      throw new Error(
+        `Remote history manual execution ${currentManual.executionId} has conflicting immutable content.`
+      );
+  }
+  return {
+    runId: current?.id,
+    manualExecutionIds: deriveManualExecutionSummaries(
+      report,
+      options.sourceReportUrl
+    ).map((execution) => execution.executionId)
+  };
 }

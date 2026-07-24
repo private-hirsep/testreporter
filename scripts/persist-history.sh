@@ -14,6 +14,23 @@ workspace="${GITHUB_WORKSPACE:-$PWD}"
 remote="https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
 run_id="$(jq -er '.metadata.runId // (.unifiedExecutions[] | select(.type == "automated") | .id)' "$report")"
 
+if [[ -f "$config" ]]; then
+  config="$(cd "$(dirname "$config")" && pwd)/$(basename "$config")"
+elif [[ "$config" != /* && -f "${tool}/${config}" ]]; then
+  config="$(cd "$tool" && pwd)/$config"
+else
+  echo "::error::History configuration file was supplied but could not be resolved: ${config}"
+  exit 2
+fi
+
+verify_remote() {
+  git -C "${workspace}/history-checkout" fetch --depth=1 origin "$branch"
+  git -C "${workspace}/history-checkout" reset --hard FETCH_HEAD
+  node "${tool}/packages/report-cli/dist/index.js" history verify \
+    --history-dir "${workspace}/history-checkout/quality-history" \
+    --current-report "$report"
+}
+
 for attempt in $(seq 1 "$attempts"); do
   echo "History persistence attempt ${attempt}/${attempts}"
   rm -rf "${workspace}/history-checkout" "${workspace}/next-history"
@@ -41,12 +58,11 @@ for attempt in $(seq 1 "$attempts"); do
   git -C "${workspace}/history-checkout" add quality-history
 
   if git -C "${workspace}/history-checkout" diff --cached --quiet; then
-    if jq -e --arg id "$run_id" '.runs[] | select(.id == $id)' \
-      "${workspace}/history-checkout/quality-history/v1/index.json" >/dev/null; then
+    if verify_remote; then
       echo "History already persisted remotely for ${run_id}."
       exit 0
     fi
-    echo "::warning::No local history diff, but remote does not contain ${run_id}; retrying."
+    echo "::warning::No local history diff, but remote lacks the exact content for ${run_id}; retrying."
     continue
   fi
 
@@ -55,8 +71,11 @@ for attempt in $(seq 1 "$attempts"); do
     -c user.email=41898282+github-actions[bot]@users.noreply.github.com \
     commit -m "chore(history): record quality run ${run_id}"
   if git -C "${workspace}/history-checkout" push origin "HEAD:${branch}"; then
-    echo "History persisted for ${run_id}."
-    exit 0
+    if verify_remote; then
+      echo "History persisted and verified for ${run_id}."
+      exit 0
+    fi
+    echo "::warning::Push completed but exact remote verification failed; retrying."
   fi
   echo "::warning::Push conflict; refetching and remerging from remote."
 done

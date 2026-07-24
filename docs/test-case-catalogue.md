@@ -53,4 +53,12 @@ Older unified executions without `caseResults` remain navigable, but the UI repo
 
 ## Historical limitations and future work
 
-This version contains the current automated execution and imported manual executions only. It does not download CI artifacts, persist summaries between builds, merge earlier workflow runs, store cross-release trends, or manufacture flaky trends. Those historical summaries and trends are deferred to PR 3. Test-plan editing, Jira synchronization, browser case editing, backend services, user accounts, portfolio history, AI recommendations, and new quality/readiness rules also remain out of scope.
+The catalogue exposes retained logical-case history with separate automated streams by branch and
+environment and independent manual streams by environment. Unified historical executions remain
+navigable, and automated transitions feed project and portfolio summaries. Current requirement
+traceability remains available.
+
+Historical requirement-state transitions, consecutive uncovered-requirement history, and
+requirement scope-transition history are explicitly deferred. Test-plan editing, Jira
+synchronization, browser case editing, backend services, user accounts, AI recommendations, and
+new quality/readiness rules remain out of scope.

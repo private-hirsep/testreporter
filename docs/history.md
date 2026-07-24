@@ -55,7 +55,11 @@ increases are rejected.
 Trusted main and release examples both call `scripts/persist-history.sh`. Each bounded attempt
 creates a fresh checkout, configures the authenticated `origin`, fetches `quality-history` when it
 exists (or creates an orphan branch), reruns the merge against that remote state, and pushes without
-force. A no-diff result is successful only when the fetched index already contains the current run.
+force. A no-diff result is successful only when the fetched run file has the exact canonical
+SHA-256 content identity of the current normalized run. The hash covers identity, project/release
+context, workflow attempt, timestamps, status/counts, gate/readiness,
+requirement/coverage/security summaries, case snapshots, and source links. Object-key order is
+normalized before hashing. A same-ID content conflict fails merge and persistence.
 After three conflicts the persistence job fails with an explicit diagnostic.
 
 The final Pages artifact is uploaded only after that merge updates `site/data/history.json` and the
@@ -68,6 +72,13 @@ loads `projects/**/project-quality-summary.json`. Set `QUALITY_SUMMARY_REPOSITOR
 repositories, provide `QUALITY_SUMMARY_READ_TOKEN` as a GitHub App installation token or
 fine-grained token with read-only Contents permission. The token is used only by Actions and is
 never copied into summaries or browser assets.
+
+Each project publishes its final validated summary using
+`examples/github-actions/project-summary-producer.yml`. The trusted producer writes
+`projects/<project-key>/project-quality-summary.json`, commits only changes, and uses a bounded
+refetch/reapply loop without force push. Set `QUALITY_SUMMARY_REPOSITORY` and store a GitHub App
+installation token (preferred) or minimally scoped fine-grained PAT with repository Contents write
+permission as `QUALITY_SUMMARY_WRITE_TOKEN`. The build job never receives that write token.
 
 ## Comparison streams and finalization
 
@@ -82,9 +93,11 @@ regenerated, and `quality-report.zip` is created last. The ZIP therefore contain
 history, summary, manifests, and checksums as the output directory. Without history, existing ZIP
 behavior remains compatible.
 
-The browser parses the complete optimized artifact with the report-core runtime schema. Invalid
-nested statuses, timestamps, durations, transitions, URLs, counts, or duplicate execution IDs
-make history unavailable while the current report remains usable. Filesystem loading validates
+The browser and CLI parse the complete optimized artifact with the single browser-safe report-core
+schema exported as `@quality-report/report-core/history-schema`. Invalid nested statuses,
+timestamps, durations, transitions, stability states, URLs, inconsistent counts or presence
+markers, and duplicate run/manual/case/stream/sample/diagnostic IDs make history unavailable while
+the current report remains usable. Filesystem loading validates
 lexical and real paths for the root, `v1`, index, run files, and manual files; an index or parent
 symlink may not escape the configured root.
 

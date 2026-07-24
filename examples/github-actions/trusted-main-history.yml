@@ -32,7 +32,7 @@ jobs:
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
-        run: bash tool/scripts/persist-history.sh site/normalized-report.json site tool quality-report.yml
+        run: bash tool/scripts/persist-history.sh site/normalized-report.json site tool tool/quality-report.yml
       - uses: actions/upload-pages-artifact@v3
         with: { path: site }
   deploy:

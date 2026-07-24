@@ -418,7 +418,20 @@ export type HistoryArtifact = {
     unstable: number;
     slowRegressions: number;
   };
-  diagnostics: Array<{ severity: string; code: string; message: string; artifact?: string }>;
+  diagnostics: Array<{
+    id?: string;
+    severity: "error" | "warning" | "information";
+    code: string;
+    message: string;
+    artifact?: string;
+    projectKey?: string;
+    runId?: string;
+    manualExecutionId?: string;
+    testCaseId?: string;
+    firstObservedAt?: string;
+    lastObservedAt?: string;
+    occurrences?: number;
+  }>;
 };
 
 export type HistoricalCaseSummary = {
