@@ -1,4 +1,5 @@
 import type { NormalizedReport } from "../schema/report.js";
+import { createHash } from "node:crypto";
 import { stableId } from "../utils/hash.js";
 import {
   HISTORY_SCHEMA_VERSION,
@@ -59,12 +60,16 @@ export const canonicalHistoricalContent = (value: unknown) =>
 
 export function historicalRunContentHash(run: HistoricalRunSummary) {
   const normalized = HistoricalRunSummarySchema.parse(run);
-  return stableId([canonicalHistoricalContent(normalized)]);
+  return createHash("sha256")
+    .update(canonicalHistoricalContent(normalized), "utf8")
+    .digest("hex");
 }
 
 export function historicalManualContentHash(execution: HistoricalManualExecutionSummary) {
   const normalized = HistoricalManualExecutionSummarySchema.parse(execution);
-  return stableId([canonicalHistoricalContent(normalized)]);
+  return createHash("sha256")
+    .update(canonicalHistoricalContent(normalized), "utf8")
+    .digest("hex");
 }
 
 function diagnosticIdentity(

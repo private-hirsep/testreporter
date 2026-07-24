@@ -130,7 +130,7 @@ function artifact() {
       }
     ],
     trends: {
-      runCount: 2,
+      runCount: 1,
       newFailures: 0,
       persistentFailures: 0,
       recovered: 0,
@@ -212,3 +212,40 @@ test("duplicate historical cases leave current readiness available", async ({ pa
   await page.goto("/#/diagnostics");
   await expect(page.getByText(/Duplicate case ID/)).toBeVisible();
 });
+
+for (const [name, mutate, diagnostic] of [
+  [
+    "inconsistent run counts",
+    (value: ReturnType<typeof artifact>) => {
+      value.runs[0]!.counts.total++;
+    },
+    /Count total|case result snapshot count/
+  ],
+  [
+    "duplicate stream key",
+    (value: ReturnType<typeof artifact>) => {
+      value.cases[0]!.streams.push(structuredClone(value.cases[0]!.streams[0]!));
+    },
+    /Duplicate case stream key/
+  ],
+  [
+    "invalid absence status",
+    (value: ReturnType<typeof artifact>) => {
+      Object.assign(value.cases[0]!.streams[0]!.samples[0]!, {
+        presence: "absent",
+        status: "passed"
+      });
+    },
+    /absent sample must have absent status/
+  ]
+] as const) {
+  test(`${name} leaves current executions usable`, async ({ page }) => {
+    const invalid = artifact();
+    mutate(invalid);
+    await provideHistory(page, invalid);
+    await page.goto("/#/executions");
+    await expect(page.getByText("demo-release-17-follow-up")).toBeVisible();
+    await page.goto("/#/diagnostics");
+    await expect(page.getByText(diagnostic)).toBeVisible();
+  });
+}

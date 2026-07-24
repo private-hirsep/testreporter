@@ -4,6 +4,13 @@ import {
   type QualityReportConfig
 } from "@quality-report/report-core";
 
+export function resolveHistorySourceReportUrl(
+  cliValue: string | undefined,
+  configValue: string | undefined
+) {
+  return cliValue ?? configValue;
+}
+
 export type HistoryCliOptions = {
   maxRuns?: string;
   maxAgeDays?: string;

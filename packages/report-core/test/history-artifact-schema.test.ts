@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  HistoricalSampleSchema,
   OptimizedHistoryArtifactSchema,
   parseOptimizedHistoryArtifact
 } from "../src/history/artifact-schema.js";
@@ -187,6 +188,47 @@ describe("optimized history artifact schema", () => {
     expect(OptimizedHistoryArtifactSchema.safeParse(valid).success).toBe(false);
   });
 
+  it("rejects duplicate result snapshots without distinct implementation identities", () => {
+    const value = artifact();
+    delete value.runs[0]!.caseResults[0]!.implementationId;
+    value.runs[0]!.caseResults.push(structuredClone(value.runs[0]!.caseResults[0]!));
+    value.runs[0]!.counts = { ...value.runs[0]!.counts, total: 2, passed: 2 };
+    expect(OptimizedHistoryArtifactSchema.safeParse(value).success).toBe(false);
+  });
+
+  it.each([
+    ["sample size", "sampleSize", 2],
+    ["passed count", "passed", 0],
+    ["failed count", "failed", 1],
+    ["pass rate", "passRate", 42],
+    ["consecutive failures", "consecutiveFailures", 2]
+  ] as const)("rejects inconsistent stream %s", (_label, field, replacement) => {
+    const value = artifact();
+    Object.assign(value.cases[0]!.streams[0]!, { [field]: replacement });
+    expect(OptimizedHistoryArtifactSchema.safeParse(value).success).toBe(false);
+  });
+
+  it("rejects trend counts inconsistent with retained runs and logical cases", () => {
+    const runCount = artifact();
+    runCount.trends.runCount = 2;
+    expect(OptimizedHistoryArtifactSchema.safeParse(runCount).success).toBe(false);
+    const excessiveMetric = artifact();
+    excessiveMetric.trends.newFailures = 2;
+    expect(OptimizedHistoryArtifactSchema.safeParse(excessiveMetric).success).toBe(false);
+  });
+
+  it("rejects legacy case fields that disagree with the preferred stream", () => {
+    const value = artifact();
+    value.cases[0]!.currentStatus = "failed";
+    expect(OptimizedHistoryArtifactSchema.safeParse(value).success).toBe(false);
+  });
+
+  it("does not expose trusted stability for an identity-conflicted case", () => {
+    const value = artifact();
+    value.cases[0]!.identityConfidence = "conflicted";
+    expect(OptimizedHistoryArtifactSchema.safeParse(value).success).toBe(false);
+  });
+
   it.each([
     ["negative", { total: 0, passed: -1, failed: 0, broken: 0, blocked: 0, skipped: 0, notRun: 0, unknown: 0 }],
     ["fractional", { total: 1, passed: 0.5, failed: 0.5, broken: 0, blocked: 0, skipped: 0, notRun: 0, unknown: 0 }],
@@ -202,7 +244,7 @@ describe("optimized history artifact schema", () => {
     const value = artifact();
     value.runs[0]!.counts = { total: 1, passed: 0, failed: 0, broken: 0, blocked: 0, skipped: 0, notRun: 0, unknown: 1 };
     value.runs[0]!.caseResults = [];
-    expect(OptimizedHistoryArtifactSchema.safeParse(value).success).toBe(true);
+    expect(OptimizedHistoryArtifactSchema.safeParse(value).success).toBe(false);
     value.runs[0]!.counts = { total: 0, passed: 0, failed: 0, broken: 0, blocked: 0, skipped: 0, notRun: 0, unknown: 0 };
     expect(OptimizedHistoryArtifactSchema.safeParse(value).success).toBe(true);
   });
@@ -219,19 +261,19 @@ describe("optimized history artifact schema", () => {
   });
 
   it("accepts explicit not-run and a valid absence marker", () => {
-    const notRun = artifact();
-    Object.assign(notRun.cases[0]!.streams[0]!.samples[0]!, {
+    const notRun = {
+      ...artifact().cases[0]!.streams[0]!.samples[0]!,
       presence: "present",
       status: "not-run"
-    });
-    expect(OptimizedHistoryArtifactSchema.safeParse(notRun).success).toBe(true);
-    const absent = artifact();
-    Object.assign(absent.cases[0]!.streams[0]!.samples[0]!, {
+    } as const;
+    expect(HistoricalSampleSchema.safeParse(notRun).success).toBe(true);
+    const absent = {
+      ...artifact().cases[0]!.streams[0]!.samples[0]!,
       presence: "absent",
-      status: "absent",
-      durationMs: undefined
-    });
-    expect(OptimizedHistoryArtifactSchema.safeParse(absent).success).toBe(true);
+      status: "absent"
+    } as const;
+    delete (absent as { durationMs?: number }).durationMs;
+    expect(HistoricalSampleSchema.safeParse(absent).success).toBe(true);
   });
 
   it.each([

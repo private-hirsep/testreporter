@@ -22,7 +22,7 @@ function history(): HistoryArtifact {
     manualExecutions: [],
     cases: [],
     trends: {
-      runCount: 2,
+      runCount: 0,
       newFailures: 0,
       persistentFailures: 0,
       recovered: 0,

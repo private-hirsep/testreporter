@@ -43,5 +43,5 @@ export function validateHistoryArtifact(value: unknown): HistoryArtifact {
       `History artifact does not match the version 1.0 contract at ${issue?.path.join(".") || "root"}: ${issue?.message ?? "validation failed"}`
     );
   }
-  return parsed.data as HistoryArtifact;
+  return parsed.data;
 }

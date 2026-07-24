@@ -2,6 +2,7 @@ import { mkdir, mkdtemp, readFile, symlink, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
+import { ProjectQualitySummarySchema } from "@quality-report/report-core";
 
 import { loadConfig } from "../src/config.js";
 import { buildReport } from "../src/generator.js";
@@ -147,6 +148,13 @@ describe("history filesystem", () => {
       outputPath: site
     });
     const reportFile = path.join(site, "normalized-report.json");
+    expect(
+      ProjectQualitySummarySchema.safeParse(
+        JSON.parse(
+          await readFile(path.join(site, "project-quality-summary.json"), "utf8")
+        )
+      ).success
+    ).toBe(true);
     const first = JSON.parse(await readFile(reportFile, "utf8")) as {
       metadata: { runId?: string; generatedAt: string };
       unifiedExecutions: Array<{
@@ -169,7 +177,12 @@ describe("history filesystem", () => {
     automated.counts.broken = 0;
     automated.status = "passed";
     await writeFile(reportFile, JSON.stringify(first));
-    await mergeHistoryDirectory({ currentReport: reportFile, outputDir: historyDir });
+    const reportUrl = "https://example.invalid/history-aware-report/";
+    await mergeHistoryDirectory({
+      currentReport: reportFile,
+      outputDir: historyDir,
+      sourceReportUrl: reportUrl
+    });
 
     const second = structuredClone(first);
     second.metadata.runId = "summary-two";
@@ -187,11 +200,13 @@ describe("history filesystem", () => {
       currentReport: reportFile,
       outputDir: historyDir,
       staticOutput: path.join(site, "data/history.json"),
-      projectSummaryOutput: path.join(site, "project-quality-summary.json")
+      projectSummaryOutput: path.join(site, "project-quality-summary.json"),
+      sourceReportUrl: reportUrl
     });
     const summary = JSON.parse(
       await readFile(path.join(site, "project-quality-summary.json"), "utf8")
-    ) as { history: { newFailures: number; sparkline: unknown[] } };
+    ) as { reportUrl?: string; history: { newFailures: number; sparkline: unknown[] } };
+    expect(summary.reportUrl).toBe(reportUrl);
     expect(summary.history.newFailures).toBe(1);
     expect(summary.history.sparkline).toHaveLength(2);
     const summaries = path.join(temp, "summaries");
@@ -212,8 +227,9 @@ describe("history filesystem", () => {
     const site = path.join(temp, "site");
     const historyDir = path.join(temp, "history");
     const configPath = path.resolve("examples/minimal/quality-report.yml");
+    const config = await loadConfig(configPath);
     await buildReport({
-      config: await loadConfig(configPath),
+      config,
       configPath,
       inputPath: path.resolve("examples/minimal/quality-artifacts"),
       outputPath: site
@@ -234,11 +250,19 @@ describe("history filesystem", () => {
       (execution) => execution.type === "automated"
     );
     await writeFile(reportFile, JSON.stringify(report));
-    await mergeHistoryDirectory({ currentReport: reportFile, outputDir: historyDir });
+    const configuredReportUrl = config.project.reportUrl;
+    await mergeHistoryDirectory({
+      currentReport: reportFile,
+      outputDir: historyDir,
+      sourceReportUrl: configuredReportUrl
+    });
+    const retained = await loadHistoryDirectory(historyDir);
+    expect(retained?.runs[0]?.sourceReport?.url).toBe(configuredReportUrl);
     await expect(
       verifyHistoryContainsCurrentInput({
         historyDir,
-        currentReport: reportFile
+        currentReport: reportFile,
+        sourceReportUrl: configuredReportUrl
       })
     ).resolves.toMatchObject({ runId: "exact-run" });
 
@@ -260,7 +284,8 @@ describe("history filesystem", () => {
     await expect(
       verifyHistoryContainsCurrentInput({
         historyDir,
-        currentReport: reportFile
+        currentReport: reportFile,
+        sourceReportUrl: configuredReportUrl
       })
     ).rejects.toThrow(/conflicting immutable content/i);
   });

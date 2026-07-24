@@ -15,7 +15,10 @@ import {
 import {
   deriveHistoryArtifact
 } from "@quality-report/report-core";
-import { resolveHistoryOptions } from "./history-options.js";
+import {
+  resolveHistoryOptions,
+  resolveHistorySourceReportUrl
+} from "./history-options.js";
 import { writeEvidence, writeProjectSummary } from "./evidence.js";
 
 const program = new Command();
@@ -58,17 +61,21 @@ historyCommand
       durationMinimumIncreaseMs?: string;
     }) => {
       try {
-        const configured = options.config ? (await loadConfig(options.config)).history : undefined;
+        const config = options.config ? await loadConfig(options.config) : undefined;
+        const sourceReportUrl = resolveHistorySourceReportUrl(
+          options.sourceReportUrl,
+          config?.project.reportUrl
+        );
         const store = await mergeHistoryDirectory({
           currentReport: options.currentReport,
           outputDir: options.outputDir,
           ...(options.historyDir ? { historyDir: options.historyDir } : {}),
           ...(options.staticOutput ? { staticOutput: options.staticOutput } : {}),
-          ...(options.sourceReportUrl ? { sourceReportUrl: options.sourceReportUrl } : {}),
+          ...(sourceReportUrl ? { sourceReportUrl } : {}),
           ...(options.projectSummaryOutput
             ? { projectSummaryOutput: options.projectSummaryOutput }
             : {}),
-          retention: resolveHistoryOptions(configured, options)
+          retention: resolveHistoryOptions(config?.history, options)
         });
         console.log(
           `History contains ${store.runs.length} automated run(s) and ${store.manualExecutions.length} manual execution(s): ${options.outputDir}`
@@ -84,15 +91,26 @@ historyCommand
   .description("Verify that retained history contains the exact current run content")
   .requiredOption("--history-dir <path>", "Git-friendly history directory")
   .requiredOption("--current-report <path>", "Current normalized-report.json")
+  .option("--config <path>", "Project configuration supplying the report URL")
   .option("--source-report-url <url>", "Stable URL included in the persisted summary")
   .action(
     async (options: {
       historyDir: string;
       currentReport: string;
+      config?: string;
       sourceReportUrl?: string;
     }) => {
       try {
-        const verified = await verifyHistoryContainsCurrentInput(options);
+        const config = options.config ? await loadConfig(options.config) : undefined;
+        const sourceReportUrl = resolveHistorySourceReportUrl(
+          options.sourceReportUrl,
+          config?.project.reportUrl
+        );
+        const verified = await verifyHistoryContainsCurrentInput({
+          historyDir: options.historyDir,
+          currentReport: options.currentReport,
+          ...(sourceReportUrl ? { sourceReportUrl } : {})
+        });
         console.log(
           `Verified exact persisted history for ${verified.runId ?? `${verified.manualExecutionIds.length} manual execution(s)`}.`
         );

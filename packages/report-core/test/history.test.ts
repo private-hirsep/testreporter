@@ -208,6 +208,7 @@ describe("project history", () => {
     const reordered = Object.fromEntries(
       Object.entries(original).reverse()
     ) as typeof original;
+    expect(historicalRunContentHash(original)).toMatch(/^[a-f0-9]{64}$/);
     expect(historicalRunContentHash(original)).toBe(historicalRunContentHash(reordered));
     for (const changed of [
       { ...original, commit: "different" },

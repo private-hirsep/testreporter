@@ -35,6 +35,7 @@ describe("history workflow examples", () => {
     expect(persistence).toContain("for attempt in");
     expect(persistence).toContain("history merge");
     expect(persistence).toContain("history verify");
+    expect(persistence.match(/--config "\$config"/g)).toHaveLength(2);
     expect(persistence).toContain("Push completed but exact remote verification failed");
     expect(persistence).not.toContain("'.runs[] | select(.id == $id)'");
     expect(persistence).toContain("refetching and remerging");
@@ -70,6 +71,11 @@ describe("history workflow examples", () => {
     const producer = await readFile(examples[4]!, "utf8");
     expect(producer).toContain("ProjectQualitySummarySchema.parse");
     expect(producer).toContain("projects/${project_key}/project-quality-summary.json");
+    expect(producer).toContain("scripts/persist-history.sh");
+    expect(producer.indexOf("scripts/persist-history.sh")).toBeLessThan(
+      producer.indexOf("actions/upload-artifact@v4")
+    );
+    expect(producer).toContain("site/data/history.json");
     expect(producer).toContain("QUALITY_SUMMARY_WRITE_TOKEN");
     expect(producer).toContain("for attempt in 1 2 3");
     expect(producer).toContain("refetching and reapplying");

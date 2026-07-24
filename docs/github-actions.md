@@ -62,7 +62,8 @@ Fork PR comments are skipped by default. Do not move this workflow to `pull_requ
 Use the executable examples under `examples/github-actions/`:
 
 - `trusted-main-history.yml` and `release-history.yml` merge compact history before Pages upload;
-- `project-summary-producer.yml` validates and publishes each final project summary to
+- `project-summary-producer.yml` merges and verifies retained history, validates the regenerated
+  history-aware project summary, and publishes that final summary to
   `projects/<project-key>/project-quality-summary.json` on `quality-summaries`;
 - `central-portfolio-history.yml` checks out that store recursively, generates the static
   portfolio, uploads the Pages artifact, and deploys it.

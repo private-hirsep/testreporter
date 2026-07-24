@@ -7,11 +7,22 @@ permissions: { contents: read }
 jobs:
   build-summary:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     steps:
       - uses: actions/checkout@v5
         with: { persist-credentials: false }
       - run: npm ci && npm run build
       - run: npm run quality-report -- generate --config quality-report.yml --input quality-artifacts --output site
+      - name: Merge, persist, and finalize retained history
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          bash scripts/persist-history.sh \
+            site/normalized-report.json \
+            site \
+            . \
+            quality-report.yml
       - name: Validate project summary
         run: |
           node --input-type=module -e \
@@ -19,7 +30,9 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           name: project-quality-summary
-          path: site/project-quality-summary.json
+          path: |
+            site/project-quality-summary.json
+            site/data/history.json
   publish-summary:
     needs: build-summary
     runs-on: ubuntu-latest

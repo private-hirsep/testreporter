@@ -1,7 +1,10 @@
 import { describe, expect, it } from "vitest";
 
 import { DEFAULT_HISTORY_OPTIONS } from "@quality-report/report-core";
-import { resolveHistoryOptions } from "../src/history-options.js";
+import {
+  resolveHistoryOptions,
+  resolveHistorySourceReportUrl
+} from "../src/history-options.js";
 
 const configured = {
   enabled: true,
@@ -13,6 +16,19 @@ const configured = {
 };
 
 describe("standalone history option resolution", () => {
+  it("resolves report URLs with explicit CLI precedence", () => {
+    expect(resolveHistorySourceReportUrl(undefined, "https://config.test/report")).toBe(
+      "https://config.test/report"
+    );
+    expect(
+      resolveHistorySourceReportUrl(
+        "https://cli.test/report",
+        "https://config.test/report"
+      )
+    ).toBe("https://cli.test/report");
+    expect(resolveHistorySourceReportUrl(undefined, undefined)).toBeUndefined();
+  });
+
   it("uses built-in defaults without configuration or CLI values", () => {
     expect(resolveHistoryOptions(undefined)).toEqual(DEFAULT_HISTORY_OPTIONS);
   });

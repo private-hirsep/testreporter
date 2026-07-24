@@ -55,11 +55,13 @@ increases are rejected.
 Trusted main and release examples both call `scripts/persist-history.sh`. Each bounded attempt
 creates a fresh checkout, configures the authenticated `origin`, fetches `quality-history` when it
 exists (or creates an orphan branch), reruns the merge against that remote state, and pushes without
-force. A no-diff result is successful only when the fetched run file has the exact canonical
-SHA-256 content identity of the current normalized run. The hash covers identity, project/release
+force. A no-diff result is successful only when the fetched run file has the exact canonical full
+64-character SHA-256 content identity of the current normalized run. Canonical JSON recursively
+sorts object keys and omits undefined values. The hash covers identity, project/release
 context, workflow attempt, timestamps, status/counts, gate/readiness,
-requirement/coverage/security summaries, case snapshots, and source links. Object-key order is
-normalized before hashing. A same-ID content conflict fails merge and persistence.
+requirement/coverage/security summaries, case snapshots, and source links. Both merge and verify
+resolve the source URL from an explicit CLI value first and `project.reportUrl` second. A same-ID
+content conflict fails merge and persistence.
 After three conflicts the persistence job fails with an explicit diagnostic.
 
 The final Pages artifact is uploaded only after that merge updates `site/data/history.json` and the
@@ -74,8 +76,9 @@ fine-grained token with read-only Contents permission. The token is used only by
 never copied into summaries or browser assets.
 
 Each project publishes its final validated summary using
-`examples/github-actions/project-summary-producer.yml`. The trusted producer writes
-`projects/<project-key>/project-quality-summary.json`, commits only changes, and uses a bounded
+`examples/github-actions/project-summary-producer.yml`. The trusted producer first merges and
+remotely verifies retained history, rewrites `site/data/history.json` and the history-aware summary,
+then writes `projects/<project-key>/project-quality-summary.json`. It commits only changes and uses a bounded
 refetch/reapply loop without force push. Set `QUALITY_SUMMARY_REPOSITORY` and store a GitHub App
 installation token (preferred) or minimally scoped fine-grained PAT with repository Contents write
 permission as `QUALITY_SUMMARY_WRITE_TOKEN`. The build job never receives that write token.
@@ -128,7 +131,17 @@ Automated and manual limits are applied independently. Newest items are retained
 
 ## Comparison and trend semantics
 
-Automated implementation variants are aggregated once per logical case per run using the existing worst-state order. A manual result is one sample per execution. Retries, variants, absent results, and repeated imports are not additional historical executions. Automated comparison streams record explicit `present` or `absent` samples. A previously present case absent from the latest comparable run is `removed-or-missing`; absence is never pass, failure, skip, not-run, or recovery. `not-executed` is reserved for an explicit `not-run` result.
+Automated run totals count implementation-result snapshots, with browser/device variants identified
+by distinct implementation IDs. Variants are aggregated once per logical case per run using the
+existing worst-state order. A manual result is one sample per execution. Retries, variants, absent
+results, and repeated imports are not additional historical executions. Stream `sampleSize` and
+pass-rate denominators include comparable present samples; `passed` counts passes and `failed`
+counts failed or broken samples. Other present statuses stay in the denominator. Absent samples are
+excluded from those values and cannot produce a pass or recovery, but remain available for
+removed/missing transitions. `not-executed` is reserved for an explicit `not-run` result.
+
+Diagnostics use deterministic IDs and are deduplicated. Legacy optional observation fields remain
+readable, but this implementation does not update occurrence counters or claim occurrence tracking.
 
 By default, comparisons require the same project, execution type, branch, and environment:
 
@@ -143,6 +156,9 @@ By default, comparisons require the same project, execution type, branch, and en
 Historical instability requires the configured sample minimum, both pass and fail observations, enough pass/fail transitions, compatible streams, and a non-conflicted identity. An in-run retry pass is labelled separately. Generated IDs show lower-confidence continuity; renames are never inferred. Conflicted identities expose raw records but no trusted pass rate or stability claim.
 
 Case duration is summed implementation time within an automated run, clearly labelled as such; it is not wall-clock time. Invalid and missing values are ignored. A slow regression requires the configured sample count and both the percentage and absolute increase thresholds.
+Wall-clock duration may differ from `completedAt - startedAt` because adapters can report the
+runner's measured interval while timestamps come from the surrounding workflow; both must still be
+finite and non-negative, and completion may not precede start.
 
 One retained run produces “One execution is available. More executions are required for trends.” No history produces “Historical execution summaries have not been imported for this report.” No synthetic points are generated.
 

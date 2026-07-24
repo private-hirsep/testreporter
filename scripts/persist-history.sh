@@ -27,6 +27,7 @@ verify_remote() {
   git -C "${workspace}/history-checkout" fetch --depth=1 origin "$branch"
   git -C "${workspace}/history-checkout" reset --hard FETCH_HEAD
   node "${tool}/packages/report-cli/dist/index.js" history verify \
+    --config "$config" \
     --history-dir "${workspace}/history-checkout/quality-history" \
     --current-report "$report"
 }
