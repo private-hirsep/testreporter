@@ -308,6 +308,29 @@ export class HistoryInputConflictError extends Error {
   }
 }
 
+export async function inspectHistoryInput(options: {
+  currentReport: string;
+  sourceReportUrl?: string;
+}) {
+  const report = NormalizedReportSchema.parse(
+    JSON.parse(await readFile(options.currentReport, "utf8"))
+  ) as NormalizedReport;
+  const run = deriveCurrentRunSummary(report, options.sourceReportUrl);
+  const manualExecutions = deriveManualExecutionSummaries(
+    report,
+    options.sourceReportUrl
+  );
+  return {
+    run: run
+      ? { id: run.id, contentHash: historicalRunContentHash(run) }
+      : undefined,
+    manualExecutions: manualExecutions.map((execution) => ({
+      executionId: execution.executionId,
+      contentHash: historicalManualContentHash(execution)
+    }))
+  };
+}
+
 export async function verifyHistoryContainsCurrentInput(options: {
   historyDir: string;
   currentReport: string;

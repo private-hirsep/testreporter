@@ -47,6 +47,10 @@ verify_remote() {
     --current-report "$report"
 }
 
+finalize_site() {
+  node "${tool}/packages/report-cli/dist/index.js" finalize --output "$site"
+}
+
 for attempt in $(seq 1 "$attempts"); do
   echo "History persistence attempt ${attempt}/${attempts}"
   rm -rf "${workspace}/history-checkout" "${workspace}/next-history"
@@ -75,6 +79,7 @@ for attempt in $(seq 1 "$attempts"); do
 
   if git -C "${workspace}/history-checkout" diff --cached --quiet; then
     if verify_remote; then
+      finalize_site
       echo "History already persisted remotely for ${history_label}."
       exit 0
     fi
@@ -94,6 +99,7 @@ for attempt in $(seq 1 "$attempts"); do
     )"
   if git -C "${workspace}/history-checkout" push origin "HEAD:${branch}"; then
     if verify_remote; then
+      finalize_site
       echo "History persisted and verified for ${history_label}."
       exit 0
     fi
