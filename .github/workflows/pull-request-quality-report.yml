@@ -20,6 +20,8 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
+      - name: Prepare reporter directories and Playwright
+        run: bash scripts/prepare-quality-runner.sh
       - run: npm run lint
       - run: npm run typecheck
       - run: npm run build
@@ -30,9 +32,7 @@ jobs:
           PLAYWRIGHT_JUNIT_OUTPUT_FILE: quality-artifacts/tests/e2e/playwright.xml
         run: npm run test:e2e -- --reporter=line,junit
       - name: Collect coverage
-        run: |
-          mkdir -p quality-artifacts/coverage
-          cp coverage/coverage-summary.json quality-artifacts/coverage/coverage-summary.json
+        run: cp coverage/coverage-summary.json quality-artifacts/coverage/coverage-summary.json
       - name: Generate read-only pull-request report
         run: >
           npm run quality-report -- generate

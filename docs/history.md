@@ -69,8 +69,11 @@ force. A no-diff result is successful only when the fetched run file has the exa
 64-character SHA-256 content identity of the current normalized run. Canonical JSON recursively
 sorts object keys and omits undefined values. The hash covers identity, project/release
 context, workflow attempt, timestamps, status/counts, gate/readiness,
-requirement/coverage/security summaries, case snapshots, and source links. Both merge and verify
-resolve the source URL from an explicit CLI value first and `project.reportUrl` second. A same-ID
+requirement/coverage/security summaries, case snapshots, and source links. Inspect, merge, and verify
+all resolve the source URL from explicit `--source-report-url` first,
+`project.reportUrl` second, and absence last. Only HTTP(S) URLs are accepted.
+Identical inputs therefore produce identical automated and manual immutable hashes
+across all three commands. A same-ID
 content conflict fails merge and persistence.
 After three conflicts the persistence job fails with an explicit diagnostic.
 Automated run IDs are optional: a manual-only report persists every completed validated manual

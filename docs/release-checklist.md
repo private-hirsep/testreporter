@@ -7,6 +7,9 @@
 - [ ] `npm test`
 - [ ] `npm run build`
 - [ ] `npm run test:e2e`
+- [ ] `npm run check:workflows-docs`
+- [ ] Dry-run core, adapters, and CLI packages
+- [ ] `npm run release:smoke` in an external temporary project
 - [ ] Generate report without history
 - [ ] Initialize history and generate a second historical run
 - [ ] Verify idempotent reprocessing and workflow-attempt rerun

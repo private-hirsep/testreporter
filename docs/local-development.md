@@ -8,12 +8,14 @@ Requirements:
 Install, verify, build, and generate a sample report:
 
 ```bash
-npm install
+npm ci
+npx playwright install --with-deps chromium
 npm run lint
 npm run typecheck
 npm test
 npm run build
 npm run check:workflows-docs
+npm run release:smoke
 npm run quality-report -- generate --config examples/minimal/quality-report.yml --quality-gates examples/minimal/quality-gates.yml --input examples/minimal/quality-artifacts --output dist/example-report --quality-profile relaxed --zip
 ```
 
@@ -27,4 +29,12 @@ Clean generated output with:
 npm run clean
 ```
 
-The dogfood workflow depends on GitHub Actions artifact download, PR comments, and Pages deployment. Use local CLI generation for report checks and `workflow_dispatch` for end-to-end workflow behavior.
+The Playwright configuration uses its default Chromium project, so workflows and
+local setup install Chromium only. `scripts/prepare-quality-runner.sh` also creates
+the unit, E2E, and coverage reporter directories before any reporter writes.
+
+The trusted self-report workflow runs the commands above against real repository
+output, merges history through `scripts/persist-history.sh`, finalizes the audit
+archive, stages the Pages artifact, and then deploys it in a separate job. Live
+token writes and Pages deployment require GitHub; local contract checks verify the
+ordering and permissions.

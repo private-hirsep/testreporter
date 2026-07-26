@@ -9,7 +9,6 @@ import { buildReport, finalizeReportArchive } from "./generator.js";
 import { buildPortfolio } from "./portfolio.js";
 import { TOOL_VERSION } from "./version.js";
 import {
-  inspectHistoryInput,
   mergeHistoryDirectory,
   verifyHistoryContainsCurrentInput
 } from "./history.js";
@@ -20,7 +19,7 @@ import {
 } from "@quality-report/report-core";
 import {
   resolveHistoryOptions,
-  resolveHistorySourceReportUrl
+  resolveHistorySourceOptions
 } from "./history-options.js";
 import { writeEvidence, writeProjectSummary } from "./evidence.js";
 
@@ -32,22 +31,33 @@ historyCommand
   .command("inspect")
   .description("Inspect the canonical persistable executions in a normalized report")
   .requiredOption("--current-report <path>", "Current normalized-report.json")
-  .option("--config <path>", "Validate the project history configuration")
+  .option("--config <path>", "Project configuration supplying the report URL")
+  .option("--source-report-url <url>", "Stable URL included in immutable content")
   .option("--format <format>", "Output format", "json")
   .action(
     async (options: {
       currentReport: string;
       config?: string;
+      sourceReportUrl?: string;
       format: string;
     }) => {
       try {
         if (options.format !== "json")
           throw new Error(`Unsupported history inspection format: ${options.format}`);
-        if (options.config) await loadConfig(options.config);
+        const source = await resolveHistorySourceOptions({
+          ...(options.config ? { configPath: options.config } : {}),
+          ...(options.sourceReportUrl
+            ? { sourceReportUrl: options.sourceReportUrl }
+            : {})
+        });
         const report = NormalizedReportSchema.parse(
           JSON.parse(await readFile(options.currentReport, "utf8"))
         );
-        console.log(JSON.stringify(inspectPersistableHistoryReport(report)));
+        console.log(
+          JSON.stringify(
+            inspectPersistableHistoryReport(report, source.sourceReportUrl)
+          )
+        );
       } catch (error) {
         handleError(error);
       }
@@ -90,21 +100,24 @@ historyCommand
       durationMinimumIncreaseMs?: string;
     }) => {
       try {
-        const config = options.config ? await loadConfig(options.config) : undefined;
-        const sourceReportUrl = resolveHistorySourceReportUrl(
-          options.sourceReportUrl,
-          config?.project.reportUrl
-        );
+        const source = await resolveHistorySourceOptions({
+          ...(options.config ? { configPath: options.config } : {}),
+          ...(options.sourceReportUrl
+            ? { sourceReportUrl: options.sourceReportUrl }
+            : {})
+        });
         const store = await mergeHistoryDirectory({
           currentReport: options.currentReport,
           outputDir: options.outputDir,
           ...(options.historyDir ? { historyDir: options.historyDir } : {}),
           ...(options.staticOutput ? { staticOutput: options.staticOutput } : {}),
-          ...(sourceReportUrl ? { sourceReportUrl } : {}),
+          ...(source.sourceReportUrl
+            ? { sourceReportUrl: source.sourceReportUrl }
+            : {}),
           ...(options.projectSummaryOutput
             ? { projectSummaryOutput: options.projectSummaryOutput }
             : {}),
-          retention: resolveHistoryOptions(config?.history, options)
+          retention: resolveHistoryOptions(source.config?.history, options)
         });
         console.log(
           `History contains ${store.runs.length} automated run(s) and ${store.manualExecutions.length} manual execution(s): ${options.outputDir}`
@@ -130,15 +143,18 @@ historyCommand
       sourceReportUrl?: string;
     }) => {
       try {
-        const config = options.config ? await loadConfig(options.config) : undefined;
-        const sourceReportUrl = resolveHistorySourceReportUrl(
-          options.sourceReportUrl,
-          config?.project.reportUrl
-        );
+        const source = await resolveHistorySourceOptions({
+          ...(options.config ? { configPath: options.config } : {}),
+          ...(options.sourceReportUrl
+            ? { sourceReportUrl: options.sourceReportUrl }
+            : {})
+        });
         const verified = await verifyHistoryContainsCurrentInput({
           historyDir: options.historyDir,
           currentReport: options.currentReport,
-          ...(sourceReportUrl ? { sourceReportUrl } : {})
+          ...(source.sourceReportUrl
+            ? { sourceReportUrl: source.sourceReportUrl }
+            : {})
         });
         console.log(
           `Verified exact persisted history for ${verified.runId ?? `${verified.manualExecutionIds.length} manual execution(s)`}.`

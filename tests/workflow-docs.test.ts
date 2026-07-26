@@ -88,11 +88,16 @@ describe("GitHub workflow and documentation contracts", () => {
     expect(content).toContain("npm run lint");
     expect(content).toContain("npm run typecheck");
     expect(content).toContain("npm run test:e2e");
+    expect(content).toContain("bash scripts/prepare-quality-runner.sh");
+    expect(content.indexOf("prepare-quality-runner.sh")).toBeLessThan(
+      content.indexOf("npm run test:e2e")
+    );
     expect(content).toContain("quality-report.yml");
     expect(content).toContain("github.run_attempt");
     expect(content.indexOf("persist-history.sh")).toBeLessThan(
       content.indexOf("actions/upload-pages-artifact@v3")
     );
+    expect(content).toContain("test -f site/data/history.json");
     expect(jobs["build-and-report"]?.permissions).toEqual({ contents: "read" });
     expect(jobs["persist-history"]?.permissions).toEqual({ contents: "write" });
     expect(jobs["deploy-pages"]?.permissions).toEqual({
@@ -113,6 +118,26 @@ describe("GitHub workflow and documentation contracts", () => {
     expect(content).not.toContain("persist-history.sh");
     expect(content).not.toContain("deploy-pages");
     expect(content).not.toContain("contents: write");
+    expect(content).toContain("bash scripts/prepare-quality-runner.sh");
+    expect(content.indexOf("prepare-quality-runner.sh")).toBeLessThan(
+      content.indexOf("npm run test:e2e")
+    );
+    expect(content).not.toContain("pull_request_target");
+  });
+
+  it("keeps the workflow checker aligned with direct self-report contracts", async () => {
+    const checker = await readFile(
+      path.join(root, "scripts/check-workflows-docs.mjs"),
+      "utf8"
+    );
+    expect(checker).toContain("trusted self-report workflow is missing");
+    expect(checker).toContain("playwright install --with-deps chromium");
+    expect(checker).toContain("test -f site/data/history.json");
+    expect(checker).toContain("actions/deploy-pages@v4");
+    expect(checker).not.toContain("quality-dogfood-artifacts");
+    expect(checker).not.toContain(
+      "dogfood workflow must call the canonical reusable workflow"
+    );
   });
 
   it("documents valid action and reusable workflow inputs", async () => {

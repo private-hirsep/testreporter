@@ -23,6 +23,7 @@
     "check:workflows-docs": "node scripts/check-workflows-docs.mjs",
     "test": "vitest run",
     "test:e2e": "playwright test",
+    "release:smoke": "node scripts/release-smoke.mjs",
     "typecheck": "tsc -b",
     "quality-report": "node packages/report-cli/dist/index.js"
   },

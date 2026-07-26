@@ -18,6 +18,8 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
+      - name: Prepare reporter directories and Playwright
+        run: bash scripts/prepare-quality-runner.sh
       - run: npm run lint
       - run: npm run typecheck
       - run: npm test
@@ -25,15 +27,17 @@ jobs:
       - run: npm run test:e2e
       - name: Verify release-candidate version
         run: test "$(node packages/report-cli/dist/index.js --version)" = "1.0.0-rc.1"
-      - name: Pack CLI and generate checksums
+      - name: Pack release packages and run clean-install smoke test
+        run: npm run release:smoke
+      - name: Generate release checksums
         shell: bash
         run: |
-          mkdir -p dist/release
-          npm pack --workspace @quality-report/report-cli --pack-destination dist/release
           cd dist/release
           sha256sum *.tgz > SHA256SUMS
       - uses: actions/upload-artifact@v4
         with:
           name: testreporter-v1.0.0-rc.1
-          path: dist/release
+          path: |
+            dist/release/*.tgz
+            dist/release/SHA256SUMS
           if-no-files-found: error
