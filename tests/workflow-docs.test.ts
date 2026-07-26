@@ -82,27 +82,62 @@ describe("GitHub workflow and documentation contracts", () => {
     expect(jobs.forward?.uses).toBe("./.github/workflows/publish-quality-report.yml");
   });
 
-  it("dogfoods through the canonical reusable workflow after uploading artifacts", async () => {
+  it("dogfoods real repository results with isolated trusted permissions", async () => {
     const { content, parsed } = await yamlFile(".github/workflows/dogfood-quality-report.yml");
-    const jobs = parsed.jobs as Record<
-      string,
-      { needs?: string | string[]; uses?: string; steps?: Array<Record<string, string>> }
-    >;
-    expect(jobs["resolve-dogfood-inputs"]).toBeTruthy();
-    expect(
-      jobs["prepare-dogfood-artifacts"]?.steps?.some(
-        (step) => step.uses === "actions/upload-artifact@v4"
-      )
-    ).toBe(true);
-    expect(jobs["dogfood-report"]?.needs).toEqual([
-      "resolve-dogfood-inputs",
-      "prepare-dogfood-artifacts"
-    ]);
-    expect(jobs["dogfood-report"]?.uses).toBe("./.github/workflows/publish-quality-report.yml");
-    expect(content).toContain("examples/minimal/quality-artifacts");
-    expect(content).toContain("examples/minimal/quality-report.yml");
-    expect(content).toContain("examples/minimal/quality-gates.yml");
-    expect(content).toContain("update-pr-comment: true");
+    const jobs = parsed.jobs as Record<string, { permissions?: Record<string, string> }>;
+    expect(content).toContain("npm run lint");
+    expect(content).toContain("npm run typecheck");
+    expect(content).toContain("npm run test:e2e");
+    expect(content).toContain("bash scripts/prepare-quality-runner.sh");
+    expect(content.indexOf("prepare-quality-runner.sh")).toBeLessThan(
+      content.indexOf("npm run test:e2e")
+    );
+    expect(content).toContain("quality-report.yml");
+    expect(content).toContain("github.run_attempt");
+    expect(content.indexOf("persist-history.sh")).toBeLessThan(
+      content.indexOf("actions/upload-pages-artifact@v3")
+    );
+    expect(content).toContain("test -f site/data/history.json");
+    expect(jobs["build-and-report"]?.permissions).toEqual({ contents: "read" });
+    expect(jobs["persist-history"]?.permissions).toEqual({ contents: "write" });
+    expect(jobs["deploy-pages"]?.permissions).toEqual({
+      pages: "write",
+      "id-token": "write"
+    });
+    expect(content).not.toMatch(/push[^\n]*--force/);
+  });
+
+  it("keeps pull-request self reports artifact-only and read-only", async () => {
+    const { content, parsed } = await yamlFile(
+      ".github/workflows/pull-request-quality-report.yml"
+    );
+    expect(parsed.permissions).toEqual({ contents: "read" });
+    expect(content).toContain("pull_request:");
+    expect(content).toContain("not retained history");
+    expect(content).toContain("actions/upload-artifact@v4");
+    expect(content).not.toContain("persist-history.sh");
+    expect(content).not.toContain("deploy-pages");
+    expect(content).not.toContain("contents: write");
+    expect(content).toContain("bash scripts/prepare-quality-runner.sh");
+    expect(content.indexOf("prepare-quality-runner.sh")).toBeLessThan(
+      content.indexOf("npm run test:e2e")
+    );
+    expect(content).not.toContain("pull_request_target");
+  });
+
+  it("keeps the workflow checker aligned with direct self-report contracts", async () => {
+    const checker = await readFile(
+      path.join(root, "scripts/check-workflows-docs.mjs"),
+      "utf8"
+    );
+    expect(checker).toContain("trusted self-report workflow is missing");
+    expect(checker).toContain("playwright install --with-deps chromium");
+    expect(checker).toContain("test -f site/data/history.json");
+    expect(checker).toContain("actions/deploy-pages@v4");
+    expect(checker).not.toContain("quality-dogfood-artifacts");
+    expect(checker).not.toContain(
+      "dogfood workflow must call the canonical reusable workflow"
+    );
   });
 
   it("documents valid action and reusable workflow inputs", async () => {

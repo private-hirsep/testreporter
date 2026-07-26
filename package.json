@@ -1,8 +1,11 @@
 {
   "name": "quality-report-platform",
-  "version": "0.1.0",
+  "version": "1.0.0-rc.1",
   "private": true,
   "type": "module",
+  "engines": {
+    "node": ">=22"
+  },
   "workspaces": [
     "packages/*"
   ],
@@ -20,6 +23,7 @@
     "check:workflows-docs": "node scripts/check-workflows-docs.mjs",
     "test": "vitest run",
     "test:e2e": "playwright test",
+    "release:smoke": "node scripts/release-smoke.mjs",
     "typecheck": "tsc -b",
     "quality-report": "node packages/report-cli/dist/index.js"
   },

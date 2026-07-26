@@ -1,4 +1,4 @@
-# Quality Report Platform
+# Testreporter
 
 Logical test cases, automated/manual variants, hybrid cases, and unified execution semantics are documented in [Logical test cases and unified executions](docs/test-case-catalogue.md).
 The report UI is a consistent QA workspace — navigation, status semantics, and responsive behavior are documented in [docs/user-interface.md](docs/user-interface.md).
@@ -50,7 +50,7 @@ Structured artifacts larger than 50 MiB are skipped with parser warnings.
 Minimal local check after building this repository:
 
 ```bash
-npm install
+npm ci
 npm run build
 npm run quality-report -- validate --config examples/minimal/quality-report.yml --input examples/minimal/quality-artifacts
 npm run quality-report -- generate --config examples/minimal/quality-report.yml --input examples/minimal/quality-artifacts --output dist/example-report --zip
@@ -398,11 +398,24 @@ Canonical reusable workflow: `.github/workflows/publish-quality-report.yml`.
 
 The deprecated `reusable-publish-quality-report.yml` file is a compatibility wrapper only. New consumers should use `publish-quality-report.yml`.
 
-## Dogfood Workflow
+## Trusted self quality report
 
-`Dogfood Quality Report` uploads `examples/minimal/quality-artifacts` as `quality-dogfood-artifacts`, then calls the canonical reusable workflow exactly like an external project would.
+The repository dogfoods real Vitest, Playwright, and coverage output. Its read-only
+build job installs Chromium explicitly, prepares reporter directories, runs lint,
+type-checking, unit tests, build, and E2E tests, then generates the current report
+with an attempt-aware execution ID.
 
-Maintainers can run it through `workflow_dispatch` and choose `quality-profile`, `publish-mode`, and `pr-comment-mode`. Pull requests use `relaxed`, `artifact`, `minimal`, and `fail-on-quality-gate: false`. Pushes to `main` use `relaxed`, `artifact`, and comments off. Manual runs can test `pages-and-artifact`, `full` comments, strict profiles, and final gate failure.
+On pushes to `main` or `release/**`, published releases, and trusted dispatches, a
+separate `contents: write` job calls `scripts/persist-history.sh`. It refetches and
+merges compact history, regenerates the project summary/evidence, verifies exact
+remote content, and runs `finalize` before uploading the final Pages artifact.
+Another job holding only `pages: write` and `id-token: write` deploys it with
+`actions/deploy-pages@v4`. Uploading the Pages artifact only stages content; it is
+not deployment.
+
+Pull requests use `.github/workflows/pull-request-quality-report.yml`. They install
+the same Chromium runner, publish an explicitly current-only report artifact, and
+have read-only repository permission. They cannot persist history or deploy Pages.
 
 ## Troubleshooting
 
@@ -445,7 +458,19 @@ npm run quality-report -- generate --config examples/minimal/quality-report.yml 
 npm run clean
 ```
 
-The dogfood workflow depends on GitHub Actions features such as artifact download, PR comments, and Pages deployment, so it cannot be fully exercised locally. Use the CLI for local report generation and `workflow_dispatch` for end-to-end workflow delivery checks.
+The trusted workflow depends on GitHub history and Pages services, so token writes
+and deployment cannot be fully exercised locally. The same checks, browser setup,
+self-report generation, release packaging, and contract checker can be run locally.
+
+## Release-candidate packages
+
+`v1.0.0-rc.1` uses three independently installable, version-matched packages:
+`@quality-report/report-core`, `@quality-report/adapters`, and
+`@quality-report/report-cli`. Release automation packs them in dependency order,
+installs only those tarballs in an external temporary project, checks
+`quality-report --version`, and runs a real `validate` command. Package allowlists
+ship runtime JavaScript, declarations, README, license, and package metadata—not
+source tests or fixtures. Node 22 or newer is supported.
 
 ## More Documentation
 
@@ -458,3 +483,15 @@ The dogfood workflow depends on GitHub Actions features such as artifact downloa
 - [Troubleshooting](docs/troubleshooting.md)
 - [Security model](docs/security.md)
 - [Local development](docs/local-development.md)
+- [Architecture](docs/architecture.md)
+- [Audit evidence](docs/audit-evidence.md)
+- [Portfolio](docs/portfolio.md)
+- [Release checklist](docs/release-checklist.md)
+
+Implemented: automated normalization, manual definitions and executions, the
+logical test-case catalogue, unified executions, release readiness, audit evidence,
+Git-first retained history, historical case/project metrics, static portfolio
+generation, and actual GitHub Pages deployment.
+
+Deferred: backend/database services, Jira synchronization, historical requirement
+state transitions, AI prioritization, and full raw artifact history.

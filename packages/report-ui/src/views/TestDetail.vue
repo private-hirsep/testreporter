@@ -86,8 +86,6 @@
       </v-window-item>
       <v-window-item value="history">
         <section class="portal-card detail-section"><h2>Historical execution summaries</h2>
-          <v-alert v-if="historical?.identityConfidence === 'conflicted'" type="error" variant="tonal" class="mb-3">Identity conflict — stability unavailable. Raw records are shown as untrusted.</v-alert>
-          <v-alert v-else-if="historical?.identityConfidence === 'generated-low'" type="warning" variant="tonal" class="mb-3">Generated identity — continuity has lower confidence; a rename is not inferred to be the same test.</v-alert>
           <EmptyState v-if="!historical" message="Historical execution summaries have not been imported for this case." />
           <template v-else>
             <div class="metric-card-items mb-4">
@@ -101,6 +99,8 @@
             <v-alert v-if="historical.duration?.slowRegression" type="warning" variant="tonal" class="mb-3">Duration regression: {{ historical.duration.percentageChange?.toFixed(1) }}% / {{ formatDuration(historical.duration.absoluteChangeMs) }} increase.</v-alert>
             <section v-for="stream in historical.streams" :key="stream.key" class="mb-4">
               <h3>{{ stream.type === "automated" ? "Automated" : "Manual" }} · {{ stream.branch ?? "all branches" }} / {{ stream.environment ?? "default environment" }}</h3>
+              <v-alert v-if="stream.identityConfidence === 'conflicted'" type="error" variant="tonal" density="compact" class="mb-2">Identity conflict in this stream — stability and pass rate are unavailable.</v-alert>
+              <v-alert v-else-if="stream.identityConfidence === 'generated-low'" type="warning" variant="tonal" density="compact" class="mb-2">Generated identity in this stream — continuity has lower confidence.</v-alert>
               <p>Transition: <strong>{{ stream.transition }}</strong> · Stability: {{ stream.stability }}</p>
               <div class="table-scroll"><v-table density="compact" :aria-label="`${stream.type} historical case results`"><thead><tr><th scope="col">Execution</th><th scope="col">Result</th><th scope="col">Observed</th><th scope="col">Case duration</th><th scope="col">Source report</th></tr></thead>
                 <tbody><tr v-for="sample in [...stream.samples].reverse()" :key="`${stream.key}-${sample.executionId}`"><td class="mono">{{ sample.executionId }}</td><td><StatusChip :status="sample.status" /></td><td>{{ formatDate(sample.at) }}</td><td>{{ formatDuration(sample.durationMs) }}</td><td><a v-if="safeHistoricalUrl(sample.sourceReport?.url)" :href="safeHistoricalUrl(sample.sourceReport?.url)" target="_blank" rel="noopener noreferrer">Open report</a><span v-else>Unavailable</span></td></tr></tbody>

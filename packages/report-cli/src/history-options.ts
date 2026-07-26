@@ -3,12 +3,38 @@ import {
   type HistoryOptions,
   type QualityReportConfig
 } from "@quality-report/report-core";
+import { loadConfig } from "./config.js";
 
 export function resolveHistorySourceReportUrl(
   cliValue: string | undefined,
   configValue: string | undefined
 ) {
-  return cliValue ?? configValue;
+  const value = cliValue ?? configValue;
+  if (value === undefined) return undefined;
+  let parsed: URL;
+  try {
+    parsed = new URL(value);
+  } catch {
+    throw new Error("source report URL must be a valid URL.");
+  }
+  if (!["http:", "https:"].includes(parsed.protocol))
+    throw new Error("source report URL must use HTTP or HTTPS.");
+  return value;
+}
+
+export async function resolveHistorySourceOptions(input: {
+  configPath?: string;
+  sourceReportUrl?: string;
+}) {
+  const config = input.configPath ? await loadConfig(input.configPath) : undefined;
+  const sourceReportUrl = resolveHistorySourceReportUrl(
+    input.sourceReportUrl,
+    config?.project.reportUrl
+  );
+  return {
+    config,
+    ...(sourceReportUrl ? { sourceReportUrl } : {})
+  };
 }
 
 export type HistoryCliOptions = {

@@ -57,6 +57,26 @@ permissions:
 
 Fork PR comments are skipped by default. Do not move this workflow to `pull_request_target` without a security review.
 
+## Repository self-report workflow
+
+`.github/workflows/dogfood-quality-report.yml` is a production-style direct
+self-report, not an example-artifact wrapper. It installs dependencies and
+Chromium, prepares `quality-artifacts/tests/unit`,
+`quality-artifacts/tests/e2e`, and `quality-artifacts/coverage`, then runs lint,
+type-check, unit/coverage, build, and Playwright E2E checks.
+
+The current report is generated before any write credential is available.
+Trusted pushes to `main`/`release/**`, published releases, and trusted dispatches
+continue into the isolated history job. That job merges and exactly verifies
+`quality-history`, regenerates history-aware summary/evidence, finalizes the audit
+ZIP, asserts `site/data/history.json`, and uploads the final Pages artifact.
+Uploading is staging only. The separate deployment job calls
+`actions/deploy-pages@v4`.
+
+The pull-request workflow follows the same test setup but has `contents: read`
+only, uploads a current-only report artifact, and never persists history,
+publishes a central summary, or deploys Pages.
+
 ## Historical summaries and central portfolio
 
 Use the executable examples under `examples/github-actions/`:

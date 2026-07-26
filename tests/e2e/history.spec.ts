@@ -68,24 +68,29 @@ function artifact() {
         testCaseId: caseId,
         streams: [
           {
-            key: "automated\u0000main\u0000ci",
+            key: `${caseId}\u0000automated\u0000main\u0000ci`,
             type: "automated",
             branch: "main",
             environment: "ci",
+            identityConfidence: "trusted",
             samples: [
               {
                 executionId: "historical-auto",
                 type: "automated",
                 at: "2026-07-23T00:00:00.000Z",
                 status: "failed",
-                presence: "present"
+                presence: "present",
+                branch: "main",
+                environment: "ci"
               },
               {
                 executionId: "latest-auto",
                 type: "automated",
                 at: "2026-07-24T00:00:00.000Z",
                 status: "absent",
-                presence: "absent"
+                presence: "absent",
+                branch: "main",
+                environment: "ci"
               }
             ],
             previousStatus: "failed",

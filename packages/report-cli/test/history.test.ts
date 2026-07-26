@@ -2,7 +2,13 @@ import { mkdir, mkdtemp, readFile, symlink, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
-import { ProjectQualitySummarySchema } from "@quality-report/report-core";
+import {
+  historicalManualContentHash,
+  historicalRunContentHash,
+  inspectPersistableHistoryReport,
+  NormalizedReportSchema,
+  ProjectQualitySummarySchema
+} from "@quality-report/report-core";
 
 import { loadConfig } from "../src/config.js";
 import { buildReport } from "../src/generator.js";
@@ -39,18 +45,44 @@ describe("history filesystem", () => {
         cases: Array<{ status: string; steps: Array<{ status: string }> }>;
       }>;
     };
-    delete report.metadata.runId;
+    report.metadata.runId = "workflow-metadata-only";
     report.unifiedExecutions = report.unifiedExecutions.filter(
       (execution) => execution.type === "manual"
     );
     expect(report.manualExecutions).toHaveLength(2);
     for (const execution of report.manualExecutions)
       execution.projectKey = config.project.key ?? config.project.name;
+    expect(
+      inspectPersistableHistoryReport(NormalizedReportSchema.parse(report))
+    ).toMatchObject({
+      automatedRun: { present: false },
+      manualExecutions: [
+        { executionId: report.manualExecutions[0]!.executionId },
+        { executionId: report.manualExecutions[1]!.executionId }
+      ]
+    });
     await writeFile(reportFile, JSON.stringify(report));
-    await mergeHistoryDirectory({ currentReport: reportFile, outputDir: historyDir });
-    expect((await loadHistoryDirectory(historyDir))?.manualExecutions).toHaveLength(2);
+    const sourceReportUrl = "https://example.invalid/manual-report/";
+    const inspection = inspectPersistableHistoryReport(
+      NormalizedReportSchema.parse(report),
+      sourceReportUrl
+    );
+    await mergeHistoryDirectory({
+      currentReport: reportFile,
+      outputDir: historyDir,
+      sourceReportUrl
+    });
+    const retained = await loadHistoryDirectory(historyDir);
+    expect(retained?.manualExecutions).toHaveLength(2);
+    expect(inspection.manualExecutions.map((item) => item.contentHash)).toEqual(
+      retained!.manualExecutions.map(historicalManualContentHash)
+    );
     await expect(
-      verifyHistoryContainsCurrentInput({ historyDir, currentReport: reportFile })
+      verifyHistoryContainsCurrentInput({
+        historyDir,
+        currentReport: reportFile,
+        sourceReportUrl
+      })
     ).resolves.toMatchObject({
       runId: undefined,
       manualExecutionIds: expect.arrayContaining(
@@ -60,7 +92,8 @@ describe("history filesystem", () => {
     await mergeHistoryDirectory({
       historyDir,
       currentReport: reportFile,
-      outputDir: historyDir
+      outputDir: historyDir,
+      sourceReportUrl
     });
     expect((await loadHistoryDirectory(historyDir))?.manualExecutions).toHaveLength(2);
     report.manualExecutions[0]!.cases[0]!.status = "passed";
@@ -68,7 +101,12 @@ describe("history filesystem", () => {
       step.status = "passed";
     await writeFile(reportFile, JSON.stringify(report));
     await expect(
-      mergeHistoryDirectory({ historyDir, currentReport: reportFile, outputDir: historyDir })
+      mergeHistoryDirectory({
+        historyDir,
+        currentReport: reportFile,
+        outputDir: historyDir,
+        sourceReportUrl
+      })
     ).rejects.toThrow(/HISTORY_MANUAL_CONFLICT/);
   });
 
@@ -225,8 +263,12 @@ describe("history filesystem", () => {
     };
     first.manualExecutions = [];
     first.metadata.runId = "summary-one";
+    first.metadata.generatedAt = "2026-07-24T00:00:00.000Z";
+    first.metadata.generatedAt = "2026-07-24T00:00:00.000Z";
     const automated = first.unifiedExecutions.find((item) => item.type === "automated")!;
     automated.id = "summary-one";
+    automated.reportedAt = first.metadata.generatedAt;
+    automated.reportedAt = first.metadata.generatedAt;
     for (const result of automated.caseResults) result.status = "passed";
     automated.counts.passed = automated.caseResults.length;
     automated.counts.failed = 0;
@@ -307,6 +349,10 @@ describe("history filesystem", () => {
     );
     await writeFile(reportFile, JSON.stringify(report));
     const configuredReportUrl = config.project.reportUrl;
+    const inspection = inspectPersistableHistoryReport(
+      NormalizedReportSchema.parse(report),
+      configuredReportUrl
+    );
     await mergeHistoryDirectory({
       currentReport: reportFile,
       outputDir: historyDir,
@@ -314,6 +360,20 @@ describe("history filesystem", () => {
     });
     const retained = await loadHistoryDirectory(historyDir);
     expect(retained?.runs[0]?.sourceReport?.url).toBe(configuredReportUrl);
+    expect(inspection.automatedRun.present).toBe(true);
+    expect(
+      inspection.automatedRun.present
+        ? inspection.automatedRun.contentHash
+        : undefined
+    ).toBe(
+      historicalRunContentHash(retained!.runs[0]!)
+    );
+    expect(
+      inspectPersistableHistoryReport(
+        NormalizedReportSchema.parse(report),
+        "https://override.example/report/"
+      ).automatedRun
+    ).not.toEqual(inspection.automatedRun);
     await expect(
       verifyHistoryContainsCurrentInput({
         historyDir,

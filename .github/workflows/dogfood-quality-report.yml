@@ -1,118 +1,110 @@
-name: Dogfood Quality Report
+name: Trusted self quality report
 
 on:
-  workflow_dispatch:
-    inputs:
-      quality-profile:
-        description: Quality profile to use.
-        required: false
-        default: relaxed
-        type: choice
-        options:
-          - off
-          - relaxed
-          - standard
-          - strict
-          - release
-      publish-mode:
-        description: Delivery mode.
-        required: false
-        default: artifact
-        type: choice
-        options:
-          - auto
-          - none
-          - artifact
-          - pages
-          - pages-and-artifact
-      pr-comment-mode:
-        description: PR comment mode.
-        required: false
-        default: off
-        type: choice
-        options:
-          - auto
-          - off
-          - minimal
-          - full
-      fail-on-quality-gate:
-        description: Fail at the end when the selected quality gate fails.
-        required: false
-        default: false
-        type: boolean
-  pull_request:
   push:
-    branches: [main]
+    branches: [main, "release/**"]
+  release:
+    types: [published]
+  workflow_dispatch:
 
 permissions:
   contents: read
-  actions: read
-  issues: write
-  pull-requests: write
-  pages: write
-  id-token: write
+
+concurrency:
+  group: testreporter-quality-history
+  cancel-in-progress: false
 
 jobs:
-  resolve-dogfood-inputs:
+  build-and-report:
     runs-on: ubuntu-latest
-    outputs:
-      quality-profile: ${{ steps.resolve.outputs.quality-profile }}
-      publish-mode: ${{ steps.resolve.outputs.publish-mode }}
-      pr-comment-mode: ${{ steps.resolve.outputs.pr-comment-mode }}
-      fail-on-quality-gate: ${{ steps.resolve.outputs.fail-on-quality-gate }}
-    steps:
-      - id: resolve
-        shell: bash
-        run: |
-          set -euo pipefail
-          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
-            echo "quality-profile=${{ inputs.quality-profile }}" >> "$GITHUB_OUTPUT"
-            echo "publish-mode=${{ inputs.publish-mode }}" >> "$GITHUB_OUTPUT"
-            echo "pr-comment-mode=${{ inputs.pr-comment-mode }}" >> "$GITHUB_OUTPUT"
-            echo "fail-on-quality-gate=${{ inputs.fail-on-quality-gate }}" >> "$GITHUB_OUTPUT"
-          elif [[ "${{ github.event_name }}" == "pull_request" ]]; then
-            echo "quality-profile=relaxed" >> "$GITHUB_OUTPUT"
-            echo "publish-mode=artifact" >> "$GITHUB_OUTPUT"
-            echo "pr-comment-mode=minimal" >> "$GITHUB_OUTPUT"
-            echo "fail-on-quality-gate=false" >> "$GITHUB_OUTPUT"
-          else
-            echo "quality-profile=relaxed" >> "$GITHUB_OUTPUT"
-            echo "publish-mode=artifact" >> "$GITHUB_OUTPUT"
-            echo "pr-comment-mode=off" >> "$GITHUB_OUTPUT"
-            echo "fail-on-quality-gate=false" >> "$GITHUB_OUTPUT"
-          fi
-
-  prepare-dogfood-artifacts:
-    runs-on: ubuntu-latest
+    permissions:
+      contents: read
     steps:
       - uses: actions/checkout@v4
-
-      - name: Upload dogfood quality artifacts
-        uses: actions/upload-artifact@v4
         with:
-          name: quality-dogfood-artifacts
-          path: examples/minimal/quality-artifacts
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Prepare reporter directories and Playwright
+        run: bash scripts/prepare-quality-runner.sh
+      - run: npm run lint
+      - run: npm run typecheck
+      - run: npm run build
+      - name: Unit tests and coverage
+        run: npm test -- --coverage --coverage.reporter=json-summary --reporter=default --reporter=json --outputFile.json=quality-artifacts/tests/unit/vitest.json
+      - name: E2E tests
+        env:
+          PLAYWRIGHT_JUNIT_OUTPUT_FILE: quality-artifacts/tests/e2e/playwright.xml
+        run: npm run test:e2e -- --reporter=line,junit
+      - name: Collect coverage
+        run: cp coverage/coverage-summary.json quality-artifacts/coverage/coverage-summary.json
+      - name: Generate current report
+        run: >
+          npm run quality-report -- generate
+          --config quality-report.yml
+          --input quality-artifacts
+          --output site
+          --execution-id "${{ github.run_id }}-${{ github.run_attempt }}"
+          --workflow-run "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}/attempts/${{ github.run_attempt }}"
+          --commit-sha "${{ github.sha }}"
+          --branch "${{ github.ref_name }}"
+          --no-fail-on-quality-gate
+      - uses: actions/upload-artifact@v4
+        with:
+          name: testreporter-current-report
+          path: site
           if-no-files-found: error
 
-  dogfood-report:
-    needs:
-      - resolve-dogfood-inputs
-      - prepare-dogfood-artifacts
+  persist-history:
+    needs: build-and-report
+    runs-on: ubuntu-latest
     permissions:
-      actions: read
-      contents: read
-      issues: write
-      pull-requests: write
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: testreporter-current-report
+          path: site
+      - uses: actions/checkout@v4
+        with:
+          path: tool
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: tool/package-lock.json
+      - working-directory: tool
+        run: npm ci && npm run build
+      - name: Merge, persist, verify, and finalize history
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: bash tool/scripts/persist-history.sh site/normalized-report.json site tool tool/quality-report.yml
+      - name: Verify finalized Pages history
+        run: test -f site/data/history.json
+      - uses: actions/upload-artifact@v4
+        with:
+          name: testreporter-final-report
+          path: site
+          if-no-files-found: error
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+
+  deploy-pages:
+    needs: persist-history
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    permissions:
       pages: write
       id-token: write
-    uses: ./.github/workflows/publish-quality-report.yml
-    with:
-      artifact-pattern: quality-dogfood-artifacts
-      artifact-path: quality-artifacts
-      config-path: examples/minimal/quality-report.yml
-      quality-gates-path: examples/minimal/quality-gates.yml
-      quality-profile: ${{ needs.resolve-dogfood-inputs.outputs.quality-profile }}
-      publish-mode: ${{ needs.resolve-dogfood-inputs.outputs.publish-mode }}
-      pr-comment-mode: ${{ needs.resolve-dogfood-inputs.outputs.pr-comment-mode }}
-      update-pr-comment: true
-      fail-on-quality-gate: ${{ needs.resolve-dogfood-inputs.outputs.fail-on-quality-gate == 'true' }}
+    steps:
+      - name: Deploy GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4

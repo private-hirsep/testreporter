@@ -1,0 +1,44 @@
+project:
+  key: TESTREPORTER
+  name: Testreporter
+  repository: private-hirsep/testreporter
+  reportUrl: https://private-hirsep.github.io/testreporter/
+
+history:
+  enabled: true
+  maxRuns: 50
+  maxAgeDays: 180
+  maxManualExecutions: 200
+  stability:
+    minimumSamples: 5
+    flakyTransitionThreshold: 2
+  duration:
+    minimumSamples: 3
+    regressionPercent: 30
+    minimumIncreaseMs: 500
+
+artifacts:
+  tests:
+    frontend:
+      vitestJson: tests/unit/vitest.json
+    e2e:
+      junit: tests/e2e/playwright.xml
+  coverage:
+    frontend:
+      summaryJson: coverage/coverage-summary.json
+
+qualityGates:
+  tests:
+    allowFailed: 0
+    allowBroken: 0
+  coverage:
+    totalMinimum: 60
+  requirements:
+    failOnMissing: false
+    failOnExtra: false
+  security:
+    maxCritical: 0
+    maxHigh: 0
+    maxMedium: 0
+  warnings:
+    maxWarnings: 10

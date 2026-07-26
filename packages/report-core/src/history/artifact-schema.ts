@@ -460,7 +460,73 @@ export const DEFAULT_HISTORICAL_THRESHOLDS = {
   durationMinimumSamples: 3,
   durationRegressionPercent: 30,
   durationMinimumIncreaseMs: 500
-};
+} satisfies z.infer<typeof HistoricalThresholdsSchema>;
+
+export function resolveHistoricalThresholds(
+  thresholds?: Partial<z.infer<typeof HistoricalThresholdsSchema>>
+): z.infer<typeof HistoricalThresholdsSchema> {
+  return HistoricalThresholdsSchema.parse({
+    minimumSamples:
+      thresholds?.minimumSamples ?? DEFAULT_HISTORICAL_THRESHOLDS.minimumSamples,
+    flakyTransitionThreshold:
+      thresholds?.flakyTransitionThreshold ??
+      DEFAULT_HISTORICAL_THRESHOLDS.flakyTransitionThreshold,
+    durationMinimumSamples:
+      thresholds?.durationMinimumSamples ??
+      DEFAULT_HISTORICAL_THRESHOLDS.durationMinimumSamples,
+    durationRegressionPercent:
+      thresholds?.durationRegressionPercent ??
+      DEFAULT_HISTORICAL_THRESHOLDS.durationRegressionPercent,
+    durationMinimumIncreaseMs:
+      thresholds?.durationMinimumIncreaseMs ??
+      DEFAULT_HISTORICAL_THRESHOLDS.durationMinimumIncreaseMs
+  });
+}
+
+export function normalizeHistoricalStreamDimension(value?: string) {
+  const normalized = value?.trim();
+  return normalized ? normalized : undefined;
+}
+
+export function historicalStreamKey(input: {
+  testCaseId: string;
+  type: "automated" | "manual";
+  branch?: string;
+  environment?: string;
+}) {
+  return [
+    input.testCaseId,
+    input.type,
+    normalizeHistoricalStreamDimension(input.branch) ?? "",
+    normalizeHistoricalStreamDimension(input.environment) ?? ""
+  ].join("\0");
+}
+
+export function compareHistoricalSamples(
+  left: z.infer<typeof HistoricalSampleSchema>,
+  right: z.infer<typeof HistoricalSampleSchema>
+) {
+  return (
+    Date.parse(left.at) - Date.parse(right.at) ||
+    left.executionId.localeCompare(right.executionId)
+  );
+}
+
+export function deriveHistoricalStreamIdentityConfidence(
+  samples: Array<z.infer<typeof HistoricalSampleSchema>>
+): z.infer<typeof HistoricalIdentityConfidenceSchema> {
+  const identities = samples.flatMap((sample) =>
+    sample.implementationResults?.map((result) => result.identity) ?? []
+  );
+  if (identities.some((identity) => identity.conflict)) return "conflicted";
+  if (
+    identities.some(
+      (identity) => !identity.stable || identity.source === "generated"
+    )
+  )
+    return "generated-low";
+  return "trusted";
+}
 
 function historicalTransition(
   current: { presence: string; status: string } | undefined,
@@ -494,11 +560,7 @@ export function deriveHistoricalStreamSemantics(
   thresholds = DEFAULT_HISTORICAL_THRESHOLDS,
   identityConfidence: z.infer<typeof HistoricalIdentityConfidenceSchema> = "trusted"
 ) {
-  const samples = [...inputSamples].sort(
-    (left, right) =>
-      Date.parse(left.at) - Date.parse(right.at) ||
-      left.executionId.localeCompare(right.executionId)
-  );
+  const samples = [...inputSamples].sort(compareHistoricalSamples);
   const current = samples.at(-1);
   const previous = [...samples]
     .slice(0, -1)
@@ -606,6 +668,7 @@ export const HistoricalCaseStreamSummarySchema = z
     type: z.enum(["automated", "manual"]),
     branch: z.string().optional(),
     environment: z.string().optional(),
+    identityConfidence: HistoricalIdentityConfidenceSchema,
     samples: z.array(HistoricalSampleSchema),
     currentStatus: HistoricalResultStatusSchema.optional(),
     previousStatus: HistoricalResultStatusSchema.optional(),
@@ -629,6 +692,42 @@ export const HistoricalCaseStreamSummarySchema = z
       "stream sample execution ID",
       context
     );
+    for (const [index, sample] of stream.samples.entries()) {
+      if (sample.type !== stream.type)
+        context.addIssue({
+          code: "custom",
+          path: ["samples", index, "type"],
+          message: "Sample type must match its historical stream type"
+        });
+      if (
+        stream.type === "automated" &&
+        normalizeHistoricalStreamDimension(sample.branch) !==
+          normalizeHistoricalStreamDimension(stream.branch)
+      )
+        context.addIssue({
+          code: "custom",
+          path: ["samples", index, "branch"],
+          message: "Sample branch must match its historical stream branch"
+        });
+      if (
+        normalizeHistoricalStreamDimension(sample.environment) !==
+        normalizeHistoricalStreamDimension(stream.environment)
+      )
+        context.addIssue({
+          code: "custom",
+          path: ["samples", index, "environment"],
+          message: "Sample environment must match its historical stream environment"
+        });
+      if (
+        index > 0 &&
+        compareHistoricalSamples(stream.samples[index - 1]!, sample) >= 0
+      )
+        context.addIssue({
+          code: "custom",
+          path: ["samples", index],
+          message: "Historical samples must be strictly ordered oldest to newest"
+        });
+    }
     if (stream.stability === "historically-unstable" && stream.sampleSize < 2)
       context.addIssue({
         code: "custom",
@@ -712,6 +811,12 @@ export const HistoricalCaseSummarySchema = z
             path: [field],
             message: `${field} does not agree with the preferred comparison stream`
           });
+      if (summary.identityConfidence !== preferred.identityConfidence)
+        context.addIssue({
+          code: "custom",
+          path: ["identityConfidence"],
+          message: "identityConfidence does not agree with the preferred comparison stream"
+        });
       if (
         summary.duration !== undefined &&
         JSON.stringify(summary.duration) !== JSON.stringify(preferred.duration)
@@ -788,13 +893,35 @@ export const OptimizedHistoryArtifactSchema = z
     );
     uniqueBy(artifact.cases, (summary) => summary.testCaseId, "case ID", context);
     uniqueBy(artifact.diagnostics, (diagnostic) => diagnostic.id, "diagnostic ID", context);
-    const thresholds = artifact.thresholds ?? DEFAULT_HISTORICAL_THRESHOLDS;
+    const thresholds = resolveHistoricalThresholds(artifact.thresholds);
     for (const [caseIndex, summary] of artifact.cases.entries())
       for (const [streamIndex, stream] of summary.streams.entries()) {
+        const expectedKey = historicalStreamKey({
+          testCaseId: summary.testCaseId,
+          type: stream.type,
+          ...(stream.branch !== undefined ? { branch: stream.branch } : {}),
+          ...(stream.environment !== undefined
+            ? { environment: stream.environment }
+            : {})
+        });
+        if (stream.key !== expectedKey)
+          context.addIssue({
+            code: "custom",
+            path: ["cases", caseIndex, "streams", streamIndex, "key"],
+            message: "Stream key does not match its canonical dimensions"
+          });
+        const expectedConfidence =
+          deriveHistoricalStreamIdentityConfidence(stream.samples);
+        if (stream.identityConfidence !== expectedConfidence)
+          context.addIssue({
+            code: "custom",
+            path: ["cases", caseIndex, "streams", streamIndex, "identityConfidence"],
+            message: "identityConfidence does not match the identities in this stream"
+          });
         const expected = deriveHistoricalStreamSemantics(
           stream.samples,
           thresholds,
-          summary.identityConfidence
+          stream.identityConfidence
         );
         const fields = [
           "currentStatus",
@@ -816,14 +943,13 @@ export const OptimizedHistoryArtifactSchema = z
               path: ["cases", caseIndex, "streams", streamIndex, field],
               message: `${field} does not match canonical stream semantics`
             });
-        if (artifact.thresholds && stream.stability !== expected.stability)
+        if (stream.stability !== expected.stability)
           context.addIssue({
             code: "custom",
             path: ["cases", caseIndex, "streams", streamIndex, "stability"],
             message: "stability does not match canonical stream semantics"
           });
         if (
-          artifact.thresholds &&
           JSON.stringify(stream.duration) !== JSON.stringify(expected.duration)
         )
           context.addIssue({

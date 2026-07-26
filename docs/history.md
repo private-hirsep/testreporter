@@ -22,7 +22,9 @@ File names combine an 80-character readable prefix with a 12-character SHA-256 s
 
 ## Identities and timestamps
 
-An automated report produces at most one run. Its ID is chosen deterministically:
+An automated report produces at most one run, and only when a normalized automated execution
+actually exists. Workflow metadata such as `metadata.runId` does not itself create an automated
+historical run. When the execution exists, its ID is chosen deterministically:
 
 1. explicit normalized `runId`;
 2. workflow run plus attempt (`github-<run-id>-<attempt>`, defaulting to attempt 1 only when unavailable);
@@ -32,6 +34,14 @@ An automated report produces at most one run. Its ID is chosen deterministically
 `reportedAt` is the report-generation observation time. It is never labelled execution completion. `startedAt`, `completedAt`, and wall-clock duration are included only when genuine run-level values exist. Summed test duration is a separate metric.
 
 Completed, valid manual executions use their validated `executionId`. Reimporting identical content keeps one record. Compatible metadata/link enrichment is merged. Conflicting immutable timestamps, status, or case results produce `HISTORY_MANUAL_CONFLICT` and retain the previous record. Drafts, browser-local drafts, invalid results, and results for non-approved cases are excluded under the existing validation rules.
+
+`quality-report history inspect --format json` exposes the automated run and exact persistable
+manual execution identities using those same core validation and hashing rules. The persistence
+script uses that result before initializing a checkout. A manual-only report remains manual-only
+even when workflow metadata contains a run ID, persists all valid completed executions, and uses
+the deterministic `manual-executions` label. If inspection finds neither kind, persistence prints
+`No new automated or manual executions to persist.` and exits without initializing history,
+writing files, committing, or pushing.
 
 ## Merge and retention
 
@@ -59,8 +69,11 @@ force. A no-diff result is successful only when the fetched run file has the exa
 64-character SHA-256 content identity of the current normalized run. Canonical JSON recursively
 sorts object keys and omits undefined values. The hash covers identity, project/release
 context, workflow attempt, timestamps, status/counts, gate/readiness,
-requirement/coverage/security summaries, case snapshots, and source links. Both merge and verify
-resolve the source URL from an explicit CLI value first and `project.reportUrl` second. A same-ID
+requirement/coverage/security summaries, case snapshots, and source links. Inspect, merge, and verify
+all resolve the source URL from explicit `--source-report-url` first,
+`project.reportUrl` second, and absence last. Only HTTP(S) URLs are accepted.
+Identical inputs therefore produce identical automated and manual immutable hashes
+across all three commands. A same-ID
 content conflict fails merge and persistence.
 After three conflicts the persistence job fails with an explicit diagnostic.
 Automated run IDs are optional: a manual-only report persists every completed validated manual
@@ -88,10 +101,22 @@ permission as `QUALITY_SUMMARY_WRITE_TOKEN`. The build job never receives that w
 
 ## Comparison streams and finalization
 
-Logical cases contain independent automated and manual streams keyed by execution type, branch,
-and environment. Automated transitions alone drive new, persistent, recovered, and missing-case
+Logical cases contain independent automated and manual streams keyed canonically by test-case ID,
+execution type, normalized branch, and normalized environment (NUL-separated in the compact key).
+Every sample must match its stream type and environment; automated samples must also match its
+branch. Empty dimension values normalize to absence, while distinct branches and environments are
+never silently mixed. Duplicate or non-canonical keys are rejected. Automated transitions alone drive new, persistent, recovered, and missing-case
 portfolio metrics. Manual environments remain separate and cannot erase automated state; aggregate
 status is display-only.
+
+Identity confidence is stored on each stream. Any conflicting identity makes only that stream
+`conflicted`; otherwise any generated or unstable identity makes it `generated-low`; compatible
+explicit browser/device/project variants remain `trusted`. Validated manual identities are trusted.
+A conflicted stream has identity-conflict stability and no trusted pass rate; a generated-low
+stream retains its continuity warning; trusted streams use normal stability semantics. The
+case-level compatibility field is copied from the preferred stream: the most recent automated
+stream when one exists, otherwise the most recent manual stream, with canonical key as the final
+tie-breaker. Manual confidence can therefore never upgrade an automated stream.
 
 When integrated generation requests a ZIP, history and manual executions are merged first, then
 the optimized history and historical project summary are written, evidence and checksums are
@@ -152,6 +177,11 @@ manual execution status is derived only from that execution's case results. Proj
 recomputed from the selected automated streams, so later manual activity cannot erase an automated
 regression or recovery.
 
+Thresholds are resolved by one shared helper for generation, merge, schema parsing, project
+summaries, and portfolio inputs. If an optimized artifact omits `thresholds`, the built-in defaults
+above are applied and stability and duration are still validated; omission never disables semantic
+checks.
+
 By default, comparisons require the same project, execution type, branch, and environment:
 
 - newly failing: current failed/broken after a comparable non-failing state;
@@ -172,6 +202,13 @@ finite and non-negative, and completion may not precede start.
 `oldestAt` and `newestAt` always mean the minimum and maximum parsed `reportedAt` instant. They do
 not use completion time or array position; equal instants use run ID as a deterministic tie-breaker.
 Execution lists may independently sort by completion, start, then report time.
+
+Stream samples are stored strictly oldest-to-newest by their genuine derived observation instant
+(automated completion, then start, then report time; manual completion, then start), parsed as a
+timestamp rather than compared lexically. Equal instants use execution ID as the deterministic
+tie-breaker. Generation writes this order and schema parsing rejects reversed or ambiguous
+duplicate ordering. The Test Case UI displays a copied reverse order (newest first) without
+mutating the canonical artifact, and shows identity warnings beside the affected stream.
 
 One retained run produces “One execution is available. More executions are required for trends.” No history produces “Historical execution summaries have not been imported for this report.” No synthetic points are generated.
 

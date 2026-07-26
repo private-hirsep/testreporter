@@ -1,6 +1,6 @@
 ﻿#!/usr/bin/env node
 import path from "node:path";
-import { mkdir } from "node:fs/promises";
+import { mkdir, readFile } from "node:fs/promises";
 import { Command } from "commander";
 import { ZodError } from "zod";
 import { loadConfig } from "./config.js";
@@ -13,17 +13,56 @@ import {
   verifyHistoryContainsCurrentInput
 } from "./history.js";
 import {
-  deriveHistoryArtifact
+  deriveHistoryArtifact,
+  inspectPersistableHistoryReport,
+  NormalizedReportSchema
 } from "@quality-report/report-core";
 import {
   resolveHistoryOptions,
-  resolveHistorySourceReportUrl
+  resolveHistorySourceOptions
 } from "./history-options.js";
 import { writeEvidence, writeProjectSummary } from "./evidence.js";
 
 const program = new Command();
 
 const historyCommand = program.command("history").description("Manage compact Git-first history");
+
+historyCommand
+  .command("inspect")
+  .description("Inspect the canonical persistable executions in a normalized report")
+  .requiredOption("--current-report <path>", "Current normalized-report.json")
+  .option("--config <path>", "Project configuration supplying the report URL")
+  .option("--source-report-url <url>", "Stable URL included in immutable content")
+  .option("--format <format>", "Output format", "json")
+  .action(
+    async (options: {
+      currentReport: string;
+      config?: string;
+      sourceReportUrl?: string;
+      format: string;
+    }) => {
+      try {
+        if (options.format !== "json")
+          throw new Error(`Unsupported history inspection format: ${options.format}`);
+        const source = await resolveHistorySourceOptions({
+          ...(options.config ? { configPath: options.config } : {}),
+          ...(options.sourceReportUrl
+            ? { sourceReportUrl: options.sourceReportUrl }
+            : {})
+        });
+        const report = NormalizedReportSchema.parse(
+          JSON.parse(await readFile(options.currentReport, "utf8"))
+        );
+        console.log(
+          JSON.stringify(
+            inspectPersistableHistoryReport(report, source.sourceReportUrl)
+          )
+        );
+      } catch (error) {
+        handleError(error);
+      }
+    }
+  );
 
 historyCommand
   .command("merge")
@@ -61,21 +100,24 @@ historyCommand
       durationMinimumIncreaseMs?: string;
     }) => {
       try {
-        const config = options.config ? await loadConfig(options.config) : undefined;
-        const sourceReportUrl = resolveHistorySourceReportUrl(
-          options.sourceReportUrl,
-          config?.project.reportUrl
-        );
+        const source = await resolveHistorySourceOptions({
+          ...(options.config ? { configPath: options.config } : {}),
+          ...(options.sourceReportUrl
+            ? { sourceReportUrl: options.sourceReportUrl }
+            : {})
+        });
         const store = await mergeHistoryDirectory({
           currentReport: options.currentReport,
           outputDir: options.outputDir,
           ...(options.historyDir ? { historyDir: options.historyDir } : {}),
           ...(options.staticOutput ? { staticOutput: options.staticOutput } : {}),
-          ...(sourceReportUrl ? { sourceReportUrl } : {}),
+          ...(source.sourceReportUrl
+            ? { sourceReportUrl: source.sourceReportUrl }
+            : {}),
           ...(options.projectSummaryOutput
             ? { projectSummaryOutput: options.projectSummaryOutput }
             : {}),
-          retention: resolveHistoryOptions(config?.history, options)
+          retention: resolveHistoryOptions(source.config?.history, options)
         });
         console.log(
           `History contains ${store.runs.length} automated run(s) and ${store.manualExecutions.length} manual execution(s): ${options.outputDir}`
@@ -101,15 +143,18 @@ historyCommand
       sourceReportUrl?: string;
     }) => {
       try {
-        const config = options.config ? await loadConfig(options.config) : undefined;
-        const sourceReportUrl = resolveHistorySourceReportUrl(
-          options.sourceReportUrl,
-          config?.project.reportUrl
-        );
+        const source = await resolveHistorySourceOptions({
+          ...(options.config ? { configPath: options.config } : {}),
+          ...(options.sourceReportUrl
+            ? { sourceReportUrl: options.sourceReportUrl }
+            : {})
+        });
         const verified = await verifyHistoryContainsCurrentInput({
           historyDir: options.historyDir,
           currentReport: options.currentReport,
-          ...(sourceReportUrl ? { sourceReportUrl } : {})
+          ...(source.sourceReportUrl
+            ? { sourceReportUrl: source.sourceReportUrl }
+            : {})
         });
         console.log(
           `Verified exact persisted history for ${verified.runId ?? `${verified.manualExecutionIds.length} manual execution(s)`}.`
@@ -126,6 +171,19 @@ program
   .requiredOption("--output <path>", "Static portfolio output directory")
   .option("--stale-days <days>", "Age after which a summary is stale", "7")
   .action(async (options: { input: string; output: string; staleDays: string }) => { try { const projects = await buildPortfolio(options.input, options.output, Number(options.staleDays)); console.log(`Generated portfolio for ${projects.length} project(s): ${options.output}`); } catch (error) { handleError(error); } });
+
+program
+  .command("finalize")
+  .description("Finalize checksums and the immutable audit ZIP after history merging")
+  .requiredOption("--output <path>", "Generated static report output directory")
+  .action(async (options: { output: string }) => {
+    try {
+      await finalizeReportArchive(options.output);
+      console.log(`Finalized audit evidence: ${path.join(options.output, "quality-report.zip")}`);
+    } catch (error) {
+      handleError(error);
+    }
+  });
 
 program
   .name("quality-report")
@@ -286,6 +344,9 @@ program
           prCommentMarker: options.prCommentMarker
           ,...(options.release ? { release: options.release } : {}), ...(options.testedBuild ? { testedBuild: options.testedBuild } : {}), ...(options.commitSha ? { commitSha: options.commitSha } : {}), ...(options.branch ? { branch: options.branch } : {}), ...(options.environment ? { environment: options.environment } : {}), ...(options.workflowRun ? { workflowRun: options.workflowRun } : {}), ...(options.executionId ? { executionId: options.executionId } : {}), ...(options.releaseDate ? { releaseDate: options.releaseDate } : {}), ...(options.releaseScope ? { releaseScope: options.releaseScope } : {})
         });
+        let retainedHistory:
+          | { runs: unknown[]; manualExecutions: unknown[] }
+          | undefined;
         if (config.history.enabled && options.historyOutputDir) {
           const store = await mergeHistoryDirectory({
             ...(options.historyDir ? { historyDir: options.historyDir } : {}),
@@ -304,6 +365,7 @@ program
               durationMinimumIncreaseMs: config.history.duration.minimumIncreaseMs
             }
           });
+          retainedHistory = store;
           await writeProjectSummary(
             options.output,
             report,
@@ -320,8 +382,37 @@ program
         }
         if (options.zip && config.history.enabled && options.historyOutputDir)
           await finalizeReportArchive(options.output);
-        console.log(`Generated report for ${report.metadata.projectName}: ${options.output}`);
-        console.log(`Quality gate: ${report.qualityGate.status.toUpperCase()}`);
+        console.log("Quality report generated successfully.\n");
+        console.log(`Report:        ${path.join(options.output, "index.html")}`);
+        console.log(
+          `Summary:       ${path.join(options.output, "project-quality-summary.json")}`
+        );
+        console.log(
+          `Audit ZIP:     ${options.zip ? path.join(options.output, "quality-report.zip") : "not requested"}`
+        );
+        console.log(
+          `History:       ${
+            !config.history.enabled
+              ? "not configured"
+              : retainedHistory
+                ? `${retainedHistory.runs.length + retainedHistory.manualExecutions.length} retained execution(s)`
+                : "configured; persistence not requested"
+          }`
+        );
+        console.log(`Test cases:    ${report.testCaseCatalogue?.length ?? report.tests.length}`);
+        console.log(`Executions:    ${report.unifiedExecutions?.length ?? 0}`);
+        console.log(`Quality gate:  ${report.qualityGate.status.toUpperCase()}`);
+        console.log("\nNext step:");
+        if (!config.history.enabled)
+          console.log("Configure Git-first history persistence to enable trends.");
+        else if (
+          retainedHistory &&
+          retainedHistory.runs.length + retainedHistory.manualExecutions.length < 2
+        )
+          console.log("Run another trusted execution to enable historical trends.");
+        else if (!options.historyOutputDir)
+          console.log("Persist this report from a trusted workflow to retain its history.");
+        else console.log("Publish the finalized report and persist its compact history.");
         if (report.warnings.length > 0)
           console.warn(`Completed with ${report.warnings.length} warning(s).`);
         process.exit(options.failOnQualityGate && report.qualityGate.status === "failed" ? 1 : 0);

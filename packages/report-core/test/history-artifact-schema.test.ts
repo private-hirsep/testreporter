@@ -2,8 +2,10 @@ import { describe, expect, it } from "vitest";
 
 import {
   deriveAutomatedHistoryStatus,
+  compareHistoricalSamples,
   deriveHistoricalStreamSemantics,
   deriveManualHistoryStatus,
+  historicalStreamKey,
   historyReportedRange,
   HistoricalSampleSchema,
   OptimizedHistoryArtifactSchema,
@@ -78,10 +80,11 @@ function artifact() {
         testCaseId: "CASE-1",
         streams: [
           {
-            key: "automated\u0000main\u0000ci",
+            key: "CASE-1\u0000automated\u0000main\u0000ci",
             type: "automated" as const,
             branch: "main",
             environment: "ci",
+            identityConfidence: "trusted" as const,
             samples: [
               {
                 executionId: "run-1",
@@ -89,7 +92,9 @@ function artifact() {
                 at: "2026-07-24T00:00:00.000Z",
                 status: "passed" as const,
                 presence: "present" as const,
-                durationMs: 100
+                durationMs: 100,
+                branch: "main",
+                environment: "ci"
               }
             ],
             currentStatus: "passed" as const,
@@ -320,6 +325,60 @@ describe("optimized history artifact schema", () => {
       slowRegression: true
     };
     expect(OptimizedHistoryArtifactSchema.safeParse(value).success).toBe(false);
+  });
+
+  it("validates stability and duration with default thresholds when thresholds are omitted", () => {
+    const stability = artifact();
+    stability.cases[0]!.streams[0]!.stability = "stable";
+    expect(OptimizedHistoryArtifactSchema.safeParse(stability).success).toBe(false);
+
+    const duration = artifact();
+    duration.cases[0]!.streams[0]!.duration = {
+      latestMs: 100,
+      medianMs: 100,
+      recentMedianMs: 100,
+      slowRegression: false
+    };
+    expect(OptimizedHistoryArtifactSchema.safeParse(duration).success).toBe(false);
+  });
+
+  it("enforces stream membership dimensions and canonical keys", () => {
+    expect(
+      historicalStreamKey({
+        testCaseId: "CASE-1",
+        type: "automated",
+        branch: " main ",
+        environment: "ci"
+      })
+    ).toBe("CASE-1\u0000automated\u0000main\u0000ci");
+    for (const mutate of [
+      (value: ReturnType<typeof artifact>) =>
+        (value.cases[0]!.streams[0]!.samples[0]!.type = "manual"),
+      (value: ReturnType<typeof artifact>) =>
+        (value.cases[0]!.streams[0]!.samples[0]!.branch = "release/1.0"),
+      (value: ReturnType<typeof artifact>) =>
+        (value.cases[0]!.streams[0]!.samples[0]!.environment = "production"),
+      (value: ReturnType<typeof artifact>) =>
+        (value.cases[0]!.streams[0]!.key = "incorrect")
+    ]) {
+      const value = artifact();
+      mutate(value);
+      expect(OptimizedHistoryArtifactSchema.safeParse(value).success).toBe(false);
+    }
+  });
+
+  it("requires canonical chronological order with parsed-offset and ID tie breaking", () => {
+    const value = artifact();
+    const stream = value.cases[0]!.streams[0]!;
+    const first = stream.samples[0]!;
+    const second = {
+      ...structuredClone(first),
+      executionId: "run-2",
+      at: "2026-07-24T01:00:00+01:00"
+    };
+    stream.samples = [second, first];
+    expect(OptimizedHistoryArtifactSchema.safeParse(value).success).toBe(false);
+    expect(compareHistoricalSamples(first, second)).toBeLessThan(0);
   });
 
   it("rejects trend counts inconsistent with retained runs and logical cases", () => {

@@ -12,22 +12,6 @@ branch="${HISTORY_BRANCH:-quality-history}"
 attempts="${HISTORY_PUSH_ATTEMPTS:-3}"
 workspace="${GITHUB_WORKSPACE:-$PWD}"
 remote="https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
-run_id="$(
-  jq -r '
-    .metadata.runId //
-    ([.unifiedExecutions[]? | select(.type == "automated") | .id][0]) //
-    empty
-  ' "$report"
-)"
-manual_count="$(
-  jq '[.manualExecutions[]? | select(.executionId and .completedAt)] | length' "$report"
-)"
-history_label="${run_id:-manual-executions}"
-
-if [[ -z "$run_id" && "$manual_count" -eq 0 ]]; then
-  echo "No new automated or manual executions to persist."
-  exit 0
-fi
 
 if [[ -f "$config" ]]; then
   config="$(cd "$(dirname "$config")" && pwd)/$(basename "$config")"
@@ -38,6 +22,21 @@ else
   exit 2
 fi
 
+inspection="$(
+  node "${tool}/packages/report-cli/dist/index.js" history inspect \
+    --current-report "$report" \
+    --config "$config" \
+    --format json
+)"
+run_id="$(jq -r 'if .automatedRun.present then .automatedRun.id else empty end' <<<"$inspection")"
+manual_count="$(jq '.manualExecutions | length' <<<"$inspection")"
+history_label="${run_id:-manual-executions}"
+
+if [[ -z "$run_id" && "$manual_count" -eq 0 ]]; then
+  echo "No new automated or manual executions to persist."
+  exit 0
+fi
+
 verify_remote() {
   git -C "${workspace}/history-checkout" fetch --depth=1 origin "$branch"
   git -C "${workspace}/history-checkout" reset --hard FETCH_HEAD
@@ -45,6 +44,10 @@ verify_remote() {
     --config "$config" \
     --history-dir "${workspace}/history-checkout/quality-history" \
     --current-report "$report"
+}
+
+finalize_site() {
+  node "${tool}/packages/report-cli/dist/index.js" finalize --output "$site"
 }
 
 for attempt in $(seq 1 "$attempts"); do
@@ -75,6 +78,7 @@ for attempt in $(seq 1 "$attempts"); do
 
   if git -C "${workspace}/history-checkout" diff --cached --quiet; then
     if verify_remote; then
+      finalize_site
       echo "History already persisted remotely for ${history_label}."
       exit 0
     fi
@@ -94,6 +98,7 @@ for attempt in $(seq 1 "$attempts"); do
     )"
   if git -C "${workspace}/history-checkout" push origin "HEAD:${branch}"; then
     if verify_remote; then
+      finalize_site
       echo "History persisted and verified for ${history_label}."
       exit 0
     fi

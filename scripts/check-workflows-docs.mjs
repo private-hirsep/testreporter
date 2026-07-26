@@ -98,22 +98,84 @@ if (
 }
 
 const dogfoodText = await readText(".github/workflows/dogfood-quality-report.yml");
+const pullRequestText = await readText(
+  ".github/workflows/pull-request-quality-report.yml"
+);
+const releaseText = await readText(".github/workflows/release.yml");
+const persistenceText = await readText("scripts/persist-history.sh");
+const runnerSetupText = await readText("scripts/prepare-quality-runner.sh");
 const canonicalText = await readText(canonical);
 const ciText = await readText(".github/workflows/ci.yml");
 const generatorText = await readText("packages/report-cli/src/generator.ts");
 const schemaText = await readText("packages/report-core/src/schema/report.ts");
 const cliConfigText = await readText("packages/report-cli/src/config.ts");
-if (!dogfoodText.includes("uses: ./.github/workflows/publish-quality-report.yml")) {
-  fail("dogfood workflow must call the canonical reusable workflow");
+for (const command of [
+  "npm run lint",
+  "npm run typecheck",
+  "npm test",
+  "npm run build",
+  "npm run test:e2e",
+  "npm run quality-report -- generate"
+])
+  if (!dogfoodText.includes(command))
+    fail(`trusted self-report workflow is missing ${command}`);
+if (!runnerSetupText.includes("quality-artifacts/tests/unit"))
+  fail("quality runner setup must create the unit reporter directory");
+if (!runnerSetupText.includes("quality-artifacts/tests/e2e"))
+  fail("quality runner setup must create the E2E reporter directory");
+if (!runnerSetupText.includes("quality-artifacts/coverage"))
+  fail("quality runner setup must create the coverage directory");
+if (!runnerSetupText.includes("playwright install --with-deps chromium"))
+  fail("quality runner setup must install only the configured Chromium browser");
+for (const workflow of [dogfoodText, pullRequestText, releaseText]) {
+  if (!workflow.includes("bash scripts/prepare-quality-runner.sh"))
+    fail("every E2E workflow must prepare reporter directories and Playwright");
+  if (
+    workflow.indexOf("bash scripts/prepare-quality-runner.sh") >
+    workflow.indexOf("npm run test:e2e")
+  )
+    fail("Playwright preparation must run before E2E tests");
 }
+if (!dogfoodText.includes("scripts/persist-history.sh"))
+  fail("trusted self-report workflow must use the canonical persistence script");
+if (!persistenceText.includes("history merge"))
+  fail("persistence script must merge retained history");
+if (!persistenceText.includes("finalize --output"))
+  fail("persistence script must finalize after history integration");
+const historyMergeIndex = persistenceText.indexOf("history merge");
+const finalizationCallIndex = persistenceText.indexOf(
+  "\n      finalize_site",
+  historyMergeIndex
+);
+if (historyMergeIndex < 0 || finalizationCallIndex < historyMergeIndex)
+  fail("history merge must occur before finalization");
 if (
-  !dogfoodText.includes("actions/upload-artifact@v4") ||
-  !dogfoodText.includes("quality-dogfood-artifacts")
-) {
-  fail("dogfood workflow must upload example artifacts before invoking the reusable workflow");
-}
+  dogfoodText.indexOf("scripts/persist-history.sh") >
+  dogfoodText.indexOf("actions/upload-pages-artifact@v3")
+)
+  fail("history integration must finish before the Pages artifact is uploaded");
+if (!dogfoodText.includes("test -f site/data/history.json"))
+  fail("trusted workflow must verify that published Pages data contains history");
+if (!dogfoodText.includes("actions/deploy-pages@v4"))
+  fail("trusted workflow must deploy the staged Pages artifact");
+if (!dogfoodText.includes("contents: write"))
+  fail("trusted workflow must isolate history write permission");
+if (
+  !dogfoodText.includes("pages: write") ||
+  !dogfoodText.includes("id-token: write")
+)
+  fail("trusted workflow must isolate Pages deployment permissions");
+if (!pullRequestText.includes("permissions:\n  contents: read"))
+  fail("pull-request self-report workflow must remain read-only");
+if (pullRequestText.includes("contents: write") || pullRequestText.includes("pages: write"))
+  fail("pull-request self-report workflow must not receive write permissions");
 if (dogfoodText.includes("pull_request_target"))
   fail("dogfood workflow must not use pull_request_target");
+if (pullRequestText.includes("pull_request_target"))
+  fail("pull-request workflow must not use pull_request_target");
+for (const source of [dogfoodText, pullRequestText, persistenceText])
+  if (/git\s+push[^\n]*(?:--force|-f(?:\s|$))/.test(source))
+    fail("quality workflows must never force-push history");
 if (!canonicalText.includes('--publish-mode "${{ steps.resolve.outputs.publish-mode }}"')) {
   fail("canonical workflow must pass resolved publish mode to the CLI");
 }
@@ -176,7 +238,7 @@ if (
   fail("README must not reference removed example publishing workflows");
 }
 for (const required of [
-  "Dogfood Quality Report",
+  "Trusted self quality report",
   "issues: write",
   "pages: write",
   "Pull requests should usually use `pr-comment-mode: minimal`",

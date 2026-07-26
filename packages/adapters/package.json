@@ -1,9 +1,11 @@
 {
   "name": "@quality-report/adapters",
-  "version": "0.1.0",
+  "version": "1.0.0-rc.1",
+  "engines": { "node": ">=22" },
   "type": "module",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
+  "files": ["dist", "README.md", "LICENSE"],
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
@@ -14,7 +16,7 @@
     "build": "tsc -p tsconfig.json"
   },
   "dependencies": {
-    "@quality-report/report-core": "file:../report-core",
+    "@quality-report/report-core": "1.0.0-rc.1",
     "fast-xml-parser": "^5.2.5",
     "yaml": "^2.8.0"
   }

@@ -9,6 +9,11 @@ import {
   deriveAutomatedHistoryStatus,
   deriveManualHistoryStatus,
   deriveHistoricalStreamSemantics,
+  deriveHistoricalStreamIdentityConfidence,
+  historicalStreamKey,
+  compareHistoricalSamples,
+  resolveHistoricalThresholds,
+  DEFAULT_HISTORICAL_THRESHOLDS,
   historyReportedRange,
   type HistoricalRunSummary,
   type HistoricalManualExecutionSummary,
@@ -36,11 +41,7 @@ export const DEFAULT_HISTORY_OPTIONS = {
   maxRuns: 50,
   maxAgeDays: 180,
   maxManualExecutions: 200,
-  minimumSamples: 5,
-  flakyTransitionThreshold: 2,
-  durationMinimumSamples: 3,
-  durationRegressionPercent: 30,
-  durationMinimumIncreaseMs: 500
+  ...DEFAULT_HISTORICAL_THRESHOLDS
 } satisfies Required<HistoryOptions>;
 
 const validTime = (value: string | undefined) => {
@@ -78,6 +79,27 @@ export function historicalManualContentHash(execution: HistoricalManualExecution
   return createHash("sha256")
     .update(canonicalHistoricalContent(normalized), "utf8")
     .digest("hex");
+}
+
+export function inspectPersistableHistoryReport(
+  report: NormalizedReport,
+  sourceReportUrl?: string
+) {
+  const automatedRun = deriveCurrentRunSummary(report, sourceReportUrl);
+  const manualExecutions = deriveManualExecutionSummaries(report, sourceReportUrl);
+  return {
+    automatedRun: automatedRun
+      ? {
+          present: true as const,
+          id: automatedRun.id,
+          contentHash: historicalRunContentHash(automatedRun)
+        }
+      : { present: false as const },
+    manualExecutions: manualExecutions.map((execution) => ({
+      executionId: execution.executionId,
+      contentHash: historicalManualContentHash(execution)
+    }))
+  };
 }
 
 function diagnosticIdentity(
@@ -256,7 +278,11 @@ export function emptyHistoryStore(
   generatedAt: string,
   options: HistoryOptions = {}
 ): ProjectHistoryStore {
-  const resolved = { ...DEFAULT_HISTORY_OPTIONS, ...options };
+  const resolved = {
+    ...DEFAULT_HISTORY_OPTIONS,
+    ...options,
+    ...resolveHistoricalThresholds(options)
+  };
   return {
     schemaVersion: HISTORY_SCHEMA_VERSION,
     project,
@@ -287,7 +313,11 @@ export function mergeProjectHistoryResult(
   options: HistoryOptions = {},
   sourceReportUrl?: string
 ): HistoryMergeResult {
-  const resolved = { ...DEFAULT_HISTORY_OPTIONS, ...options };
+  const resolved = {
+    ...DEFAULT_HISTORY_OPTIONS,
+    ...options,
+    ...resolveHistoricalThresholds(options)
+  };
   const project = {
     key: report.metadata.projectKey ?? report.metadata.projectName,
     name: report.metadata.projectName
@@ -476,7 +506,11 @@ export function deriveCaseHistory(
   catalogueIds: string[] = [],
   options: HistoryOptions = {}
 ): HistoricalCaseSummary[] {
-  const resolved = { ...DEFAULT_HISTORY_OPTIONS, ...options };
+  const resolved = {
+    ...DEFAULT_HISTORY_OPTIONS,
+    ...options,
+    ...resolveHistoricalThresholds(options)
+  };
   const byCase = new Map<string, HistoricalCaseSummary["samples"]>();
   const streams = new Map<string, HistoricalRunSummary[]>();
   for (const run of [...store.runs].reverse()) {
@@ -543,9 +577,7 @@ export function deriveCaseHistory(
       });
   const allIds = new Set([...catalogueIds, ...byCase.keys()]);
   return [...allIds].sort().map((testCaseId) => {
-    const allSamples = (byCase.get(testCaseId) ?? []).sort(
-      (a, b) => validTime(a.at) - validTime(b.at) || a.executionId.localeCompare(b.executionId)
-    );
+    const allSamples = (byCase.get(testCaseId) ?? []).sort(compareHistoricalSamples);
     const latest = allSamples.at(-1);
     const comparable = latest
       ? allSamples.filter(
@@ -675,24 +707,26 @@ export function deriveCaseHistory(
     >;
     const streamGroups = new Map<string, typeof allSamples>();
     for (const sample of allSamples) {
-      const key = [sample.type, sample.branch ?? "", sample.environment ?? ""].join("\0");
+      const key = historicalStreamKey({
+        testCaseId,
+        type: sample.type,
+        ...(sample.branch !== undefined ? { branch: sample.branch } : {}),
+        ...(sample.environment !== undefined
+          ? { environment: sample.environment }
+          : {})
+      });
       streamGroups.set(key, [...(streamGroups.get(key) ?? []), sample]);
     }
     const streamSummaries: HistoricalCaseStreamSummary[] = [...streamGroups.entries()]
       .map(([key, samples]) => {
         const streamCurrent = samples.at(-1);
-        const present = samples.filter((sample) => sample.presence === "present");
-        const streamIdentity = [...present].reverse()[0]?.implementationResults?.[0]?.identity;
-        const streamConfidence = streamIdentity?.conflict
-          ? "conflicted"
-          : streamIdentity && (!streamIdentity.stable || streamIdentity.source === "generated")
-            ? "generated-low"
-            : "trusted";
+        const streamConfidence = deriveHistoricalStreamIdentityConfidence(samples);
         return {
           key,
           type: streamCurrent?.type ?? "automated",
           ...(streamCurrent?.branch ? { branch: streamCurrent.branch } : {}),
           ...(streamCurrent?.environment ? { environment: streamCurrent.environment } : {}),
+          identityConfidence: streamConfidence,
           samples,
           ...deriveHistoricalStreamSemantics(samples, resolved, streamConfidence)
         } satisfies HistoricalCaseStreamSummary;
@@ -721,6 +755,7 @@ export function deriveCaseHistory(
     )[0];
     return {
       ...legacy,
+      ...(preferred ? { identityConfidence: preferred.identityConfidence } : {}),
       streams: streamSummaries,
       ...(automated ? { automated } : {}),
       ...(manual.length ? { manual } : {}),
@@ -747,7 +782,11 @@ export function deriveCaseHistory(
 }
 
 export function deriveHistoryArtifact(store: ProjectHistoryStore, options: HistoryOptions = {}) {
-  const resolved = { ...DEFAULT_HISTORY_OPTIONS, ...options };
+  const resolved = {
+    ...DEFAULT_HISTORY_OPTIONS,
+    ...options,
+    ...resolveHistoricalThresholds(options)
+  };
   const cases = deriveCaseHistory(store, [], options);
   const counts = (name: HistoryTransition) =>
     cases.filter((item) => item.automated?.transition === name).length;
@@ -764,7 +803,11 @@ export function deriveHistoryArtifact(store: ProjectHistoryStore, options: Histo
       durationMinimumIncreaseMs: resolved.durationMinimumIncreaseMs
     },
     availability:
-      store.runs.length === 0 ? "unavailable" : store.runs.length === 1 ? "insufficient" : "available",
+      store.runs.length + store.manualExecutions.length === 0
+        ? "unavailable"
+        : store.runs.length + store.manualExecutions.length === 1
+          ? "insufficient"
+          : "available",
     runs: store.runs,
     manualExecutions: store.manualExecutions,
     cases: cases.map(({ samples, automated, manual, ...item }) => {

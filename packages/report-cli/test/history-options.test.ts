@@ -1,8 +1,11 @@
 import { describe, expect, it } from "vitest";
+import { readFile } from "node:fs/promises";
+import path from "node:path";
 
 import { DEFAULT_HISTORY_OPTIONS } from "@quality-report/report-core";
 import {
   resolveHistoryOptions,
+  resolveHistorySourceOptions,
   resolveHistorySourceReportUrl
 } from "../src/history-options.js";
 
@@ -29,8 +32,46 @@ describe("standalone history option resolution", () => {
     expect(resolveHistorySourceReportUrl(undefined, undefined)).toBeUndefined();
   });
 
+  it("resolves configured report URLs through the shared command resolver", async () => {
+    await expect(
+      resolveHistorySourceOptions({
+        configPath: "examples/minimal/quality-report.yml"
+      })
+    ).resolves.toMatchObject({
+      sourceReportUrl: "https://example.invalid/quality-report/"
+    });
+    await expect(
+      resolveHistorySourceOptions({
+        configPath: "examples/minimal/quality-report.yml",
+        sourceReportUrl: "https://override.example/report/"
+      })
+    ).resolves.toMatchObject({
+      sourceReportUrl: "https://override.example/report/"
+    });
+  });
+
+  it.each(["not a URL", "file:///tmp/report", "javascript:alert(1)"])(
+    "rejects invalid source report URL %s",
+    (value) => {
+      expect(() => resolveHistorySourceReportUrl(value, undefined)).toThrow(
+        /source report URL/i
+      );
+    }
+  );
+
   it("uses built-in defaults without configuration or CLI values", () => {
     expect(resolveHistoryOptions(undefined)).toEqual(DEFAULT_HISTORY_OPTIONS);
+  });
+
+  it("routes inspect, merge, and verify through the same source resolver", async () => {
+    const cli = await readFile(
+      path.resolve("packages/report-cli/src/index.ts"),
+      "utf8"
+    );
+    expect(cli.match(/resolveHistorySourceOptions\(\{/g)).toHaveLength(3);
+    expect(cli).toContain(
+      "inspectPersistableHistoryReport(report, source.sourceReportUrl)"
+    );
   });
 
   it("uses project configuration when CLI values are omitted", () => {
