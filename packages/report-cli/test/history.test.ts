@@ -3,7 +3,8 @@ import os from "node:os";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
 import {
-  historicalRunContentHash,
+  inspectPersistableHistoryReport,
+  NormalizedReportSchema,
   ProjectQualitySummarySchema
 } from "@quality-report/report-core";
 
@@ -43,13 +44,22 @@ describe("history filesystem", () => {
         cases: Array<{ status: string; steps: Array<{ status: string }> }>;
       }>;
     };
-    delete report.metadata.runId;
+    report.metadata.runId = "workflow-metadata-only";
     report.unifiedExecutions = report.unifiedExecutions.filter(
       (execution) => execution.type === "manual"
     );
     expect(report.manualExecutions).toHaveLength(2);
     for (const execution of report.manualExecutions)
       execution.projectKey = config.project.key ?? config.project.name;
+    expect(
+      inspectPersistableHistoryReport(NormalizedReportSchema.parse(report))
+    ).toMatchObject({
+      automatedRun: { present: false },
+      manualExecutions: [
+        { executionId: report.manualExecutions[0]!.executionId },
+        { executionId: report.manualExecutions[1]!.executionId }
+      ]
+    });
     await writeFile(reportFile, JSON.stringify(report));
     await mergeHistoryDirectory({ currentReport: reportFile, outputDir: historyDir });
     expect((await loadHistoryDirectory(historyDir))?.manualExecutions).toHaveLength(2);
@@ -230,8 +240,10 @@ describe("history filesystem", () => {
     first.manualExecutions = [];
     first.metadata.runId = "summary-one";
     first.metadata.generatedAt = "2026-07-24T00:00:00.000Z";
+    first.metadata.generatedAt = "2026-07-24T00:00:00.000Z";
     const automated = first.unifiedExecutions.find((item) => item.type === "automated")!;
     automated.id = "summary-one";
+    automated.reportedAt = first.metadata.generatedAt;
     automated.reportedAt = first.metadata.generatedAt;
     for (const result of automated.caseResults) result.status = "passed";
     automated.counts.passed = automated.caseResults.length;

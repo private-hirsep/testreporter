@@ -389,6 +389,41 @@ describe("project history", () => {
     });
   });
 
+  it("keeps automated and manual identity confidence independent", () => {
+    for (const automatedIdentity of [
+      { source: "generated" as const, conflict: false, expected: "generated-low" },
+      { source: "explicit" as const, conflict: true, expected: "conflicted" }
+    ]) {
+      const store = merged([
+        report("automated", "2026-01-01T00:00:00.000Z", [
+          {
+            testCaseId: "TC-1",
+            status: "passed",
+            source: automatedIdentity.source,
+            conflict: automatedIdentity.conflict
+          }
+        ])
+      ]);
+      store.manualExecutions.push({
+        executionId: "manual-later",
+        projectKey: "DEMO",
+        environment: "ci",
+        startedAt: "2026-01-02T00:00:00.000Z",
+        completedAt: "2026-01-02T01:00:00.000Z",
+        status: "passed",
+        caseResults: [{ testCaseId: "TC-1", status: "passed" }]
+      });
+      const summary = deriveCaseHistory(store)[0]!;
+      expect(summary.automated?.identityConfidence).toBe(automatedIdentity.expected);
+      expect(summary.manual?.[0]?.identityConfidence).toBe("trusted");
+      expect(summary.identityConfidence).toBe(automatedIdentity.expected);
+      if (automatedIdentity.conflict) {
+        expect(summary.automated?.stability).toBe("identity-conflict");
+        expect(summary.automated?.passRate).toBeUndefined();
+      }
+    }
+  });
+
   it("requires percentage and absolute duration thresholds", () => {
     const make = (id: string, day: number, durationMs: number) =>
       report(id, `2026-01-0${day}T00:00:00.000Z`, [

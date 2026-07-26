@@ -12,22 +12,6 @@ branch="${HISTORY_BRANCH:-quality-history}"
 attempts="${HISTORY_PUSH_ATTEMPTS:-3}"
 workspace="${GITHUB_WORKSPACE:-$PWD}"
 remote="https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
-run_id="$(
-  jq -r '
-    .metadata.runId //
-    ([.unifiedExecutions[]? | select(.type == "automated") | .id][0]) //
-    empty
-  ' "$report"
-)"
-manual_count="$(
-  jq '[.manualExecutions[]? | select(.executionId and .completedAt)] | length' "$report"
-)"
-history_label="${run_id:-manual-executions}"
-
-if [[ -z "$run_id" && "$manual_count" -eq 0 ]]; then
-  echo "No new automated or manual executions to persist."
-  exit 0
-fi
 
 if [[ -f "$config" ]]; then
   config="$(cd "$(dirname "$config")" && pwd)/$(basename "$config")"
@@ -36,6 +20,21 @@ elif [[ "$config" != /* && -f "${tool}/${config}" ]]; then
 else
   echo "::error::History configuration file was supplied but could not be resolved: ${config}"
   exit 2
+fi
+
+inspection="$(
+  node "${tool}/packages/report-cli/dist/index.js" history inspect \
+    --current-report "$report" \
+    --config "$config" \
+    --format json
+)"
+run_id="$(jq -r 'if .automatedRun.present then .automatedRun.id else empty end' <<<"$inspection")"
+manual_count="$(jq '.manualExecutions | length' <<<"$inspection")"
+history_label="${run_id:-manual-executions}"
+
+if [[ -z "$run_id" && "$manual_count" -eq 0 ]]; then
+  echo "No new automated or manual executions to persist."
+  exit 0
 fi
 
 verify_remote() {

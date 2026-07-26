@@ -35,7 +35,13 @@ describe("history workflow examples", () => {
     expect(persistence).toContain("for attempt in");
     expect(persistence).toContain("history merge");
     expect(persistence).toContain("history verify");
-    expect(persistence.match(/--config "\$config"/g)).toHaveLength(2);
+    expect(persistence).toContain("history inspect");
+    expect(persistence).not.toContain(".metadata.runId //");
+    expect(persistence.indexOf("history inspect")).toBeLessThan(
+      persistence.indexOf('git -C "${workspace}/history-checkout" init')
+    );
+    expect(persistence).toContain("No new automated or manual executions to persist.");
+    expect(persistence.match(/--config "\$config"/g)).toHaveLength(3);
     expect(persistence).toContain("Push completed but exact remote verification failed");
     expect(persistence).not.toContain("'.runs[] | select(.id == $id)'");
     expect(persistence).toContain("refetching and remerging");

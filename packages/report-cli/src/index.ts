@@ -1,6 +1,6 @@
 ﻿#!/usr/bin/env node
 import path from "node:path";
-import { mkdir } from "node:fs/promises";
+import { mkdir, readFile } from "node:fs/promises";
 import { Command } from "commander";
 import { ZodError } from "zod";
 import { loadConfig } from "./config.js";
@@ -14,7 +14,9 @@ import {
   verifyHistoryContainsCurrentInput
 } from "./history.js";
 import {
-  deriveHistoryArtifact
+  deriveHistoryArtifact,
+  inspectPersistableHistoryReport,
+  NormalizedReportSchema
 } from "@quality-report/report-core";
 import {
   resolveHistoryOptions,
@@ -28,42 +30,24 @@ const historyCommand = program.command("history").description("Manage compact Gi
 
 historyCommand
   .command("inspect")
-  .description("Inspect persistable executions and their immutable content hashes")
+  .description("Inspect the canonical persistable executions in a normalized report")
   .requiredOption("--current-report <path>", "Current normalized-report.json")
-  .option("--config <path>", "Project configuration supplying the report URL")
-  .option("--source-report-url <url>", "Stable URL included in immutable content")
-  .option("--json", "Print machine-readable JSON", false)
+  .option("--config <path>", "Validate the project history configuration")
+  .option("--format <format>", "Output format", "json")
   .action(
     async (options: {
       currentReport: string;
       config?: string;
-      sourceReportUrl?: string;
-      json?: boolean;
+      format: string;
     }) => {
       try {
-        const config = options.config ? await loadConfig(options.config) : undefined;
-        const sourceReportUrl = resolveHistorySourceReportUrl(
-          options.sourceReportUrl,
-          config?.project.reportUrl
+        if (options.format !== "json")
+          throw new Error(`Unsupported history inspection format: ${options.format}`);
+        if (options.config) await loadConfig(options.config);
+        const report = NormalizedReportSchema.parse(
+          JSON.parse(await readFile(options.currentReport, "utf8"))
         );
-        const inspection = await inspectHistoryInput({
-          currentReport: options.currentReport,
-          ...(sourceReportUrl ? { sourceReportUrl } : {})
-        });
-        if (options.json) {
-          console.log(JSON.stringify(inspection, null, 2));
-          return;
-        }
-        if (!inspection.run && inspection.manualExecutions.length === 0) {
-          console.log("No new automated or manual executions to persist.");
-          return;
-        }
-        if (inspection.run)
-          console.log(`Automated run: ${inspection.run.id} (${inspection.run.contentHash})`);
-        for (const execution of inspection.manualExecutions)
-          console.log(
-            `Manual execution: ${execution.executionId} (${execution.contentHash})`
-          );
+        console.log(JSON.stringify(inspectPersistableHistoryReport(report)));
       } catch (error) {
         handleError(error);
       }
