@@ -14,11 +14,7 @@ const packages = [
 ];
 
 function run(command, args, cwd = root) {
-  const executable =
-    process.platform === "win32" ? process.env.ComSpec ?? "cmd.exe" : command;
-  const commandArgs =
-    process.platform === "win32" ? ["/d", "/s", "/c", command, ...args] : args;
-  const result = spawnSync(executable, commandArgs, {
+  const result = spawnSync(command, args, {
     cwd,
     encoding: "utf8",
     stdio: ["ignore", "pipe", "pipe"]
