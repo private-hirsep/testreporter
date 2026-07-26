@@ -1,0 +1,865 @@
+{
+  "id": "30215560456-1",
+  "type": "automated",
+  "projectKey": "TESTREPORTER",
+  "branch": "main",
+  "commit": "a92c7bb23e790c09c23e0549ac1d05f0d7406f2f",
+  "workflowRun": "https://github.com/private-hirsep/testreporter/actions/runs/30215560456/attempts/1",
+  "workflowAttempt": 1,
+  "reportedAt": "2026-07-26T18:51:45.686Z",
+  "testDurationSumMs": 32150,
+  "status": "unknown",
+  "counts": {
+    "total": 77,
+    "passed": 45,
+    "failed": 0,
+    "broken": 0,
+    "blocked": 0,
+    "skipped": 0,
+    "notRun": 0,
+    "unknown": 32
+  },
+  "qualityGate": {
+    "status": "passed"
+  },
+  "readiness": {
+    "status": "incomplete",
+    "blockers": 0,
+    "warnings": 0,
+    "acceptedRisks": 0
+  },
+  "requirements": {
+    "covered": 0,
+    "uncovered": 0,
+    "excluded": 0,
+    "total": 0
+  },
+  "coverage": {
+    "line": 65.35
+  },
+  "security": {
+    "blockers": 0,
+    "warnings": 0,
+    "accepted": 0
+  },
+  "caseResults": [
+    {
+      "testCaseId": "00a2a6f90c739bff",
+      "implementationId": "00a2a6f90c739bff",
+      "status": "passed",
+      "durationMs": 505,
+      "identity": {
+        "source": "generated",
+        "stable": false,
+        "conflict": false
+      }
+    },
+    {
+      "testCaseId": "010f36b7cb4f14dc",
+      "implementationId": "010f36b7cb4f14dc",
+      "status": "passed",
+      "durationMs": 328,
+      "identity": {
+        "source": "generated",
+        "stable": false,
+        "conflict": false
+      }
+    },
+    {
+      "testCaseId": "0964eeeb267eb24d",
+      "implementationId": "0964eeeb267eb24d",
+      "status": "passed",
+      "durationMs": 374,
+      "identity": {
+        "source": "generated",
+        "stable": false,
+        "conflict": false
+      }
+    },
+    {
+      "testCaseId": "0de307bf98b1d43e",
+      "implementationId": "0de307bf98b1d43e",
+      "status": "unknown",
+      "identity": {
+        "source": "generated",
+        "stable": false,
+        "conflict": false
+      }
+    },
+    {
+      "testCaseId": "0e4d2d4b49fa1ef8",
+      "implementationId": "0e4d2d4b49fa1ef8",
+      "status": "passed",
+      "durationMs": 1354,
+      "identity": {
+        "source": "generated",
+        "stable": false,
+        "conflict": false
+      }
+    },
+    {
+      "testCaseId": "11f3438f6c0ca662",
+      "implementationId": "11f3438f6c0ca662",
+      "status": "unknown",
+      "identity": {
+        "source": "generated",
+        "stable": false,
+        "conflict": false
+      }
+    },
+    {
+      "testCaseId": "14323753187e7d14",
+      "implementationId": "14323753187e7d14",
+      "status": "unknown",
+      "identity": {
+        "source": "generated",
+        "stable": false,
+        "conflict": false
+      }
+    },
+    {
+      "testCaseId": "158ce411198d714d",
+      "implementationId": "158ce411198d714d",
+      "status": "passed",
+      "durationMs": 3111,
+      "identity": {
+        "source": "generated",
+        "stable": false,
+        "conflict": false
+      }
+    },
+    {
+      "testCaseId": "19e00f9a3e55eecd",
+      "implementationId": "19e00f9a3e55eecd",
+      "status": "unknown",
+      "identity": {
+        "source": "generated",
+        "stable": false,
+        "conflict": false
+      }
+    },
+    {
+      "testCaseId": "1e8809347f67c416",
+      "implementationId": "1e8809347f67c416",
+      "status": "unknown",
+      "identity": {
+        "source": "generated",
+        "stable": false,
+        "conflict": false
+      }
+    },
+    {
+      "testCaseId": "23d68b085a3f7aeb",
+      "implementationId": "23d68b085a3f7aeb",
+      "status": "unknown",
+      "identity": {
+        "source": "generated",
+        "stable": false,
+        "conflict": false
+      }
+    },
+    {
+      "testCaseId": "253bcf570d0438e7",
+      "implementationId": "253bcf570d0438e7",
+      "status": "unknown",
+      "identity": {
+        "source": "generated",
+        "stable": false,
+        "conflict": false
+      }
+    },
+    {
+      "testCaseId": "25a82199b7314d5d",
+      "implementationId": "25a82199b7314d5d",
+      "status": "unknown",
+      "identity": {
+        "source": "generated",
+        "stable": false,
+        "conflict": false
+      }
+    },
+    {
+      "testCaseId": "294baec479a91f4d",
+      "implementationId": "294baec479a91f4d",
+      "status": "passed",
+      "durationMs": 285,
+      "identity": {
+        "source": "generated",
+        "stable": false,
+        "conflict": false
+      }
+    },
+    {
+      "testCaseId": "29bff2c38d3d62f7",
+      "implementationId": "29bff2c38d3d62f7",
+      "status": "passed",
+      "durationMs": 287,
+      "identity": {
+        "source": "generated",
+        "stable": false,
+        "conflict": false
+      }
+    },
+    {
+      "testCaseId": "2a2d2ba616862489",
+      "implementationId": "2a2d2ba616862489",
+      "status": "unknown",
+      "identity": {
+        "source": "generated",
+        "stable": false,
+        "conflict": false
+      }
+    },
+    {
+      "testCaseId": "2ab37873141a260d",
+      "implementationId": "2ab37873141a260d",
+      "status": "unknown",
+      "identity": {
+        "source": "generated",
+        "stable": false,
+        "conflict": false
+      }
+    },
+    {
+      "testCaseId": "2b7374d27458a480",
+      "implementationId": "2b7374d27458a480",
+      "status": "passed",
+      "durationMs": 629,
+      "identity": {
+        "source": "generated",
+        "stable": false,
+        "conflict": false
+      }
+    },
+    {
+      "testCaseId": "2c98665670337538",
+      "implementationId": "2c98665670337538",
+      "status": "unknown",
+      "identity": {
+        "source": "generated",
+        "stable": false,
+        "conflict": false
+      }
+    },
+    {
+      "testCaseId": "2fe60c0ad2ea9462",
+      "implementationId": "2fe60c0ad2ea9462",
+      "status": "unknown",
+      "identity": {
+        "source": "generated",
+        "stable": false,
+        "conflict": false
+      }
+    },
+    {
+      "testCaseId": "322ff7daaddb3616",
+      "implementationId": "322ff7daaddb3616",
+      "status": "unknown",
+      "identity": {
+        "source": "generated",
+        "stable": false,
+        "conflict": false
+      }
+    },
+    {
+      "testCaseId": "324f69c8b1ac32a3",
+      "implementationId": "324f69c8b1ac32a3",
+      "status": "passed",
+      "durationMs": 742,
+      "identity": {
+        "source": "generated",
+        "stable": false,
+        "conflict": false
+      }
+    },
+    {
+      "testCaseId": "35c3517f13c01232",
+      "implementationId": "35c3517f13c01232",
+      "status": "passed",
+      "durationMs": 391,
+      "identity": {
+        "source": "generated",
+        "stable": false,
+        "conflict": false
+      }
+    },
+    {
+      "testCaseId": "38a8c8d4ab446b64",
+      "implementationId": "38a8c8d4ab446b64",
+      "status": "unknown",
+      "identity": {
+        "source": "generated",
+        "stable": false,
+        "conflict": false
+      }
+    },
+    {
+      "testCaseId": "3a2a12b42d76da5b",
+      "implementationId": "3a2a12b42d76da5b",
+      "status": "passed",
+      "durationMs": 578,
+      "identity": {
+        "source": "generated",
+        "stable": false,
+        "conflict": false
+      }
+    },
+    {
+      "testCaseId": "3b55b2e783456764",
+      "implementationId": "3b55b2e783456764",
+      "status": "passed",
+      "durationMs": 399,
+      "identity": {
+        "source": "generated",
+        "stable": false,
+        "conflict": false
+      }
+    },
+    {
+      "testCaseId": "3c38605e7f19e3d1",
+      "implementationId": "3c38605e7f19e3d1",
+      "status": "passed",
+      "durationMs": 640,
+      "identity": {
+        "source": "generated",
+        "stable": false,
+        "conflict": false
+      }
+    },
+    {
+      "testCaseId": "3cdd1050e6d4020c",
+      "implementationId": "3cdd1050e6d4020c",
+      "status": "unknown",
+      "identity": {
+        "source": "generated",
+        "stable": false,
+        "conflict": false
+      }
+    },
+    {
+      "testCaseId": "417a2790d917f3dc",
+      "implementationId": "417a2790d917f3dc",
+      "status": "passed",
+      "durationMs": 311,
+      "identity": {
+        "source": "generated",
+        "stable": false,
+        "conflict": false
+      }
+    },
+    {
+      "testCaseId": "5fd5ca4428319e6f",
+      "implementationId": "5fd5ca4428319e6f",
+      "status": "passed",
+      "durationMs": 3220,
+      "identity": {
+        "source": "generated",
+        "stable": false,
+        "conflict": false
+      }
+    },
+    {
+      "testCaseId": "625915a37711663d",
+      "implementationId": "625915a37711663d",
+      "status": "unknown",
+      "identity": {
+        "source": "generated",
+        "stable": false,
+        "conflict": false
+      }
+    },
+    {
+      "testCaseId": "6828e8789b28d4bf",
+      "implementationId": "6828e8789b28d4bf",
+      "status": "passed",
+      "durationMs": 1497,
+      "identity": {
+        "source": "generated",
+        "stable": false,
+        "conflict": false
+      }
+    },
+    {
+      "testCaseId": "721eb260cd1313a8",
+      "implementationId": "721eb260cd1313a8",
+      "status": "unknown",
+      "identity": {
+        "source": "generated",
+        "stable": false,
+        "conflict": false
+      }
+    },
+    {
+      "testCaseId": "76e5dacba316c7d2",
+      "implementationId": "76e5dacba316c7d2",
+      "status": "passed",
+      "durationMs": 429,
+      "identity": {
+        "source": "generated",
+        "stable": false,
+        "conflict": false
+      }
+    },
+    {
+      "testCaseId": "77958d46813a8db3",
+      "implementationId": "77958d46813a8db3",
+      "status": "passed",
+      "durationMs": 375,
+      "identity": {
+        "source": "generated",
+        "stable": false,
+        "conflict": false
+      }
+    },
+    {
+      "testCaseId": "79bcef557c85e9a8",
+      "implementationId": "79bcef557c85e9a8",
+      "status": "unknown",
+      "identity": {
+        "source": "generated",
+        "stable": false,
+        "conflict": false
+      }
+    },
+    {
+      "testCaseId": "7cdcd5815d4345dd",
+      "implementationId": "7cdcd5815d4345dd",
+      "status": "unknown",
+      "identity": {
+        "source": "generated",
+        "stable": false,
+        "conflict": false
+      }
+    },
+    {
+      "testCaseId": "81960b3ef60478f2",
+      "implementationId": "81960b3ef60478f2",
+      "status": "unknown",
+      "identity": {
+        "source": "generated",
+        "stable": false,
+        "conflict": false
+      }
+    },
+    {
+      "testCaseId": "831b5ce7ecc405ab",
+      "implementationId": "831b5ce7ecc405ab",
+      "status": "passed",
+      "durationMs": 1043,
+      "identity": {
+        "source": "generated",
+        "stable": false,
+        "conflict": false
+      }
+    },
+    {
+      "testCaseId": "837fcf96ffc60bc5",
+      "implementationId": "837fcf96ffc60bc5",
+      "status": "passed",
+      "durationMs": 664,
+      "identity": {
+        "source": "generated",
+        "stable": false,
+        "conflict": false
+      }
+    },
+    {
+      "testCaseId": "849ced596a66b3ae",
+      "implementationId": "849ced596a66b3ae",
+      "status": "unknown",
+      "identity": {
+        "source": "generated",
+        "stable": false,
+        "conflict": false
+      }
+    },
+    {
+      "testCaseId": "86802bf749e8810a",
+      "implementationId": "86802bf749e8810a",
+      "status": "unknown",
+      "identity": {
+        "source": "generated",
+        "stable": false,
+        "conflict": false
+      }
+    },
+    {
+      "testCaseId": "8c893e427449f868",
+      "implementationId": "8c893e427449f868",
+      "status": "passed",
+      "durationMs": 22,
+      "identity": {
+        "source": "generated",
+        "stable": false,
+        "conflict": false
+      }
+    },
+    {
+      "testCaseId": "8ce2688fbd643def",
+      "implementationId": "8ce2688fbd643def",
+      "status": "passed",
+      "durationMs": 324,
+      "identity": {
+        "source": "generated",
+        "stable": false,
+        "conflict": false
+      }
+    },
+    {
+      "testCaseId": "8d06b78b752a20fb",
+      "implementationId": "8d06b78b752a20fb",
+      "status": "passed",
+      "durationMs": 1092,
+      "identity": {
+        "source": "generated",
+        "stable": false,
+        "conflict": false
+      }
+    },
+    {
+      "testCaseId": "9140d9891d1cc0e6",
+      "implementationId": "9140d9891d1cc0e6",
+      "status": "passed",
+      "durationMs": 504,
+      "identity": {
+        "source": "generated",
+        "stable": false,
+        "conflict": false
+      }
+    },
+    {
+      "testCaseId": "937b0d116ea87749",
+      "implementationId": "937b0d116ea87749",
+      "status": "unknown",
+      "identity": {
+        "source": "generated",
+        "stable": false,
+        "conflict": false
+      }
+    },
+    {
+      "testCaseId": "93c1a05088f4a60a",
+      "implementationId": "93c1a05088f4a60a",
+      "status": "unknown",
+      "identity": {
+        "source": "generated",
+        "stable": false,
+        "conflict": false
+      }
+    },
+    {
+      "testCaseId": "9ac91767124b4b00",
+      "implementationId": "9ac91767124b4b00",
+      "status": "passed",
+      "durationMs": 395,
+      "identity": {
+        "source": "generated",
+        "stable": false,
+        "conflict": false
+      }
+    },
+    {
+      "testCaseId": "9c7ee7915c7fa5a1",
+      "implementationId": "9c7ee7915c7fa5a1",
+      "status": "unknown",
+      "identity": {
+        "source": "generated",
+        "stable": false,
+        "conflict": false
+      }
+    },
+    {
+      "testCaseId": "a075a7bc955c9214",
+      "implementationId": "a075a7bc955c9214",
+      "status": "passed",
+      "durationMs": 515,
+      "identity": {
+        "source": "generated",
+        "stable": false,
+        "conflict": false
+      }
+    },
+    {
+      "testCaseId": "a36d87b7f0a556e3",
+      "implementationId": "a36d87b7f0a556e3",
+      "status": "passed",
+      "durationMs": 1143,
+      "identity": {
+        "source": "generated",
+        "stable": false,
+        "conflict": false
+      }
+    },
+    {
+      "testCaseId": "a5587d69198db608",
+      "implementationId": "a5587d69198db608",
+      "status": "passed",
+      "durationMs": 675,
+      "identity": {
+        "source": "generated",
+        "stable": false,
+        "conflict": false
+      }
+    },
+    {
+      "testCaseId": "a62f6cd93c34628a",
+      "implementationId": "a62f6cd93c34628a",
+      "status": "passed",
+      "durationMs": 481,
+      "identity": {
+        "source": "generated",
+        "stable": false,
+        "conflict": false
+      }
+    },
+    {
+      "testCaseId": "aacbf27b79af9e0e",
+      "implementationId": "aacbf27b79af9e0e",
+      "status": "passed",
+      "durationMs": 2332,
+      "identity": {
+        "source": "generated",
+        "stable": false,
+        "conflict": false
+      }
+    },
+    {
+      "testCaseId": "aef713557ff9c847",
+      "implementationId": "aef713557ff9c847",
+      "status": "passed",
+      "durationMs": 13,
+      "identity": {
+        "source": "generated",
+        "stable": false,
+        "conflict": false
+      }
+    },
+    {
+      "testCaseId": "b17e7661484479f9",
+      "implementationId": "b17e7661484479f9",
+      "status": "passed",
+      "durationMs": 623,
+      "identity": {
+        "source": "generated",
+        "stable": false,
+        "conflict": false
+      }
+    },
+    {
+      "testCaseId": "b7763335b15d497b",
+      "implementationId": "b7763335b15d497b",
+      "status": "passed",
+      "durationMs": 467,
+      "identity": {
+        "source": "generated",
+        "stable": false,
+        "conflict": false
+      }
+    },
+    {
+      "testCaseId": "ba38c7ad7390abaa",
+      "implementationId": "ba38c7ad7390abaa",
+      "status": "passed",
+      "durationMs": 344,
+      "identity": {
+        "source": "generated",
+        "stable": false,
+        "conflict": false
+      }
+    },
+    {
+      "testCaseId": "bb5ed02bb2658f37",
+      "implementationId": "bb5ed02bb2658f37",
+      "status": "passed",
+      "durationMs": 739,
+      "identity": {
+        "source": "generated",
+        "stable": false,
+        "conflict": false
+      }
+    },
+    {
+      "testCaseId": "bd25907dda1cb044",
+      "implementationId": "bd25907dda1cb044",
+      "status": "passed",
+      "durationMs": 616,
+      "identity": {
+        "source": "generated",
+        "stable": false,
+        "conflict": false
+      }
+    },
+    {
+      "testCaseId": "c2a688e1c2c68526",
+      "implementationId": "c2a688e1c2c68526",
+      "status": "unknown",
+      "identity": {
+        "source": "generated",
+        "stable": false,
+        "conflict": false
+      }
+    },
+    {
+      "testCaseId": "c420071daf8be02d",
+      "implementationId": "c420071daf8be02d",
+      "status": "unknown",
+      "identity": {
+        "source": "generated",
+        "stable": false,
+        "conflict": false
+      }
+    },
+    {
+      "testCaseId": "c493bf067ac7626b",
+      "implementationId": "c493bf067ac7626b",
+      "status": "passed",
+      "durationMs": 956,
+      "identity": {
+        "source": "generated",
+        "stable": false,
+        "conflict": false
+      }
+    },
+    {
+      "testCaseId": "c7aa04b41a043de2",
+      "implementationId": "c7aa04b41a043de2",
+      "status": "passed",
+      "durationMs": 348,
+      "identity": {
+        "source": "generated",
+        "stable": false,
+        "conflict": false
+      }
+    },
+    {
+      "testCaseId": "ca35f780f27f9e6c",
+      "implementationId": "ca35f780f27f9e6c",
+      "status": "passed",
+      "durationMs": 427,
+      "identity": {
+        "source": "generated",
+        "stable": false,
+        "conflict": false
+      }
+    },
+    {
+      "testCaseId": "d016d999eb7d5315",
+      "implementationId": "d016d999eb7d5315",
+      "status": "unknown",
+      "identity": {
+        "source": "generated",
+        "stable": false,
+        "conflict": false
+      }
+    },
+    {
+      "testCaseId": "e04b93a99afc19d5",
+      "implementationId": "e04b93a99afc19d5",
+      "status": "passed",
+      "durationMs": 794,
+      "identity": {
+        "source": "generated",
+        "stable": false,
+        "conflict": false
+      }
+    },
+    {
+      "testCaseId": "e0ec954fd9df6a2b",
+      "implementationId": "e0ec954fd9df6a2b",
+      "status": "passed",
+      "durationMs": 376,
+      "identity": {
+        "source": "generated",
+        "stable": false,
+        "conflict": false
+      }
+    },
+    {
+      "testCaseId": "e5514bb310f0bbef",
+      "implementationId": "e5514bb310f0bbef",
+      "status": "passed",
+      "durationMs": 460,
+      "identity": {
+        "source": "generated",
+        "stable": false,
+        "conflict": false
+      }
+    },
+    {
+      "testCaseId": "e78434e03c1a304a",
+      "implementationId": "e78434e03c1a304a",
+      "status": "passed",
+      "durationMs": 508,
+      "identity": {
+        "source": "generated",
+        "stable": false,
+        "conflict": false
+      }
+    },
+    {
+      "testCaseId": "e8284385fbbbf66c",
+      "implementationId": "e8284385fbbbf66c",
+      "status": "unknown",
+      "identity": {
+        "source": "generated",
+        "stable": false,
+        "conflict": false
+      }
+    },
+    {
+      "testCaseId": "f46a771ca837f000",
+      "implementationId": "f46a771ca837f000",
+      "status": "passed",
+      "durationMs": 438,
+      "identity": {
+        "source": "generated",
+        "stable": false,
+        "conflict": false
+      }
+    },
+    {
+      "testCaseId": "f843a2831ddb3529",
+      "implementationId": "f843a2831ddb3529",
+      "status": "unknown",
+      "identity": {
+        "source": "generated",
+        "stable": false,
+        "conflict": false
+      }
+    },
+    {
+      "testCaseId": "fcc9a31d1e469387",
+      "implementationId": "fcc9a31d1e469387",
+      "status": "unknown",
+      "identity": {
+        "source": "generated",
+        "stable": false,
+        "conflict": false
+      }
+    },
+    {
+      "testCaseId": "fdf71f53114edeef",
+      "implementationId": "fdf71f53114edeef",
+      "status": "unknown",
+      "identity": {
+        "source": "generated",
+        "stable": false,
+        "conflict": false
+      }
+    },
+    {
+      "testCaseId": "fed0debbe9b9774d",
+      "implementationId": "fed0debbe9b9774d",
+      "status": "passed",
+      "durationMs": 396,
+      "identity": {
+        "source": "generated",
+        "stable": false,
+        "conflict": false
+      }
+    }
+  ],
+  "sourceReport": {
+    "url": "https://private-hirsep.github.io/testreporter/"
+  }
+}

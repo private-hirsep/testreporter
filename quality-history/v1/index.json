@@ -1,0 +1,24 @@
+{
+  "schemaVersion": "1.0",
+  "project": {
+    "key": "TESTREPORTER",
+    "name": "Testreporter"
+  },
+  "generatedAt": "2026-07-26T18:51:45.686Z",
+  "retention": {
+    "maxRuns": 50,
+    "maxAgeDays": 180,
+    "maxManualExecutions": 200,
+    "prunedRuns": 0,
+    "prunedManualExecutions": 0
+  },
+  "runs": [
+    {
+      "id": "30215560456-1",
+      "file": "runs/30215560456-1-a8d8523694d0.json",
+      "reportedAt": "2026-07-26T18:51:45.686Z"
+    }
+  ],
+  "manualExecutions": [],
+  "diagnostics": []
+}
