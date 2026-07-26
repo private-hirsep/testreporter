@@ -3,7 +3,7 @@
 Logical test cases, automated/manual variants, hybrid cases, and unified execution semantics are documented in [Logical test cases and unified executions](docs/test-case-catalogue.md).
 The report UI is a consistent QA workspace — navigation, status semantics, and responsive behavior are documented in [docs/user-interface.md](docs/user-interface.md).
 
-Release readiness, Git definition history, audit evidence, and multi-project portfolio generation are documented in [docs/release-readiness.md](docs/release-readiness.md).
+Release readiness, Git-first execution history, audit evidence, and history-aware multi-project portfolio generation are documented in [docs/release-readiness.md](docs/release-readiness.md) and [docs/history.md](docs/history.md).
 
 Stable test identity and traceability are documented in [docs/test-identity.md](docs/test-identity.md). Explicit IDs are optional; all automated results remain imported automatically.
 

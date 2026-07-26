@@ -5,11 +5,120 @@ import { Command } from "commander";
 import { ZodError } from "zod";
 import { loadConfig } from "./config.js";
 import { discoverArtifacts } from "./discovery.js";
-import { buildReport } from "./generator.js";
+import { buildReport, finalizeReportArchive } from "./generator.js";
 import { buildPortfolio } from "./portfolio.js";
 import { TOOL_VERSION } from "./version.js";
+import {
+  mergeHistoryDirectory,
+  verifyHistoryContainsCurrentInput
+} from "./history.js";
+import {
+  deriveHistoryArtifact
+} from "@quality-report/report-core";
+import {
+  resolveHistoryOptions,
+  resolveHistorySourceReportUrl
+} from "./history-options.js";
+import { writeEvidence, writeProjectSummary } from "./evidence.js";
 
 const program = new Command();
+
+const historyCommand = program.command("history").description("Manage compact Git-first history");
+
+historyCommand
+  .command("merge")
+  .option("--history-dir <path>", "Existing Git-friendly history directory")
+  .option("--config <path>", "Project configuration supplying history thresholds")
+  .requiredOption("--current-report <path>", "Current normalized-report.json")
+  .requiredOption("--output-dir <path>", "Atomically written next history directory")
+  .option("--static-output <path>", "Optimized static history.json output")
+  .option("--source-report-url <url>", "Stable URL of the full report")
+  .option("--project-summary-output <path>", "Write project summary with derived history")
+  .option("--max-runs <count>", "Maximum retained automated runs (default: 50)")
+  .option("--max-age-days <days>", "Maximum automated run age (default: 180)")
+  .option("--max-manual-executions <count>", "Maximum retained manual executions (default: 200)")
+  .option("--stability-minimum-samples <count>", "Samples required for stability (default: 5)")
+  .option("--flaky-transition-threshold <count>", "Pass/fail transitions considered unstable (default: 2)")
+  .option("--duration-minimum-samples <count>", "Duration samples required (default: 3)")
+  .option("--duration-regression-percent <percent>", "Minimum duration increase percent (default: 30)")
+  .option("--duration-minimum-increase-ms <ms>", "Minimum absolute duration increase (default: 500)")
+  .action(
+    async (options: {
+      historyDir?: string;
+      config?: string;
+      currentReport: string;
+      outputDir: string;
+      staticOutput?: string;
+      sourceReportUrl?: string;
+      projectSummaryOutput?: string;
+      maxRuns?: string;
+      maxAgeDays?: string;
+      maxManualExecutions?: string;
+      stabilityMinimumSamples?: string;
+      flakyTransitionThreshold?: string;
+      durationMinimumSamples?: string;
+      durationRegressionPercent?: string;
+      durationMinimumIncreaseMs?: string;
+    }) => {
+      try {
+        const config = options.config ? await loadConfig(options.config) : undefined;
+        const sourceReportUrl = resolveHistorySourceReportUrl(
+          options.sourceReportUrl,
+          config?.project.reportUrl
+        );
+        const store = await mergeHistoryDirectory({
+          currentReport: options.currentReport,
+          outputDir: options.outputDir,
+          ...(options.historyDir ? { historyDir: options.historyDir } : {}),
+          ...(options.staticOutput ? { staticOutput: options.staticOutput } : {}),
+          ...(sourceReportUrl ? { sourceReportUrl } : {}),
+          ...(options.projectSummaryOutput
+            ? { projectSummaryOutput: options.projectSummaryOutput }
+            : {}),
+          retention: resolveHistoryOptions(config?.history, options)
+        });
+        console.log(
+          `History contains ${store.runs.length} automated run(s) and ${store.manualExecutions.length} manual execution(s): ${options.outputDir}`
+        );
+      } catch (error) {
+        handleError(error);
+      }
+    }
+  );
+
+historyCommand
+  .command("verify")
+  .description("Verify that retained history contains the exact current run content")
+  .requiredOption("--history-dir <path>", "Git-friendly history directory")
+  .requiredOption("--current-report <path>", "Current normalized-report.json")
+  .option("--config <path>", "Project configuration supplying the report URL")
+  .option("--source-report-url <url>", "Stable URL included in the persisted summary")
+  .action(
+    async (options: {
+      historyDir: string;
+      currentReport: string;
+      config?: string;
+      sourceReportUrl?: string;
+    }) => {
+      try {
+        const config = options.config ? await loadConfig(options.config) : undefined;
+        const sourceReportUrl = resolveHistorySourceReportUrl(
+          options.sourceReportUrl,
+          config?.project.reportUrl
+        );
+        const verified = await verifyHistoryContainsCurrentInput({
+          historyDir: options.historyDir,
+          currentReport: options.currentReport,
+          ...(sourceReportUrl ? { sourceReportUrl } : {})
+        });
+        console.log(
+          `Verified exact persisted history for ${verified.runId ?? `${verified.manualExecutionIds.length} manual execution(s)`}.`
+        );
+      } catch (error) {
+        handleError(error);
+      }
+    }
+  );
 
 program
   .command("portfolio")
@@ -138,8 +247,11 @@ program
   .option("--branch <name>", "Branch")
   .option("--environment <name>", "Test environment")
   .option("--workflow-run <id>", "Workflow run identifier or URL")
+  .option("--execution-id <id>", "Explicit execution identity")
   .option("--release-date <date>", "Release date")
   .option("--release-scope <path>", "Release scope YAML or JSON")
+  .option("--history-dir <path>", "Existing Git-friendly history directory")
+  .option("--history-output-dir <path>", "Atomically write the next history directory")
   .action(
     async (options: {
       config: string;
@@ -152,7 +264,7 @@ program
       prCommentMarker?: string;
       failOnQualityGate?: boolean;
       zip?: boolean;
-      release?: string; testedBuild?: string; commitSha?: string; branch?: string; environment?: string; workflowRun?: string; releaseDate?: string; releaseScope?: string;
+      release?: string; testedBuild?: string; commitSha?: string; branch?: string; environment?: string; workflowRun?: string; executionId?: string; releaseDate?: string; releaseScope?: string; historyDir?: string; historyOutputDir?: string;
     }) => {
       try {
         const config = await loadConfig(
@@ -167,12 +279,47 @@ program
           inputPath: options.input,
           outputPath: options.output,
           zip: options.zip,
+          deferZip: Boolean(options.zip && config.history.enabled && options.historyOutputDir),
           qualityProfile: options.qualityProfile,
           publishMode: options.publishMode,
           prCommentMode: options.prCommentMode,
           prCommentMarker: options.prCommentMarker
-          ,...(options.release ? { release: options.release } : {}), ...(options.testedBuild ? { testedBuild: options.testedBuild } : {}), ...(options.commitSha ? { commitSha: options.commitSha } : {}), ...(options.branch ? { branch: options.branch } : {}), ...(options.environment ? { environment: options.environment } : {}), ...(options.workflowRun ? { workflowRun: options.workflowRun } : {}), ...(options.releaseDate ? { releaseDate: options.releaseDate } : {}), ...(options.releaseScope ? { releaseScope: options.releaseScope } : {})
+          ,...(options.release ? { release: options.release } : {}), ...(options.testedBuild ? { testedBuild: options.testedBuild } : {}), ...(options.commitSha ? { commitSha: options.commitSha } : {}), ...(options.branch ? { branch: options.branch } : {}), ...(options.environment ? { environment: options.environment } : {}), ...(options.workflowRun ? { workflowRun: options.workflowRun } : {}), ...(options.executionId ? { executionId: options.executionId } : {}), ...(options.releaseDate ? { releaseDate: options.releaseDate } : {}), ...(options.releaseScope ? { releaseScope: options.releaseScope } : {})
         });
+        if (config.history.enabled && options.historyOutputDir) {
+          const store = await mergeHistoryDirectory({
+            ...(options.historyDir ? { historyDir: options.historyDir } : {}),
+            currentReport: path.join(options.output, "normalized-report.json"),
+            outputDir: options.historyOutputDir,
+            staticOutput: path.join(options.output, "data", "history.json"),
+            ...(config.project.reportUrl ? { sourceReportUrl: config.project.reportUrl } : {}),
+            retention: {
+              maxRuns: config.history.maxRuns,
+              maxAgeDays: config.history.maxAgeDays,
+              maxManualExecutions: config.history.maxManualExecutions,
+              minimumSamples: config.history.stability.minimumSamples,
+              flakyTransitionThreshold: config.history.stability.flakyTransitionThreshold,
+              durationMinimumSamples: config.history.duration.minimumSamples,
+              durationRegressionPercent: config.history.duration.regressionPercent,
+              durationMinimumIncreaseMs: config.history.duration.minimumIncreaseMs
+            }
+          });
+          await writeProjectSummary(
+            options.output,
+            report,
+            config.project.reportUrl,
+            deriveHistoryArtifact(store, {
+              minimumSamples: config.history.stability.minimumSamples,
+              flakyTransitionThreshold: config.history.stability.flakyTransitionThreshold,
+              durationMinimumSamples: config.history.duration.minimumSamples,
+              durationRegressionPercent: config.history.duration.regressionPercent,
+              durationMinimumIncreaseMs: config.history.duration.minimumIncreaseMs
+            })
+          );
+          await writeEvidence(options.output, report);
+        }
+        if (options.zip && config.history.enabled && options.historyOutputDir)
+          await finalizeReportArchive(options.output);
         console.log(`Generated report for ${report.metadata.projectName}: ${options.output}`);
         console.log(`Quality gate: ${report.qualityGate.status.toUpperCase()}`);
         if (report.warnings.length > 0)

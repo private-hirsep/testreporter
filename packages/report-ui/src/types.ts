@@ -1,3 +1,9 @@
+import type {
+  HistoricalCaseStreamSummary as CoreHistoricalCaseStreamSummary,
+  HistoricalCaseSummary as CoreHistoricalCaseSummary,
+  OptimizedHistoryArtifact
+} from "@quality-report/report-core/history-schema";
+
 export type TestCase = {
   id: string;
   name: string;
@@ -309,6 +315,7 @@ export type UnifiedExecution = {
   environment?: string;
   commit?: string;
   workflowRun?: string;
+  workflowAttempt?: number;
   startedAt?: string;
   completedAt?: string;
   reportedAt?: string;
@@ -346,6 +353,10 @@ export type UnifiedExecution = {
   sourceReport?: string;
   caseResultsAvailable?: boolean;
 };
+
+export type HistoryArtifact = OptimizedHistoryArtifact;
+export type HistoricalCaseSummary = CoreHistoricalCaseSummary;
+export type HistoricalCaseStreamSummary = CoreHistoricalCaseStreamSummary;
 
 export type RequirementCoverage = {
   expected: string[];

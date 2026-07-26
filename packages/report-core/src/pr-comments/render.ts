@@ -68,16 +68,26 @@ function flakyCount(report: NormalizedReport): number {
 
 function blockers(report: NormalizedReport, limit: number): string[] {
   const items: string[] = [];
-  for (const test of report.tests.filter((item) => item.status === "failed" || item.status === "broken").slice(0, limit)) {
-    items.push(`${escapeMarkdownText(test.status)} test: ${formatInlineCode(test.fullName ?? test.name)}`);
+  for (const test of report.tests
+    .filter((item) => item.status === "failed" || item.status === "broken")
+    .slice(0, limit)) {
+    items.push(
+      `${escapeMarkdownText(test.status)} test: ${formatInlineCode(test.fullName ?? test.name)}`
+    );
   }
   for (const requirement of report.requirements.missing.slice(0, limit)) {
     items.push(`missing requirement: ${formatInlineCode(requirement)}`);
   }
-  for (const finding of report.security.filter((item) => item.severity === "critical" || item.severity === "high").slice(0, limit)) {
-    items.push(`${escapeMarkdownText(finding.severity)} security finding: ${escapeMarkdownText(finding.title)}`);
+  for (const finding of report.security
+    .filter((item) => item.severity === "critical" || item.severity === "high")
+    .slice(0, limit)) {
+    items.push(
+      `${escapeMarkdownText(finding.severity)} security finding: ${escapeMarkdownText(finding.title)}`
+    );
   }
-  for (const check of report.qualityGate.checks.filter((item) => item.status === "failed").slice(0, limit)) {
+  for (const check of report.qualityGate.checks
+    .filter((item) => item.status === "failed")
+    .slice(0, limit)) {
     items.push(
       `failed gate check: ${escapeMarkdownText(check.label)} (${escapeMarkdownText(check.actual)} / ${escapeMarkdownText(check.expected)})`
     );
@@ -88,15 +98,21 @@ function blockers(report: NormalizedReport, limit: number): string[] {
 function reportLink(options: PrCommentOptions): string {
   if (options.fullReportUrl) return `Full report: ${escapeMarkdownText(options.fullReportUrl)}`;
   if (options.publishMode === "none") return "Full report: not published for this run.";
-  if (options.artifactName) return `Full report: available in workflow artifact ${formatInlineCode(options.artifactName)}.`;
+  if (options.artifactName)
+    return `Full report: available in workflow artifact ${formatInlineCode(options.artifactName)}.`;
   return "Full report: not published for this run.";
 }
 
 function marker(value: string): string {
-  return /^<!--[\s\S]*-->$/.test(value.trim()) ? value.trim() : "<!-- quality-report-platform:summary -->";
+  return /^<!--[\s\S]*-->$/.test(value.trim())
+    ? value.trim()
+    : "<!-- quality-report-platform:summary -->";
 }
 
-export function renderMinimalPrComment(report: NormalizedReport, options: PrCommentOptions): string {
+export function renderMinimalPrComment(
+  report: NormalizedReport,
+  options: PrCommentOptions
+): string {
   const topItems = blockers(report, Math.max(1, options.maxItems));
   return [
     marker(options.marker),
@@ -120,14 +136,21 @@ export function renderMinimalPrComment(report: NormalizedReport, options: PrComm
   ].join("\n");
 }
 
-function cappedList<T>(title: string, items: T[], limit: number, render: (item: T) => string): string[] {
+function cappedList<T>(
+  title: string,
+  items: T[],
+  limit: number,
+  render: (item: T) => string
+): string[] {
   if (!items.length) return [];
   const capped = items.slice(0, limit);
   return [
     "",
     `### ${title}`,
     ...capped.map((item) => `- ${render(item)}`),
-    ...(items.length > capped.length ? [`- ${items.length - capped.length} more item(s) omitted.`] : [])
+    ...(items.length > capped.length
+      ? [`- ${items.length - capped.length} more item(s) omitted.`]
+      : [])
   ];
 }
 
@@ -139,8 +162,12 @@ export function renderFullPrComment(report: NormalizedReport, options: PrComment
     ...(options.publishMode || options.prCommentMode
       ? [
           "### Delivery",
-          ...(options.publishMode ? [`- Publish mode: ${formatInlineCode(options.publishMode)}`] : []),
-          ...(options.prCommentMode ? [`- PR comment mode: ${formatInlineCode(options.prCommentMode)}`] : [])
+          ...(options.publishMode
+            ? [`- Publish mode: ${formatInlineCode(options.publishMode)}`]
+            : []),
+          ...(options.prCommentMode
+            ? [`- PR comment mode: ${formatInlineCode(options.prCommentMode)}`]
+            : [])
         ]
       : []),
     "",
@@ -153,19 +180,28 @@ export function renderFullPrComment(report: NormalizedReport, options: PrComment
       "Failed and Broken Tests",
       report.tests.filter((test) => test.status === "failed" || test.status === "broken"),
       limit,
-      (test) => `${formatInlineCode(test.fullName ?? test.name)} (${escapeMarkdownText(test.status)})`
+      (test) =>
+        `${formatInlineCode(test.fullName ?? test.name)} (${escapeMarkdownText(test.status)})`
     ),
     ...cappedList(
       "Slowest Tests",
-      [...report.tests].filter((test) => test.durationMs !== undefined).sort((a, b) => (b.durationMs ?? 0) - (a.durationMs ?? 0)),
+      [...report.tests]
+        .filter((test) => test.durationMs !== undefined)
+        .sort((a, b) => (b.durationMs ?? 0) - (a.durationMs ?? 0)),
       limit,
       (test) => `${formatInlineCode(test.fullName ?? test.name)} - ${test.durationMs}ms`
     ),
-    ...cappedList("Missing Requirements", report.requirements.missing, limit, (item) => formatInlineCode(item)),
-    ...cappedList("Extra Requirements", report.requirements.extra, limit, (item) => formatInlineCode(item)),
+    ...cappedList("Missing Requirements", report.requirements.missing, limit, (item) =>
+      formatInlineCode(item)
+    ),
+    ...cappedList("Extra Requirements", report.requirements.extra, limit, (item) =>
+      formatInlineCode(item)
+    ),
     ...cappedList(
       "Security Findings",
-      report.security.filter((finding: SecurityFinding) => ["critical", "high", "medium"].includes(finding.severity)),
+      report.security.filter((finding: SecurityFinding) =>
+        ["critical", "high", "medium"].includes(finding.severity)
+      ),
       limit,
       (finding) => `${escapeMarkdownText(finding.severity)}: ${escapeMarkdownText(finding.title)}`
     ),

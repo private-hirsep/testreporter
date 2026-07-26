@@ -1,4 +1,4 @@
-name: Portfolio example
+name: Central quality attention portfolio
 on: { workflow_dispatch: {} }
 permissions: { contents: read }
 jobs:
@@ -9,13 +9,15 @@ jobs:
         with:
           repository: ${{ vars.QUALITY_SUMMARY_REPOSITORY }}
           ref: quality-summaries
-          path: summaries
+          path: summary-store
           token: ${{ secrets.QUALITY_SUMMARY_READ_TOKEN }}
           persist-credentials: false
       - uses: actions/checkout@v5
-        with: { path: tool, persist-credentials: false }
+        with:
+          path: tool
+          persist-credentials: false
       - run: cd tool && npm ci && npm run build
-      - run: node tool/packages/report-cli/dist/index.js portfolio --input summaries/projects --output portfolio --stale-days 7
+      - run: node tool/packages/report-cli/dist/index.js portfolio --input summary-store/projects --output portfolio
       - uses: actions/upload-pages-artifact@v3
         with: { path: portfolio }
   deploy:
@@ -24,7 +26,9 @@ jobs:
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
-    permissions: { pages: write, id-token: write }
+    permissions:
+      pages: write
+      id-token: write
     steps:
       - name: Deploy GitHub Pages
         id: deployment

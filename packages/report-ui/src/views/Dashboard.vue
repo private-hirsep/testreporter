@@ -207,10 +207,48 @@
       </SectionCard>
     </div>
 
-    <SectionCard v-if="!hasHistory" title="Execution trends" class="mb-4">
+    <SectionCard v-if="history" title="Execution trend" class="mb-4">
+      <template #actions><v-chip size="small" variant="tonal">{{ history.runs.length }} retained run(s)</v-chip></template>
+      <v-alert v-if="history.availability === 'insufficient'" type="info" variant="tonal" class="mb-3">
+        One execution is available. More executions are required for trends.
+      </v-alert>
+      <div v-if="history.availability === 'available'" class="history-bars" role="img" :aria-label="trendSummary">
+        <div v-for="run in [...history.runs].reverse().slice(-12)" :key="run.id" class="history-bar">
+          <span class="history-bar-label">{{ run.branch ?? "default" }}</span>
+          <span class="history-bar-passed" :style="{ flexGrow: run.counts.passed }">{{ run.counts.passed }} passed</span>
+          <span class="history-bar-failed" :style="{ flexGrow: run.counts.failed + run.counts.broken }">{{ run.counts.failed + run.counts.broken }} failed</span>
+        </div>
+      </div>
+      <div class="table-scroll"><v-table density="compact" aria-label="Execution trend values"><thead><tr><th scope="col">Run</th><th scope="col">Observed</th><th scope="col">Status</th><th scope="col">Passed</th><th scope="col">Failed / broken</th><th scope="col">Readiness</th><th scope="col">Quality gate</th></tr></thead>
+        <tbody><tr v-for="run in history.runs.slice(0, 12)" :key="run.id"><td class="mono">{{ run.id }}</td><td>{{ formatObserved(run) }}</td><td><StatusChip :status="run.status" /></td><td>{{ run.counts.passed }}</td><td>{{ run.counts.failed }} / {{ run.counts.broken }}</td><td>{{ run.readiness?.status ?? "unavailable" }}</td><td>{{ run.qualityGate?.status ?? "unavailable" }}</td></tr></tbody>
+      </v-table></div>
+    </SectionCard>
+    <div v-if="history" class="secondary-grid mb-4">
+      <SectionCard title="Required QA attention">
+        <ul class="linked-list">
+          <li><strong>{{ history.trends.newFailures }}</strong> newly failing</li>
+          <li><strong>{{ history.trends.persistentFailures }}</strong> persistent failures</li>
+          <li><strong>{{ history.trends.removedOrMissing }}</strong> removed or missing cases</li>
+          <li><strong>{{ history.trends.unstable }}</strong> historically unstable</li>
+          <li><strong>{{ history.trends.slowRegressions }}</strong> slow regressions</li>
+        </ul>
+      </SectionCard>
+      <SectionCard title="Recovered since previous execution">
+        <ul v-if="recovered.length" class="linked-list"><li v-for="entry in recovered" :key="entry.testCaseId"><router-link :to="`/tests/${entry.testCaseId}`" class="mono">{{ entry.testCaseId }}</router-link></li></ul>
+        <EmptyState v-else variant="positive" message="No recovered cases in the latest comparable stream." />
+      </SectionCard>
+      <SectionCard title="Top persistent failures">
+        <ul v-if="persistent.length" class="linked-list"><li v-for="entry in persistent" :key="entry.testCaseId"><router-link :to="`/tests/${entry.testCaseId}`" class="mono">{{ entry.testCaseId }}</router-link><span>{{ entry.consecutiveFailures }} consecutive failures</span></li></ul>
+        <EmptyState v-else message="No persistent failures in available history." />
+      </SectionCard>
+      <SectionCard title="History health">
+        <dl class="detail-list"><dt>Retained runs</dt><dd>{{ history.runs.length }} / {{ history.retention.maxRuns }}</dd><dt>Oldest / newest</dt><dd>{{ formatDate(history.trends.oldestAt) }} / {{ formatDate(history.trends.newestAt) }}</dd><dt>Pruned</dt><dd>{{ history.retention.prunedRuns }} run(s), {{ history.retention.prunedManualExecutions }} manual execution(s)</dd><dt>Last persistence update</dt><dd>{{ formatDate(history.generatedAt) }}</dd></dl>
+      </SectionCard>
+    </div>
+    <SectionCard v-if="!history" title="Execution trends" class="mb-4">
       <EmptyState
         variant="unavailable"
-        message="Historical execution trends are not available in this report yet. Only the current run is included."
+        message="Historical execution trends are not available in this report yet. Historical execution summaries have not been imported."
       />
     </SectionCard>
   </div>
@@ -228,7 +266,6 @@ import { formatPercent } from "../format";
 import {
   attentionItems,
   buildSummaryCards,
-  hasHistoricalRuns,
   requirementGapEmptyState,
   requirementGaps,
   requirementLink,
@@ -236,9 +273,9 @@ import {
   topFailingTests
 } from "../services/overview";
 import { resolveStatus } from "../services/status";
-import type { Manifest, TestCase } from "../types";
+import type { HistoryArtifact, Manifest, TestCase } from "../types";
 
-const props = defineProps<{ manifest?: Manifest; tests: TestCase[] }>();
+const props = defineProps<{ manifest?: Manifest; tests: TestCase[]; historyData?: HistoryArtifact }>();
 
 const ATTENTION_LIMIT = 8;
 const cards = computed(() => (props.manifest ? buildSummaryCards(props.manifest) : []));
@@ -264,7 +301,10 @@ const securityBlockers = computed(() =>
 const totalFindings = computed(() =>
   Object.values(props.manifest?.summary.security ?? {}).reduce((sum, value) => sum + value, 0)
 );
-const hasHistory = computed(() => (props.manifest ? hasHistoricalRuns(props.manifest) : false));
+const history = computed(() => props.historyData);
+const recovered = computed(() => history.value?.cases.filter((item) => item.transition === "recovered").slice(0, 6) ?? []);
+const persistent = computed(() => history.value?.cases.filter((item) => item.transition === "persistently-failing").sort((a, b) => b.consecutiveFailures - a.consecutiveFailures).slice(0, 6) ?? []);
+const trendSummary = computed(() => history.value ? `${history.value.runs.length} retained executions; ${history.value.trends.newFailures} new failures; ${history.value.trends.recovered} recovered cases.` : "");
 
 function gapLink(key: string) {
   return props.manifest ? requirementLink(props.manifest, key) : undefined;
@@ -274,5 +314,11 @@ function checkActual(check: { actual: string | number; expected: string }) {
   if (typeof check.actual === "number" && check.expected.includes("%"))
     return formatPercent(check.actual);
   return check.actual;
+}
+function formatDate(value?: string) { return value && Number.isFinite(Date.parse(value)) ? new Date(value).toLocaleString() : "Unavailable"; }
+function formatObserved(run: HistoryArtifact["runs"][number]) {
+  if (run.completedAt) return formatDate(run.completedAt);
+  if (run.startedAt) return formatDate(run.startedAt);
+  return `Report generated ${formatDate(run.reportedAt)}`;
 }
 </script>

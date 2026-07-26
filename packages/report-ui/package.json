@@ -9,6 +9,7 @@
     "typecheck": "vue-tsc -p tsconfig.app.json --noEmit"
   },
   "dependencies": {
+    "@quality-report/report-core": "0.1.0",
     "@mdi/font": "^7.4.47",
     "@vitejs/plugin-vue": "^6.0.0",
     "vite": "^7.0.2",

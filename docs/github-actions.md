@@ -57,6 +57,22 @@ permissions:
 
 Fork PR comments are skipped by default. Do not move this workflow to `pull_request_target` without a security review.
 
+## Historical summaries and central portfolio
+
+Use the executable examples under `examples/github-actions/`:
+
+- `trusted-main-history.yml` and `release-history.yml` merge compact history before Pages upload;
+- `project-summary-producer.yml` merges and verifies retained history, validates the regenerated
+  history-aware project summary, and publishes that final summary to
+  `projects/<project-key>/project-quality-summary.json` on `quality-summaries`;
+- `central-portfolio-history.yml` checks out that store recursively, generates the static
+  portfolio, uploads the Pages artifact, and deploys it.
+
+Private summary repositories should use a GitHub App token where possible. Producers require
+Contents write through `QUALITY_SUMMARY_WRITE_TOKEN`; consumers require Contents read through
+`QUALITY_SUMMARY_READ_TOKEN`. Tokens are isolated from untrusted build jobs and never enter static
+browser assets.
+
 ## Compatibility Wrapper
 
 The old `reusable-publish-quality-report.yml` filename is kept only as a deprecated compatibility wrapper around `publish-quality-report.yml`. New consumers should use the canonical workflow directly.

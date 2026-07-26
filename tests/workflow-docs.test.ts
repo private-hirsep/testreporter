@@ -24,8 +24,11 @@ describe("GitHub workflow and documentation contracts", () => {
 
   it("keeps publish-quality-report as the canonical reusable workflow", async () => {
     const { content, parsed } = await yamlFile(".github/workflows/publish-quality-report.yml");
-    const workflowCall = (parsed.on as { workflow_call?: { inputs?: Record<string, unknown>; outputs?: Record<string, unknown> } })
-      .workflow_call;
+    const workflowCall = (
+      parsed.on as {
+        workflow_call?: { inputs?: Record<string, unknown>; outputs?: Record<string, unknown> };
+      }
+    ).workflow_call;
     expect(workflowCall).toBeTruthy();
     expect(Object.keys(workflowCall?.inputs ?? {}).sort()).toEqual([
       "artifact-path",
@@ -70,7 +73,9 @@ describe("GitHub workflow and documentation contracts", () => {
   });
 
   it("keeps the deprecated reusable workflow as a wrapper only", async () => {
-    const { content, parsed } = await yamlFile(".github/workflows/reusable-publish-quality-report.yml");
+    const { content, parsed } = await yamlFile(
+      ".github/workflows/reusable-publish-quality-report.yml"
+    );
     const jobs = parsed.jobs as Record<string, { uses?: string }>;
     expect(content).toContain("Deprecated compatibility wrapper");
     expect(Object.keys(jobs)).toEqual(["forward"]);
@@ -84,10 +89,15 @@ describe("GitHub workflow and documentation contracts", () => {
       { needs?: string | string[]; uses?: string; steps?: Array<Record<string, string>> }
     >;
     expect(jobs["resolve-dogfood-inputs"]).toBeTruthy();
-    expect(jobs["prepare-dogfood-artifacts"]?.steps?.some((step) => step.uses === "actions/upload-artifact@v4")).toBe(
-      true
-    );
-    expect(jobs["dogfood-report"]?.needs).toEqual(["resolve-dogfood-inputs", "prepare-dogfood-artifacts"]);
+    expect(
+      jobs["prepare-dogfood-artifacts"]?.steps?.some(
+        (step) => step.uses === "actions/upload-artifact@v4"
+      )
+    ).toBe(true);
+    expect(jobs["dogfood-report"]?.needs).toEqual([
+      "resolve-dogfood-inputs",
+      "prepare-dogfood-artifacts"
+    ]);
     expect(jobs["dogfood-report"]?.uses).toBe("./.github/workflows/publish-quality-report.yml");
     expect(content).toContain("examples/minimal/quality-artifacts");
     expect(content).toContain("examples/minimal/quality-report.yml");

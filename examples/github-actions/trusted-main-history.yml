@@ -1,0 +1,50 @@
+name: Persist trusted quality history
+on:
+  push:
+    branches: [main, "release/**"]
+  workflow_dispatch:
+permissions: { contents: read }
+concurrency:
+  group: quality-history-${{ github.repository }}
+  cancel-in-progress: false
+jobs:
+  generate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with: { persist-credentials: false }
+      - run: npm ci && npm run build
+      - run: npm run quality-report -- generate --config quality-report.yml --input quality-artifacts --output site
+      - uses: actions/upload-artifact@v4
+        with: { name: quality-report-unmerged, path: site }
+  persist:
+    needs: generate
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with: { name: quality-report-unmerged, path: site }
+      - uses: actions/checkout@v5
+        with: { path: tool, persist-credentials: false }
+      - run: cd tool && npm ci && npm run build
+      - name: Persist history from latest remote state
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: bash tool/scripts/persist-history.sh site/normalized-report.json site tool tool/quality-report.yml
+      - uses: actions/upload-pages-artifact@v3
+        with: { path: site }
+  deploy:
+    needs: persist
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    permissions:
+      pages: write
+      id-token: write
+    steps:
+      - name: Deploy GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4

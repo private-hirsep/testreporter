@@ -8,3 +8,4 @@ packages/*/dist/
 packages/report-ui/dist-ts/
 *.tsbuildinfo
 *.log
+docs/screenshots/**/*.png

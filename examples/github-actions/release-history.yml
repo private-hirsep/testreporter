@@ -1,0 +1,36 @@
+name: Persist release quality history
+on:
+  release: { types: [published] }
+permissions: { contents: read }
+concurrency:
+  group: quality-history-${{ github.repository }}
+  cancel-in-progress: false
+jobs:
+  persist:
+    runs-on: ubuntu-latest
+    permissions: { contents: write }
+    steps:
+      - uses: actions/checkout@v5
+        with: { persist-credentials: false }
+      - run: npm ci && npm run build
+      - run: npm run quality-report -- generate --config quality-report.yml --input quality-artifacts --output site --release "${{ github.event.release.tag_name }}"
+      - name: Persist history from latest remote state
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: bash scripts/persist-history.sh site/normalized-report.json site . quality-report.yml
+      - uses: actions/upload-pages-artifact@v3
+        with: { path: site }
+  deploy:
+    needs: persist
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    permissions:
+      pages: write
+      id-token: write
+    steps:
+      - name: Deploy GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4

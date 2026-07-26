@@ -1,0 +1,81 @@
+name: Publish project quality summary
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+permissions: { contents: read }
+jobs:
+  build-summary:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v5
+        with: { persist-credentials: false }
+      - run: npm ci && npm run build
+      - run: npm run quality-report -- generate --config quality-report.yml --input quality-artifacts --output site
+      - name: Merge, persist, and finalize retained history
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          bash scripts/persist-history.sh \
+            site/normalized-report.json \
+            site \
+            . \
+            quality-report.yml
+      - name: Validate project summary
+        run: |
+          node --input-type=module -e \
+            "import {readFile} from 'node:fs/promises'; import {ProjectQualitySummarySchema} from '@quality-report/report-core'; ProjectQualitySummarySchema.parse(JSON.parse(await readFile('site/project-quality-summary.json','utf8')));"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: project-quality-summary
+          path: |
+            site/project-quality-summary.json
+            site/data/history.json
+  publish-summary:
+    needs: build-summary
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: project-quality-summary
+          path: incoming
+      - name: Publish with bounded refetch and reapply
+        shell: bash
+        env:
+          SUMMARY_TOKEN: ${{ secrets.QUALITY_SUMMARY_WRITE_TOKEN }}
+          SUMMARY_REPOSITORY: ${{ vars.QUALITY_SUMMARY_REPOSITORY }}
+        run: |
+          set -euo pipefail
+          project_key="$(jq -er '.projectKey' incoming/project-quality-summary.json)"
+          [[ "$project_key" =~ ^[A-Za-z0-9._-]+$ ]] || {
+            echo "::error::Unsafe project key for summary path: ${project_key}"
+            exit 2
+          }
+          remote="https://x-access-token:${SUMMARY_TOKEN}@github.com/${SUMMARY_REPOSITORY}.git"
+          for attempt in 1 2 3; do
+            rm -rf summary-store
+            git clone --depth=1 --branch quality-summaries "$remote" summary-store ||
+              {
+                git init summary-store
+                git -C summary-store remote add origin "$remote"
+                git -C summary-store checkout --orphan quality-summaries
+              }
+            mkdir -p "summary-store/projects/${project_key}"
+            cp incoming/project-quality-summary.json \
+              "summary-store/projects/${project_key}/project-quality-summary.json"
+            git -C summary-store add "projects/${project_key}/project-quality-summary.json"
+            if git -C summary-store diff --cached --quiet; then
+              echo "Project summary already published."
+              exit 0
+            fi
+            git -C summary-store \
+              -c user.name=github-actions \
+              -c user.email=41898282+github-actions[bot]@users.noreply.github.com \
+              commit -m "chore(summary): update ${project_key}"
+            git -C summary-store push origin HEAD:quality-summaries && exit 0
+            echo "::warning::Summary push conflict; refetching and reapplying."
+          done
+          echo "::error::Project summary publication failed after three attempts."
+          exit 1

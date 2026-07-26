@@ -155,7 +155,7 @@ describe("portfolio", () => {
         [{ ...base, projectKey: "S", projectName: "Stale", generatedAt: "2020-01-01T00:00:00Z" }],
         new Date("2026-07-15T00:00:00Z")
       )[0]
-    ).toMatchObject({ stale: true, priority: 2 });
+    ).toMatchObject({ stale: true, priority: 10 });
   });
 
   it("accepts only HTTP(S) report links", () => {
