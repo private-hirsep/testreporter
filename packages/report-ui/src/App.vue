@@ -26,6 +26,9 @@
         <template v-else>
           <ProjectContextHeader :manifest="manifest" />
           <router-view :manifest="manifest" :tests="tests" :history-data="history" :history-error="historyError" />
+          <footer class="app-version" aria-label="Testreporter version">
+            Testreporter v{{ appVersion }}
+          </footer>
         </template>
       </v-container>
     </v-main>
@@ -39,6 +42,7 @@ import AppNavigation from "./components/AppNavigation.vue";
 import ProjectContextHeader from "./components/ProjectContextHeader.vue";
 import { loadHistory, loadManifest, loadTests } from "./services/reportData";
 import type { HistoryArtifact, Manifest, TestCase } from "./types";
+import packageMetadata from "../package.json";
 
 const manifest = ref<Manifest>();
 const tests = ref<TestCase[]>([]);
@@ -48,6 +52,7 @@ const error = ref("");
 const loading = ref(true);
 const drawer = ref(false);
 const { mdAndUp } = useDisplay();
+const appVersion = packageMetadata.version;
 
 function focusMain() {
   document.getElementById("main-content")?.focus();

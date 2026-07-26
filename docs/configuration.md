@@ -80,3 +80,51 @@ qualityGates:
 `quality-gates.yml` may contain `qualityGates` and `qualityGateProfiles`. Passing `--quality-profile <name>` replaces `qualityGates` with the selected built-in or custom profile. Passing `--quality-gates <path>` loads an external gates file before selecting the profile.
 
 Current CLI custom profiles are direct profile objects; `extends` is not implemented in the canonical workflow path.
+
+## Complete history configuration
+
+The repository's production configuration uses the supported fields below:
+
+```yaml
+project:
+  key: TESTREPORTER
+  name: Testreporter
+  repository: private-hirsep/testreporter
+  reportUrl: https://private-hirsep.github.io/testreporter/
+
+history:
+  enabled: true
+  maxRuns: 50
+  maxAgeDays: 180
+  maxManualExecutions: 200
+  stability:
+    minimumSamples: 5
+    flakyTransitionThreshold: 2
+  duration:
+    minimumSamples: 3
+    regressionPercent: 30
+    minimumIncreaseMs: 500
+```
+
+`project.key` is an optional non-empty string during current-only generation but
+is the stable identity used by history and portfolio. `reportUrl` is an optional
+HTTP(S) URL embedded in history links; `--source-report-url` overrides it for
+`history inspect`, `merge`, and `verify`. Avoid URLs containing credentials or
+private query values.
+
+History defaults to enabled. All retention values are positive integers:
+`maxRuns=50`, `maxAgeDays=180`, and `maxManualExecutions=200`. Stability defaults
+are 5 samples and 2 transitions. Duration defaults are 3 samples, 30 percent, and
+500 ms. Retention changes compact Git history but not the current report or an
+already finalized audit ZIP.
+
+Common invalid values fail validation:
+
+```yaml
+history:
+  maxRuns: 0                 # must be positive
+  stability:
+    minimumSamples: 1       # minimum is 2
+  duration:
+    regressionPercent: -1   # must be positive
+```

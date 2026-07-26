@@ -77,3 +77,40 @@ Expected. CI intentionally generates a strict sample report and asserts that its
 ## Missing Permissions
 
 Use the smallest permission block for the selected mode. PR comments need `issues: write` and `pull-requests: write`; Pages needs `pages: write` and `id-token: write`.
+
+## History and persistence recovery
+
+- Missing `quality-history` branch is a valid first run; the trusted persistence
+  script creates an orphan branch and the `quality-history/v1` store.
+- Permission denied means the isolated persistence job needs `contents: write`;
+  fork pull requests must never receive it.
+- Push conflicts are retried by refetching and remerging. Never force-push.
+- Exact-content conflicts mean the same execution ID has different immutable
+  content. Inspect with `quality-report history inspect --config quality-report.yml
+  --current-report site/normalized-report.json --json`, then use a distinct
+  attempt-aware ID or correct the producer.
+- A project-key mismatch requires restoring the original `project.key` or starting
+  a deliberately separate history store.
+- Invalid history is rejected as a whole; the current report remains usable. Open
+  Diagnostics and validate `quality-history/v1/index.json` plus referenced files.
+- If history is absent from Pages, confirm merge ran before
+  `upload-pages-artifact`, and that `site/data/history.json` exists.
+- An empty report exits successfully before checkout with “No new automated or
+  manual executions to persist.”
+- A rejected manual execution needs `executionId`, `completedAt`, a matching
+  project identity, and at least one valid completed case result.
+
+## Summaries, portfolio, and audit recovery
+
+- A current-only project summary is valid but cannot show trends; persist and merge
+  another trusted run.
+- Missing historical report links mean `project.reportUrl` was absent or changed;
+  keep it stable and pass the same config to inspect, merge, and verify.
+- An empty portfolio means no valid summaries were found at the configured stable
+  project paths.
+- Central summary authentication must be provided only to the trusted producer or
+  portfolio checkout job. Verify repository, branch, token scope, and project path.
+- For ZIP/checksum mismatch, regenerate the report, merge history, then run
+  `quality-report finalize --output site`. Do not mutate the ZIP afterward.
+- Older reports without optional history/newer fields display compatibility states;
+  they must not be interpreted as zero.

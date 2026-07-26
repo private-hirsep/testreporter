@@ -1,4 +1,4 @@
-# Quality Report Platform
+# Testreporter
 
 Logical test cases, automated/manual variants, hybrid cases, and unified execution semantics are documented in [Logical test cases and unified executions](docs/test-case-catalogue.md).
 The report UI is a consistent QA workspace — navigation, status semantics, and responsive behavior are documented in [docs/user-interface.md](docs/user-interface.md).
@@ -50,7 +50,7 @@ Structured artifacts larger than 50 MiB are skipped with parser warnings.
 Minimal local check after building this repository:
 
 ```bash
-npm install
+npm ci
 npm run build
 npm run quality-report -- validate --config examples/minimal/quality-report.yml --input examples/minimal/quality-artifacts
 npm run quality-report -- generate --config examples/minimal/quality-report.yml --input examples/minimal/quality-artifacts --output dist/example-report --zip
@@ -458,3 +458,15 @@ The dogfood workflow depends on GitHub Actions features such as artifact downloa
 - [Troubleshooting](docs/troubleshooting.md)
 - [Security model](docs/security.md)
 - [Local development](docs/local-development.md)
+- [Architecture](docs/architecture.md)
+- [Audit evidence](docs/audit-evidence.md)
+- [Portfolio](docs/portfolio.md)
+- [Release checklist](docs/release-checklist.md)
+
+Implemented: automated normalization, manual definitions and executions, the
+logical test-case catalogue, unified executions, release readiness, audit evidence,
+Git-first retained history, historical case/project metrics, static portfolio
+generation, and actual GitHub Pages deployment.
+
+Deferred: backend/database services, Jira synchronization, historical requirement
+state transitions, AI prioritization, and full raw artifact history.
