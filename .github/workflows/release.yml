@@ -4,17 +4,36 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   release:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
       - uses: actions/setup-node@v4
         with:
           node-version: 22
           cache: npm
       - run: npm ci
-      - run: npm run build
+      - run: npm run lint
+      - run: npm run typecheck
       - run: npm test
+      - run: npm run build
+      - run: npm run test:e2e
+      - name: Verify release-candidate version
+        run: test "$(node packages/report-cli/dist/index.js --version)" = "1.0.0-rc.1"
+      - name: Pack CLI and generate checksums
+        shell: bash
+        run: |
+          mkdir -p dist/release
+          npm pack --workspace @quality-report/report-cli --pack-destination dist/release
+          cd dist/release
+          sha256sum *.tgz > SHA256SUMS
+      - uses: actions/upload-artifact@v4
+        with:
+          name: testreporter-v1.0.0-rc.1
+          path: dist/release
+          if-no-files-found: error
