@@ -16,7 +16,7 @@ jobs:
         with: { path: tool, persist-credentials: false }
       - run: cd tool && npm ci && npm run build
       - run: node tool/packages/report-cli/dist/index.js portfolio --input summaries/projects --output portfolio --stale-days 7
-      - uses: actions/upload-pages-artifact@v3
+      - uses: actions/upload-pages-artifact@v5
         with: { path: portfolio }
   deploy:
     needs: build
